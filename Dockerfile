@@ -1,8 +1,18 @@
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
-WORKDIR /app
+# ---------- BUILD STAGE ----------
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
 
 COPY . .
-EXPOSE 8080
 
-ENV ASPNETCORE_URLS=http://0.0.0.0:8080
+RUN dotnet restore "./BackendServer.csproj"
+RUN dotnet publish "./BackendServer.csproj" -c Release -o /out
+
+# ---------- RUN STAGE ----------
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+WORKDIR /app
+
+COPY --from=build /out ./
+
+ENV ASPNETCORE_URLS=http://0.0.0.0:${PORT}
+
 ENTRYPOINT ["dotnet", "BackendServer.dll"]
