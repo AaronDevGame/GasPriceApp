@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http.HttpResults;
+
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
@@ -9,18 +11,28 @@ var state = new ServerState
     Version = "1.0.0"
 };
 
-app.MapGet("/status", () => Results.Ok(state));
+var InstanceId = GetInstanceId();
+
+app.MapGet("/ping", () => new ApiResponse<object>());
+
+app.MapGet("/status", () => ApiResults.Ok(state, "success", InstanceId));
 
 app.MapPost("/start", () =>
 {
-    state.Status = "running";
-    return Results.Ok(state);
+    if(state.Status == "start")
+        return ApiResults.BadRequest("Server already running...", InstanceId, "Current status: running");
+    
+    state.Status = "start";
+    return ApiResults.Ok(state, "server is running...", InstanceId);
 });
 
 app.MapPost("/stop", () =>
 {
-    state.Status = "stopped";
-    return Results.Ok(state);
+    if(state.Status == "stop")
+        return ApiResults.BadRequest("Server already stopped...", InstanceId);
+    
+    state.Status = "stop";
+    return ApiResults.Ok(state, "server is stopped...", InstanceId);
 });
 
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
@@ -28,9 +40,14 @@ app.Urls.Add($"http://0.0.0.0:{port}");
 
 app.Run();
 
-public class ServerState
+
+static string GetInstanceId()
 {
-    public string ServerName { get; set; } = "";
-    public string Status { get; set; } = "";
-    public string Version { get; set; } = "";
+    // On Render: unique per running instance
+    var renderInstanceId = Environment.GetEnvironmentVariable("RENDER_INSTANCE_ID");
+    if (!string.IsNullOrWhiteSpace(renderInstanceId))
+        return renderInstanceId;
+
+    // Local fallback
+    return Environment.MachineName;
 }
