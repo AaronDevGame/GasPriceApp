@@ -1,0 +1,7 @@
+/Users/Aaron/BackendServer/out/BackendServer
+/Users/Aaron/BackendServer/out/appsettings.Development.json
+/Users/Aaron/BackendServer/out/appsettings.json
+/Users/Aaron/BackendServer/out/BackendServer.dll
+/Users/Aaron/BackendServer/out/BackendServer.deps.json
+/Users/Aaron/BackendServer/out/BackendServer.runtimeconfig.json
+/Users/Aaron/BackendServer/out/BackendServer.pdb

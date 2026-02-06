@@ -11,7 +11,7 @@ using System;
 using System.Reflection;
 
 [assembly: System.Reflection.AssemblyCompanyAttribute("BackendServer")]
-[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
 [assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c89c5d6a46ff20be1c9e3c93e2691eba5b1c3aa0")]
 [assembly: System.Reflection.AssemblyProductAttribute("BackendServer")]
