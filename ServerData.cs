@@ -1,8 +1,8 @@
 public class ApiResponse<T>
 {
     public int Code { get ; set;}  = 200;
-    public string Message { get; set; } = "Success";
-    public string InstanceId {get; set; } = ""; 
+    public string? Message { get; set; } = "Success";
+    public string? InstanceId {get; set; } = ""; 
 
     public DateTime Date {get; set; } = DateTime.UtcNow;
 

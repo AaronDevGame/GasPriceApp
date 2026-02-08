@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 
 public static class ApiResults
 {
-    public static IResult Ok<T>(T data, string message = "", string instanceId = "")
+    public static IResult Ok<T>(T data, string? message = null, string? instanceId = null)
         => Results.Ok(new ApiResponse<T>
         {
             Code = ErrorCodes.Ok,
