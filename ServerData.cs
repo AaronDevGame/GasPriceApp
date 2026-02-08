@@ -23,3 +23,11 @@ public class ServerState
     public string Status { get; set; } = "";
     public string Version { get; set; } = "";
 }
+
+public record ApiInfo 
+{
+    public string DeveloperName {get; init; } = "";
+    public string ContactEmail {get; init; } = "";
+    public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
+    public string CopyrightNotice {get; init; } = "";
+}

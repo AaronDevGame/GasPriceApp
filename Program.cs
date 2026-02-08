@@ -17,6 +17,8 @@ app.MapGet("/ping", () => new ApiResponse<object>());
 
 app.MapGet("/status", () => ApiResults.Ok(state, "success", InstanceId));
 
+app.MapGet("/info", () => ApiResults.Ok(ApiMetadata.Info));
+
 app.MapPost("/start", () =>
 {
     if(state.Status == "start")

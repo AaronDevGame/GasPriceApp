@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 
 public static class ApiResults
 {
-    public static IResult Ok<T>(T data, string message, string instanceId)
+    public static IResult Ok<T>(T data, string message = "", string instanceId = "")
         => Results.Ok(new ApiResponse<T>
         {
             Code = ErrorCodes.Ok,
@@ -35,4 +35,15 @@ public static class ApiResults
                 Detail = detail
             }
         });
+}
+
+public static class ApiMetadata
+{
+    public static readonly ApiInfo Info = new()
+    {
+        DeveloperName = "Aaron Crisostomo",
+        ContactEmail = "aaron@email.com",
+        CreatedAt = new DateTime(2026, 2, 6),
+        CopyrightNotice = "© 2026 Aaron Crisostomo"
+    };
 }
