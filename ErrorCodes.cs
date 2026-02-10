@@ -5,7 +5,7 @@ public static class ErrorCodes
     public const int BadRequest = 400;
     public const int Unauthorized = 401;
     public const int NotFound = 404;
-
+    public const int TooManyRequest = 429;
     public const int ServerError = 500;
 
     // Custom / app-level errors (optional, future-proof)

@@ -32,6 +32,8 @@ app.Use(async (context, next) =>
     );
 });
 
+app.UseMiddleware<RateLimitMiddleware>();
+
 app.MapGet("/ping", () => new ApiResponse<object>());
 
 app.MapGet("/status", () => ApiResults.Ok(state, "success", InstanceId));

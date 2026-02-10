@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
 
 public static class ApiResults
 {
@@ -48,6 +49,18 @@ public static class ApiResults
                 Detail = detail
             }
         });
+
+    public static IResult TooManyRequest(string error, string? detail = null)
+        => Results.Json(new ApiResponse<object>
+        {
+            Code = ErrorCodes.TooManyRequest,
+            Message = "too_many_request",
+            Error = new ApiError
+            {
+                Error = error,
+                Detail = detail
+            }
+        }, statusCode: StatusCodes.Status429TooManyRequests);
 }
 
 public static class ApiMetadata
