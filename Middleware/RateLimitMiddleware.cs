@@ -4,8 +4,6 @@ public class RateLimitMiddleware
 {
     private static readonly Dictionary<string, TimeSpan> _cooldowns = new()
     {
-        ["/start"]  = TimeSpan.FromSeconds(15),
-        ["/stop"]   = TimeSpan.FromSeconds(15),
         ["/ping"]   = TimeSpan.FromSeconds(2),
         ["/status"] = TimeSpan.FromSeconds(5),
         ["/info"]   = TimeSpan.FromSeconds(5),
@@ -23,55 +21,77 @@ public class RateLimitMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var path = context.Request.Path.Value ?? "";
+        var path = context.Request.Path;
 
-        if (_cooldowns.TryGetValue(path, out var cooldown))
+        // 1) Decide cooldown
+        TimeSpan? cooldown = null;
+
+        // Admin: rate-limit all /admin/* uniformly
+        if (path.StartsWithSegments("/admin"))
         {
-            var key = $"{ip}|{path}";
-            var now = DateTime.UtcNow;
+            cooldown = TimeSpan.FromSeconds(15);
+        }
+        else
+        {
+        // Public endpoints: lookup by exact path string
+        var pathValue = path.Value ?? "";
+        
+            if (_cooldowns.TryGetValue(pathValue, out var specificCooldown))
+                cooldown = specificCooldown;
 
-            bool blocked = false;
-            int retryAfterSeconds = 0;
+        }
 
-            lock (_lastRequest)
+        // 2) If no cooldown rule, just continue
+        if (cooldown is null)
+        {
+            await _next(context);
+            return;
+        }
+
+        var key = $"{ip}|{path}";
+        var now = DateTime.UtcNow;
+
+        bool blocked = false;
+        int retryAfterSeconds = 0;
+
+        lock (_lastRequest)
+        {
+            if (_lastRequest.TryGetValue(key, out var lastTime))
             {
-                if (_lastRequest.TryGetValue(key, out var lastTime))
+                var elapsed = now - lastTime;
+                if (elapsed < cooldown.Value)
                 {
-                    var elapsed = now - lastTime;
-                    if (elapsed < cooldown)
-                    {
-                        blocked = true;
-                        retryAfterSeconds = (int)Math.Ceiling((cooldown - elapsed).TotalSeconds);
-                    }
-                    else
-                    {
-                        _lastRequest[key] = now;
-                    }
+                    blocked = true;
+                    retryAfterSeconds = (int)Math.Ceiling((cooldown.Value - elapsed).TotalSeconds);
                 }
                 else
                 {
                     _lastRequest[key] = now;
                 }
             }
-
-            if (blocked)
+            else
             {
-                context.Response.Headers["Retry-After"] = retryAfterSeconds.ToString();
-                context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-
-                await context.Response.WriteAsJsonAsync(new ApiResponse<object>
-                {
-                    Code = ErrorCodes.TooManyRequest,
-                    Message = "too_many_requests",
-                    Error = new ApiError
-                    {
-                        Error = "Too many requests",
-                        Detail = $"Try again in {retryAfterSeconds} seconds."
-                    }
-                });
-
-                return;
+                _lastRequest[key] = now;
             }
+        }
+
+        if (blocked)
+        {
+            context.Response.Headers["Retry-After"] = retryAfterSeconds.ToString();
+            context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+
+            await context.Response.WriteAsJsonAsync(new ApiResponse<object>
+            {
+                Code = ErrorCodes.TooManyRequest,
+                Message = "too_many_requests",
+                Error = new ApiError
+                {
+                    Error = "Too many requests",
+                    Detail = $"Try again in {retryAfterSeconds} seconds."
+                }
+            });
+
+            return;
         }
 
         await _next(context);

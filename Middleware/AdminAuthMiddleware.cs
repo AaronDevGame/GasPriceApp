@@ -1,20 +1,28 @@
 using Microsoft.AspNetCore.Http;
 
-public static class AdminAuthMiddleware
+public class AdminAuthMiddleware
 {
-    public static async Task InvokeAsync(
-        HttpContext context,
-        RequestDelegate next,
-        string adminApiKey,
-        string instanceId)
+    private readonly RequestDelegate _next;
+    private readonly string _adminApiKey;
+    private readonly string _instanceId;
+
+    public AdminAuthMiddleware(RequestDelegate next, IConfiguration config)
+    {
+        _next = next;
+
+        _adminApiKey = config["ADMIN_API_KEY"]
+            ?? throw new InvalidOperationException("ADMIN_API_KEY is not configured");
+
+        _instanceId = config["INSTANCE_ID"] ?? "unknown";
+    }
+
+    public async Task InvokeAsync(HttpContext context)
     {
         var path = context.Request.Path;
 
-        // Protect only admin endpoints
-        if (path.StartsWithSegments("/start") ||
-            path.StartsWithSegments("/stop"))
+        if (path.StartsWithSegments("/admin"))
         {
-            if (!IsAdmin(context.Request, adminApiKey, out var authError))
+            if (!IsAdmin(context.Request, _adminApiKey, out var authError))
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
 
@@ -22,18 +30,18 @@ public static class AdminAuthMiddleware
                 {
                     Code = ErrorCodes.Unauthorized,
                     Message = "unauthorized_request",
-                    InstanceId = instanceId,
+                    InstanceId = _instanceId,
                     Error = new ApiError
                     {
                         Error = authError
                     }
                 });
 
-                return; // ⛔ stop pipeline
+                return;
             }
         }
 
-        await next(context); // ✅ continue
+        await _next(context);
     }
 
     private static bool IsAdmin(
@@ -49,39 +57,11 @@ public static class AdminAuthMiddleware
             return false;
         }
 
-        var authValue = authHeader.ToString();
-
-        if (string.IsNullOrWhiteSpace(authValue))
-        {
-            error = AuthErrors.MissingAuthorizationHeader;
-            return false;
-        }
-
-        var parts = authValue.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-
-        if (parts.Length == 1 &&
-            parts[0].Equals("Bearer", StringComparison.OrdinalIgnoreCase))
-        {
-            error = AuthErrors.MissingAuthorizationHeader;
-            return false;
-        }
+        var parts = authHeader.ToString().Split(' ', 2);
 
         if (parts.Length != 2 ||
-            !parts[0].Equals("Bearer", StringComparison.OrdinalIgnoreCase))
-        {
-            error = AuthErrors.InvalidAdminKey;
-            return false;
-        }
-
-        var token = parts[1].Trim();
-
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            error = AuthErrors.MissingAuthorizationHeader;
-            return false;
-        }
-
-        if (token != adminApiKey)
+            !parts[0].Equals("Bearer", StringComparison.OrdinalIgnoreCase) ||
+            parts[1] != adminApiKey)
         {
             error = AuthErrors.InvalidAdminKey;
             return false;
