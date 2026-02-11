@@ -48,7 +48,10 @@ public class RateLimitMiddleware
             return;
         }
 
-        var key = $"{ip}|{path}";
+        var key = path.StartsWithSegments("/admin")
+            ? $"{ip}|admin"
+            : $"{ip}|{path}";
+            
         var now = DateTime.UtcNow;
 
         bool blocked = false;
