@@ -46,6 +46,8 @@ admin.MapPost("/stop", (HttpRequest request) =>
     return ApiResults.Ok(state, "server is stopped...", InstanceId);
 });
 
+app.MapFallback((HttpContext context) => ApiResults.NotFound("The requested endpoint does not exist.", InstanceId, context.Request.Path));
+
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 app.Urls.Add($"http://0.0.0.0:{port}");
 

@@ -37,8 +37,8 @@ public static class ApiResults
             }
         }, statusCode: StatusCodes.Status401Unauthorized);
 
-    public static IResult NotFound(string error, string instanceId, int code, string? detail = null)
-        => Results.NotFound(new ApiResponse<object>
+    public static IResult NotFound(string error, string instanceId, string path)
+        => Results.Json(new ApiResponse<object>
         {
             Code = ErrorCodes.NotFound,
             Message = "not_found",
@@ -46,9 +46,9 @@ public static class ApiResults
             Error = new ApiError
             {
                 Error = error,
-                Detail = detail
+                Detail = $"Path {path} doesn't exist."
             }
-        });
+        }, statusCode: StatusCodes.Status404NotFound);
 
     public static IResult TooManyRequest(string error, string? detail = null)
         => Results.Json(new ApiResponse<object>
