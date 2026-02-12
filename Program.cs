@@ -28,6 +28,8 @@ app.MapGet("/status", () => ApiResults.Ok(state, "success", InstanceId));
 
 app.MapGet("/info", () => ApiResults.Ok(ApiMetadata.Info));
 
+app.MapGet("/routes", () =>ApiResults.Ok(RouteRegistry.Public, "public_routes", InstanceId));
+
 admin.MapPost("/start", (HttpRequest request) =>
 {
     if(state.Status == "start")

@@ -31,3 +31,14 @@ public record ApiInfo
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     public string CopyrightNotice {get; init; } = "";
 }
+
+public static class RouteRegistry
+{
+    public static readonly RouteInfo[] Public =
+    {
+        new("/ping", "GET"),
+        new("/status", "GET"),
+    };
+}
+
+public record RouteInfo(string Route, string Method);
