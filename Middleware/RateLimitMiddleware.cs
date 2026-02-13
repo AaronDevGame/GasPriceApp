@@ -24,34 +24,28 @@ public class RateLimitMiddleware
         var path = context.Request.Path;
 
         // 1) Decide cooldown
-        TimeSpan? cooldown = null;
+        TimeSpan cooldown;
 
         // Admin: rate-limit all /admin/* uniformly
         if (path.StartsWithSegments("/admin"))
         {
             cooldown = TimeSpan.FromSeconds(15);
         }
+        else if (_cooldowns.TryGetValue(path.Value ?? "", out var specificCooldown)) {
+                cooldown = specificCooldown;
+        } 
         else
         {
-        // Public endpoints: lookup by exact path string
-        var pathValue = path.Value ?? "";
-        
-            if (_cooldowns.TryGetValue(pathValue, out var specificCooldown))
-                cooldown = specificCooldown;
-
+             cooldown = TimeSpan.FromSeconds(1); // unknown endpoints
         }
 
-        // 2) If no cooldown rule, just continue
-        if (cooldown is null)
-        {
-            await _next(context);
-            return;
-        }
+        // 1.5) Decide bucket key (prevents bypass by changing path)
+        var keyPath =
+            path.StartsWithSegments("/admin") ? "/admin" :
+            _cooldowns.ContainsKey(path.Value ?? "") ? (path.Value ?? "") :
+            "/unknown";
 
-        var key = path.StartsWithSegments("/admin")
-            ? $"{ip}|admin"
-            : $"{ip}|{path}";
-            
+        var key = $"{ip}|{keyPath}";
         var now = DateTime.UtcNow;
 
         bool blocked = false;
@@ -62,10 +56,10 @@ public class RateLimitMiddleware
             if (_lastRequest.TryGetValue(key, out var lastTime))
             {
                 var elapsed = now - lastTime;
-                if (elapsed < cooldown.Value)
+                if (elapsed < cooldown)
                 {
                     blocked = true;
-                    retryAfterSeconds = (int)Math.Ceiling((cooldown.Value - elapsed).TotalSeconds);
+                    retryAfterSeconds = (int)Math.Ceiling((cooldown - elapsed).TotalSeconds);
                 }
                 else
                 {

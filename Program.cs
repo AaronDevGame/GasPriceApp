@@ -12,7 +12,7 @@ var state = new ServerState
 {
     ServerName = "API Gateway 1",
     Status = "stopped",
-    Version = "1.0.0"
+    Version = "1.1.0"
 };
 
 var InstanceId = GetInstanceId();
@@ -29,6 +29,8 @@ app.MapGet("/status", () => ApiResults.Ok(state, "success", InstanceId));
 app.MapGet("/info", () => ApiResults.Ok(ApiMetadata.Info));
 
 app.MapGet("/routes", () =>ApiResults.Ok(RouteRegistry.Public, "public_routes", InstanceId));
+
+app.MapFallback((HttpContext context) => ApiResults.NotFound("The requested endpoint does not exist.", InstanceId, context.Request.Path));
 
 admin.MapPost("/start", (HttpRequest request) =>
 {
@@ -48,7 +50,9 @@ admin.MapPost("/stop", (HttpRequest request) =>
     return ApiResults.Ok(state, "server is stopped...", InstanceId);
 });
 
-app.MapFallback((HttpContext context) => ApiResults.NotFound("The requested endpoint does not exist.", InstanceId, context.Request.Path));
+admin.MapFallback((HttpContext context) => ApiResults.NotFound("The requested endpoint does not exist.", InstanceId, context.Request.Path));
+
+
 
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 app.Urls.Add($"http://0.0.0.0:{port}");
