@@ -6,13 +6,21 @@ using Microsoft.AspNetCore.Http.HttpResults;
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 var admin = app.MapGroup("/admin");
+string version = "1.2.2";
 
 // In-memory state (resets when you restart the app)
 var state = new ServerState
 {
-    ServerName = "API Gateway 1",
+    ServerName = "AEnlight API Server",
     Status = "stopped",
-    Version = "1.1.0"
+    Version = version
+};
+
+var health = new ServerState
+{
+    ServerName = "AEnlight API Server",
+    Status = "healthy",
+    Version = version
 };
 
 var InstanceId = GetInstanceId();
@@ -23,6 +31,8 @@ app.UseMiddleware<AdminAuthMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
 
 app.MapGet("/ping", () => new ApiResponse<object>());
+
+app.MapGet("/health", () => ApiResults.Ok(health, InstanceId));
 
 app.MapGet("/status", () => ApiResults.Ok(state, "success", InstanceId));
 
