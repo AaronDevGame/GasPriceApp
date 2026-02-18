@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
 
 public class RateLimitMiddleware
@@ -11,6 +12,7 @@ public class RateLimitMiddleware
 
     // Key = ip + "|" + route
     private static readonly Dictionary<string, DateTime> _lastRequest = new();
+    private static DateTime _lastCleanup = DateTime.UtcNow;
     private readonly RequestDelegate _next;
 
     public RateLimitMiddleware(RequestDelegate next)
@@ -53,6 +55,34 @@ public class RateLimitMiddleware
 
         lock (_lastRequest)
         {
+            if ((now - _lastCleanup).TotalMinutes >= 1)
+            {
+                var cutoff = now.AddMinutes(-10);
+
+                List<string>? toRemove = null;
+                foreach (var kvp in _lastRequest)
+                {
+                    if (kvp.Value < cutoff)
+                    {
+                        toRemove ??= new List<string>();
+                        toRemove.Add(kvp.Key);
+                    }
+                }
+
+                if (toRemove != null)
+                {
+                    foreach (var k in toRemove)
+                    {
+                        // Console.WriteLine($"[CLEANUP] Removing: {k}");
+                        _lastRequest.Remove(k);
+                    }
+                }
+
+                // Console.WriteLine($"[CLEANUP] Remaining count: {_lastRequest.Count}");
+
+                _lastCleanup = now;
+            }
+
             if (_lastRequest.TryGetValue(key, out var lastTime))
             {
                 var elapsed = now - lastTime;
