@@ -22,7 +22,6 @@ All notable changes to this project will be documented in this file.
 - Nullable warnings in ApiResponse
 - Minor status logic adjustments
 
-
 ## [1.2.0] - 2026-02-14
 
 ### Added
@@ -35,5 +34,12 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 -  Prevent unbounded dictionary growth in rate limit middleware
 
+## [1.2.2] - 2026-02-18
+
 ### Added
 -  Health check endpoint
+
+## [1.2.3] - 2026-02-19
+
+### Added
+-  Include health, info, and routes in public routes

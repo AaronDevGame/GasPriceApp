@@ -37,7 +37,10 @@ public static class RouteRegistry
     public static readonly RouteInfo[] Public =
     {
         new("/ping", "GET"),
+        new("/health", "GET"),
         new("/status", "GET"),
+        new("/info", "GET"),
+        new("/routes", "GET"),
     };
 }
 

@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 var admin = app.MapGroup("/admin");
-string version = "1.2.2";
+string version = "1.2.3";
 
 // In-memory state (resets when you restart the app)
 var state = new ServerState
