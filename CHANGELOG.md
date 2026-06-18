@@ -43,3 +43,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 -  Include health, info, and routes in public routes
+
+## [1.2.4] - 2026-02-19
+
+### Added
+- .gitignore and .dockerignore
+
+### Changed
+- Update Dockerfile to target .NET 10
