@@ -12,11 +12,11 @@ string version = "1.2.5";
 var state = new ServerState
 {
     ServerName = "AEnlight API Server",
-    Status = "stopped",
+    Status = ServerStatus.Stopped,
     Version = version
 };
 
-var health = new ServerState
+var health = new HealthState
 {
     ServerName = "AEnlight API Server",
     Status = "healthy",
@@ -44,30 +44,43 @@ app.MapFallback((HttpContext context) => ApiResults.NotFound("The requested endp
 
 admin.MapPost("/start", (HttpRequest request) =>
 {
-    if(state.Status == "start")
+    if(state.Status == ServerStatus.Running)
         return ApiResults.BadRequest("Server already running...", InstanceId, "Current status: running");
-    
-    state.Status = "start";
-    state.StartedAt = DateTime.UtcNow;
+
+    var now = DateTime.UtcNow;
+    state.Status = ServerStatus.Running;
+    state.StartedAt = now;
+    state.LastStartedAt = now;
     return ApiResults.Ok(state, "server is running...", InstanceId);
 });
 
 admin.MapPost("/stop", (HttpRequest request) =>
 {
-    if(state.Status == "stop")
+    if(state.Status == ServerStatus.Stopped)
         return ApiResults.BadRequest("Server already stopped...", InstanceId);
-    
-    state.Status = "stop";
+
+    var now = DateTime.UtcNow;
+    if (state.StartedAt is not null)
+        state.AccumulatedUptimeSeconds += (now - state.StartedAt.Value).TotalSeconds;
+
+    state.Status = ServerStatus.Stopped;
     state.StartedAt = null;
+    state.LastStoppedAt = now;
     return ApiResults.Ok(state, "server is stopped...", InstanceId);
 });
 
 admin.MapPost("/restart", (HttpRequest request) =>
 {
-    if(state.Status != "start")
+    if(state.Status != ServerStatus.Running)
         return ApiResults.BadRequest("Server is not running...", InstanceId, "Start the server before restarting.");
 
-    state.StartedAt = DateTime.UtcNow;
+    var now = DateTime.UtcNow;
+    if (state.StartedAt is not null)
+        state.AccumulatedUptimeSeconds += (now - state.StartedAt.Value).TotalSeconds;
+
+    state.StartedAt = now;
+    state.LastStartedAt = now;
+    state.RestartCount++;
     return ApiResults.Ok(state, "server restarted...", InstanceId);
 });
 

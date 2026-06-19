@@ -58,3 +58,9 @@ All notable changes to this project will be documented in this file.
 - Server lifecycle tracking on `/status`: `startedAt` timestamp, `uptimeSeconds`, and human-readable `uptime`
 - `/admin/start` now records the start time; `/admin/stop` clears it
 - `/admin/restart` endpoint: sets status to running and resets the start time
+- Lifecycle history on `/status`: `lastStartedAt`, `lastStoppedAt`, and `restartCount`
+- Cumulative `totalUptimeSeconds` / `totalUptime` across all start/stop sessions
+
+### Changed
+- Server status is now a typed enum serialized as `Running` / `Stopped` (was loose `start` / `stop` / `stopped` strings)
+- `/health` uses a dedicated response model, decoupled from the lifecycle status

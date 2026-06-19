@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 public class ApiResponse<T>
 {
     public int Code { get ; set;}  = 200;
@@ -17,24 +19,54 @@ public class ApiError
 
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ServerStatus
+{
+    Stopped,
+    Running
+}
+
 public class ServerState
 {
     public string ServerName { get; set; } = "";
-    public string Status { get; set; } = "";
+    public ServerStatus Status { get; set; } = ServerStatus.Stopped;
     public string Version { get; set; } = "";
 
-    // UTC timestamp of when the server was last started; null while stopped.
+    // Current session: UTC timestamp of when the server was last started; null while stopped.
     public DateTime? StartedAt { get; set; }
 
-    // How long the server has been active since StartedAt; null while stopped.
+    // Lifecycle history
+    public DateTime? LastStartedAt { get; set; }
+    public DateTime? LastStoppedAt { get; set; }
+    public int RestartCount { get; set; }
+
+    // Cumulative uptime of all completed sessions, in seconds.
+    // A field (not a property) so it stays out of the JSON response.
+    public double AccumulatedUptimeSeconds;
+
+    // How long the server has been active in the current session; null while stopped.
     public double? UptimeSeconds =>
         StartedAt is null ? null : (DateTime.UtcNow - StartedAt.Value).TotalSeconds;
 
     public string? Uptime =>
         StartedAt is null ? null : FormatUptime(DateTime.UtcNow - StartedAt.Value);
 
+    // Total uptime across all sessions, including the current one.
+    public double TotalUptimeSeconds =>
+        AccumulatedUptimeSeconds + (UptimeSeconds ?? 0);
+
+    public string TotalUptime =>
+        FormatUptime(TimeSpan.FromSeconds(TotalUptimeSeconds));
+
     private static string FormatUptime(TimeSpan t) =>
         $"{(int)t.TotalDays}d {t.Hours}h {t.Minutes}m {t.Seconds}s";
+}
+
+public record HealthState
+{
+    public string ServerName { get; init; } = "";
+    public string Status { get; init; } = "healthy";
+    public string Version { get; init; } = "";
 }
 
 public record ApiInfo 
