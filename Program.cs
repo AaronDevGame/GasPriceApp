@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 var admin = app.MapGroup("/admin");
-string version = "1.2.3";
+string version = "1.2.5";
 
 // In-memory state (resets when you restart the app)
 var state = new ServerState
@@ -60,6 +60,15 @@ admin.MapPost("/stop", (HttpRequest request) =>
     state.Status = "stop";
     state.StartedAt = null;
     return ApiResults.Ok(state, "server is stopped...", InstanceId);
+});
+
+admin.MapPost("/restart", (HttpRequest request) =>
+{
+    if(state.Status != "start")
+        return ApiResults.BadRequest("Server is not running...", InstanceId, "Start the server before restarting.");
+
+    state.StartedAt = DateTime.UtcNow;
+    return ApiResults.Ok(state, "server restarted...", InstanceId);
 });
 
 admin.MapFallback((HttpContext context) => ApiResults.NotFound("The requested endpoint does not exist.", InstanceId, context.Request.Path));

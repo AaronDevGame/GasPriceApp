@@ -57,3 +57,4 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Server lifecycle tracking on `/status`: `startedAt` timestamp, `uptimeSeconds`, and human-readable `uptime`
 - `/admin/start` now records the start time; `/admin/stop` clears it
+- `/admin/restart` endpoint: sets status to running and resets the start time
