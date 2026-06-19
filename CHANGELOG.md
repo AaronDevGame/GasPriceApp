@@ -68,7 +68,9 @@ All notable changes to this project will be documented in this file.
 ## [1.2.6] - 2026-06-20
 
 ### Added
-- Guest login: `POST /login` issues a deterministic per-device token, `POST /logout` acknowledges sign-out
+- Guest login: `POST /login` issues a deterministic per-device token, `POST /logout` ends the session
 - Device identity resolved from the `X-Device-Id` header, a `device_id` cookie, or a server-minted GUID (set as a cookie) when neither is present
+- `/login` reports `already_logged_in` while a session is active and `guest_login` otherwise, tracked via a `session_active` cookie that `/logout` clears
+- Session is independent per device, and the token stays the same across logout/login (the `device_id` cookie persists; only the session marker is cleared)
 - `AuthService` (HMAC-SHA256 over the device id, keyed by `AUTH_SECRET`) in `Auth.cs`
 - `/login` and `/logout` listed in the public route registry
