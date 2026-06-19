@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 var admin = app.MapGroup("/admin");
-string version = "1.2.5";
+string version = "1.2.6";
 
 // In-memory state (resets when you restart the app)
 var state = new ServerState
@@ -25,6 +25,8 @@ var health = new HealthState
 
 var InstanceId = GetInstanceId();
 
+var auth = new AuthService(app.Configuration);
+
 // Middleware
 
 app.UseMiddleware<AdminAuthMiddleware>();
@@ -39,6 +41,8 @@ app.MapGet("/status", () => ApiResults.Ok(state, "success", InstanceId));
 app.MapGet("/info", () => ApiResults.Ok(ApiMetadata.Info));
 
 app.MapGet("/routes", () =>ApiResults.Ok(RouteRegistry.Public, "public_routes", InstanceId));
+
+app.MapAuthEndpoints(auth, InstanceId);
 
 app.MapFallback((HttpContext context) => ApiResults.NotFound("The requested endpoint does not exist.", InstanceId, context.Request.Path));
 

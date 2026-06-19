@@ -86,6 +86,8 @@ public static class RouteRegistry
         new("/status", "GET"),
         new("/info", "GET"),
         new("/routes", "GET"),
+        new("/login", "POST"),
+        new("/logout", "POST"),
     };
 }
 

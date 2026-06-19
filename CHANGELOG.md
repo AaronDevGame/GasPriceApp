@@ -64,3 +64,11 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Server status is now a typed enum serialized as `Running` / `Stopped` (was loose `start` / `stop` / `stopped` strings)
 - `/health` uses a dedicated response model, decoupled from the lifecycle status
+
+## [1.2.6] - 2026-06-20
+
+### Added
+- Guest login: `POST /login` issues a deterministic per-device token, `POST /logout` acknowledges sign-out
+- Device identity resolved from the `X-Device-Id` header, a `device_id` cookie, or a server-minted GUID (set as a cookie) when neither is present
+- `AuthService` (HMAC-SHA256 over the device id, keyed by `AUTH_SECRET`) in `Auth.cs`
+- `/login` and `/logout` listed in the public route registry
