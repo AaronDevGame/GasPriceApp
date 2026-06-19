@@ -51,3 +51,9 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Update Dockerfile to target .NET 10
+
+## [1.2.5] - 2026-06-20
+
+### Added
+- Server lifecycle tracking on `/status`: `startedAt` timestamp, `uptimeSeconds`, and human-readable `uptime`
+- `/admin/start` now records the start time; `/admin/stop` clears it

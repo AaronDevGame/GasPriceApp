@@ -48,6 +48,7 @@ admin.MapPost("/start", (HttpRequest request) =>
         return ApiResults.BadRequest("Server already running...", InstanceId, "Current status: running");
     
     state.Status = "start";
+    state.StartedAt = DateTime.UtcNow;
     return ApiResults.Ok(state, "server is running...", InstanceId);
 });
 
@@ -57,6 +58,7 @@ admin.MapPost("/stop", (HttpRequest request) =>
         return ApiResults.BadRequest("Server already stopped...", InstanceId);
     
     state.Status = "stop";
+    state.StartedAt = null;
     return ApiResults.Ok(state, "server is stopped...", InstanceId);
 });
 

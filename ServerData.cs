@@ -22,6 +22,19 @@ public class ServerState
     public string ServerName { get; set; } = "";
     public string Status { get; set; } = "";
     public string Version { get; set; } = "";
+
+    // UTC timestamp of when the server was last started; null while stopped.
+    public DateTime? StartedAt { get; set; }
+
+    // How long the server has been active since StartedAt; null while stopped.
+    public double? UptimeSeconds =>
+        StartedAt is null ? null : (DateTime.UtcNow - StartedAt.Value).TotalSeconds;
+
+    public string? Uptime =>
+        StartedAt is null ? null : FormatUptime(DateTime.UtcNow - StartedAt.Value);
+
+    private static string FormatUptime(TimeSpan t) =>
+        $"{(int)t.TotalDays}d {t.Hours}h {t.Minutes}m {t.Seconds}s";
 }
 
 public record ApiInfo 
