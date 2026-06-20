@@ -84,3 +84,4 @@ All notable changes to this project will be documented in this file.
 - Connection string resolved from `DATABASE_URL`, then `ConnectionStrings:Postgres`, then a local Homebrew default
 - Pending migrations are applied automatically on startup
 - Forwarded-headers support so the real client IP is captured behind a proxy (e.g. Render)
+- TLS for managed Postgres: `DATABASE_URL` connections use `SslMode=Require` with `TrustServerCertificate` so they work on Render

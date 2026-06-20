@@ -66,7 +66,8 @@ public static class DbConfig
             Username = Uri.UnescapeDataString(parts[0]),
             Password = parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : "",
             Database = uri.AbsolutePath.TrimStart('/'),
-            SslMode = SslMode.Require   // Render requires TLS
+            SslMode = SslMode.Require,        // Render requires TLS
+            TrustServerCertificate = true     // accept Render's managed cert without a local CA chain
         }.ConnectionString;
     }
 }
