@@ -1,12 +1,32 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(DbConfig.ResolveConnectionString(builder.Configuration)));
+
 var app = builder.Build();
+
+// Apply any pending migrations on startup so the schema exists locally and on Render.
+using (var scope = app.Services.CreateScope())
+    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+
+// Behind Render's proxy the real client IP is in X-Forwarded-For; surface it as RemoteIpAddress.
+var forwardedOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+};
+forwardedOptions.KnownIPNetworks.Clear();
+forwardedOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedOptions);
+
 var admin = app.MapGroup("/admin");
-string version = "1.2.6";
+string version = "1.2.7";
 
 // In-memory state (resets when you restart the app)
 var state = new ServerState

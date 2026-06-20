@@ -45,7 +45,7 @@ public static class AuthEndpoints
 
     public static void MapAuthEndpoints(this WebApplication app, AuthService auth, string instanceId)
     {
-        app.MapPost("/login", (HttpRequest request, HttpResponse response) =>
+        app.MapPost("/login", async (HttpRequest request, HttpResponse response, AppDbContext db) =>
         {
             var deviceId = ResolveDeviceId(request, response);
             var token = auth.GenerateToken(deviceId);
@@ -54,8 +54,27 @@ public static class AuthEndpoints
             // hasn't been ended by /logout. The device_id (and therefore the token)
             // persists across logout; only this session marker is cleared.
             var alreadyLoggedIn = request.Cookies.ContainsKey(SessionCookie);
-
             response.Cookies.Append(SessionCookie, "1", SessionCookieOptions(request));
+
+            // Upsert the guest record and record this login.
+            var now = DateTime.UtcNow;
+            var userAgent = request.Headers.UserAgent.ToString();
+
+            var guest = await db.Guests.FindAsync(deviceId);
+            if (guest is null)
+            {
+                guest = new Guest { DeviceId = deviceId, CreatedAt = now };
+                db.Guests.Add(guest);
+            }
+
+            guest.Token = token;
+            guest.IpAddress = request.HttpContext.Connection.RemoteIpAddress?.ToString();
+            guest.UserAgent = string.IsNullOrWhiteSpace(userAgent) ? null : userAgent;
+            guest.DeviceType = DetectDeviceType(userAgent);
+            guest.LastLoginAt = now;
+            guest.LoginCount += 1;
+
+            await db.SaveChangesAsync();
 
             return ApiResults.Ok(
                 new AuthResult { DeviceId = deviceId, Token = token },
@@ -65,9 +84,23 @@ public static class AuthEndpoints
 
         // Ends the session marker so the next /login reports guest_login again.
         // The device_id cookie is intentionally kept, so re-login yields the same token.
-        app.MapPost("/logout", (HttpResponse response) =>
+        app.MapPost("/logout", async (HttpRequest request, HttpResponse response, AppDbContext db) =>
         {
             response.Cookies.Delete(SessionCookie);
+
+            // The device_id is still present (we only clear the session marker), so
+            // we can record the logout against the guest record.
+            if (TryGetDeviceId(request, out var deviceId))
+            {
+                var guest = await db.Guests.FindAsync(deviceId);
+                if (guest is not null)
+                {
+                    guest.LastLogoutAt = DateTime.UtcNow;
+                    guest.LogoutCount += 1;
+                    await db.SaveChangesAsync();
+                }
+            }
+
             return ApiResults.Ok<object?>(null, "logged_out", instanceId);
         });
     }
@@ -104,4 +137,45 @@ public static class AuthEndpoints
         MaxAge = TimeSpan.FromDays(365),
         IsEssential = true
     };
+
+    // Reads an existing device id (header or cookie) without minting a new one.
+    private static bool TryGetDeviceId(HttpRequest request, out string deviceId)
+    {
+        if (request.Headers.TryGetValue(DeviceIdHeader, out var headerValue) &&
+            !string.IsNullOrWhiteSpace(headerValue.ToString()))
+        {
+            deviceId = headerValue.ToString();
+            return true;
+        }
+
+        if (request.Cookies.TryGetValue(DeviceIdCookie, out var cookieValue) &&
+            !string.IsNullOrWhiteSpace(cookieValue))
+        {
+            deviceId = cookieValue;
+            return true;
+        }
+
+        deviceId = "";
+        return false;
+    }
+
+    // Best-effort device/platform category from the User-Agent. Browsers parse
+    // reliably; native apps may send a generic UA or none, so this can be "Unknown".
+    private static string DetectDeviceType(string? userAgent)
+    {
+        if (string.IsNullOrWhiteSpace(userAgent)) return "Unknown";
+
+        var ua = userAgent.ToLowerInvariant();
+        if (ua.Contains("iphone")) return "iPhone";
+        if (ua.Contains("ipad")) return "iPad";
+        if (ua.Contains("android")) return "Android";
+        if (ua.Contains("windows")) return "Windows";
+        if (ua.Contains("mac os") || ua.Contains("macintosh")) return "Mac";
+        if (ua.Contains("linux")) return "Linux";
+        if (ua.Contains("unity")) return "Unity";
+        if (ua.Contains("postman")) return "Postman";
+        if (ua.Contains("curl")) return "curl";
+        if (ua.Contains("mozilla")) return "Browser";
+        return "Unknown";
+    }
 }

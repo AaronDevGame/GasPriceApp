@@ -74,3 +74,13 @@ All notable changes to this project will be documented in this file.
 - Session is independent per device, and the token stays the same across logout/login (the `device_id` cookie persists; only the session marker is cleared)
 - `AuthService` (HMAC-SHA256 over the device id, keyed by `AUTH_SECRET`) in `Auth.cs`
 - `/login` and `/logout` listed in the public route registry
+
+## [1.2.7] - 2026-06-21
+
+### Added
+- PostgreSQL persistence for guests via EF Core + Npgsql (`Guest` entity, `AppDbContext`, initial `InitGuests` migration)
+- `/login` upserts a guest row and records `ip_address`, `user_agent`, best-effort `device_type`, `last_login_at`, and `login_count`
+- `/logout` records `last_logout_at` and `logout_count`
+- Connection string resolved from `DATABASE_URL`, then `ConnectionStrings:Postgres`, then a local Homebrew default
+- Pending migrations are applied automatically on startup
+- Forwarded-headers support so the real client IP is captured behind a proxy (e.g. Render)

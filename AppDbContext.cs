@@ -1,0 +1,89 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
+using Npgsql;
+
+public class AppDbContext : DbContext
+{
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
+    public DbSet<Guest> Guests => Set<Guest>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        // Map to snake_case columns (the Postgres convention).
+        modelBuilder.Entity<Guest>(e =>
+        {
+            e.ToTable("guests");
+            e.HasKey(g => g.DeviceId);
+            e.Property(g => g.DeviceId).HasColumnName("device_id");
+            e.Property(g => g.Token).HasColumnName("token");
+            e.Property(g => g.IpAddress).HasColumnName("ip_address");
+            e.Property(g => g.UserAgent).HasColumnName("user_agent");
+            e.Property(g => g.DeviceType).HasColumnName("device_type");
+            e.Property(g => g.CreatedAt).HasColumnName("created_at");
+            e.Property(g => g.LastLoginAt).HasColumnName("last_login_at");
+            e.Property(g => g.LoginCount).HasColumnName("login_count");
+            e.Property(g => g.LastLogoutAt).HasColumnName("last_logout_at");
+            e.Property(g => g.LogoutCount).HasColumnName("logout_count");
+        });
+    }
+}
+
+public static class DbConfig
+{
+    // Resolves the connection string, in priority order:
+    //   1. DATABASE_URL  (Render provides this as a postgres:// URI)
+    //   2. ConnectionStrings:Postgres  (explicit override)
+    //   3. local Homebrew default (localhost, current OS user, trust auth)
+    public static string ResolveConnectionString(IConfiguration config)
+    {
+        var url = Environment.GetEnvironmentVariable("DATABASE_URL");
+        if (!string.IsNullOrWhiteSpace(url))
+            return FromUrl(url);
+
+        var explicitCs = config.GetConnectionString("Postgres");
+        if (!string.IsNullOrWhiteSpace(explicitCs))
+            return explicitCs;
+
+        return new NpgsqlConnectionStringBuilder
+        {
+            Host = "localhost",
+            Port = 5432,
+            Database = "backendserver",
+            Username = Environment.UserName
+        }.ConnectionString;
+    }
+
+    private static string FromUrl(string url)
+    {
+        var uri = new Uri(url);
+        var parts = uri.UserInfo.Split(':', 2);
+
+        return new NpgsqlConnectionStringBuilder
+        {
+            Host = uri.Host,
+            Port = uri.Port > 0 ? uri.Port : 5432,
+            Username = Uri.UnescapeDataString(parts[0]),
+            Password = parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : "",
+            Database = uri.AbsolutePath.TrimStart('/'),
+            SslMode = SslMode.Require   // Render requires TLS
+        }.ConnectionString;
+    }
+}
+
+// Lets `dotnet ef` build the context without running the whole app.
+public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
+{
+    public AppDbContext CreateDbContext(string[] args)
+    {
+        var config = new ConfigurationBuilder()
+            .AddEnvironmentVariables()
+            .Build();
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(DbConfig.ResolveConnectionString(config))
+            .Options;
+
+        return new AppDbContext(options);
+    }
+}
