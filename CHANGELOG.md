@@ -85,3 +85,8 @@ All notable changes to this project will be documented in this file.
 - Pending migrations are applied automatically on startup
 - Forwarded-headers support so the real client IP is captured behind a proxy (e.g. Render)
 - TLS for managed Postgres: `DATABASE_URL` connections use `SslMode=Require` with `TrustServerCertificate` so they work on Render
+
+## [1.2.8] - 2026-06-22
+
+### Fixed
+- Display actual message in message field instead of InstanceID

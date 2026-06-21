@@ -54,7 +54,7 @@ app.UseMiddleware<RateLimitMiddleware>();
 
 app.MapGet("/ping", () => new ApiResponse<object>());
 
-app.MapGet("/health", () => ApiResults.Ok(health, InstanceId));
+app.MapGet("/health", () => ApiResults.Ok(health, "success", InstanceId));
 
 app.MapGet("/status", () => ApiResults.Ok(state, "success", InstanceId));
 
