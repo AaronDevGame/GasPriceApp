@@ -68,7 +68,7 @@ public static class ApiMetadata
     public static readonly ApiInfo Info = new()
     {
         DeveloperName = "Aaron Crisostomo",
-        ContactEmail = "aaron@email.com",
+        ContactEmail = "aarondevgame@gmail.com",
         CreatedAt = new DateTime(2026, 2, 6),
         CopyrightNotice = "© 2026 Aaron Crisostomo"
     };

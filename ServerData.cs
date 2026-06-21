@@ -30,7 +30,7 @@ public class ServerState
 {
     public string ServerName { get; set; } = "";
     public ServerStatus Status { get; set; } = ServerStatus.Stopped;
-    public string Version { get; set; } = "";
+    public string Version { get; set; } = APIVersion.Version;
 
     // Current session: UTC timestamp of when the server was last started; null while stopped.
     public DateTime? StartedAt { get; set; }
@@ -66,7 +66,7 @@ public record HealthState
 {
     public string ServerName { get; init; } = "";
     public string Status { get; init; } = "healthy";
-    public string Version { get; init; } = "";
+    public string Version { get; init; } = APIVersion.Version;
 }
 
 public record ApiInfo 
@@ -75,6 +75,7 @@ public record ApiInfo
     public string ContactEmail {get; init; } = "";
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     public string CopyrightNotice {get; init; } = "";
+    public string Version {get; init; } = APIVersion.Version;
 }
 
 public static class RouteRegistry
@@ -92,3 +93,8 @@ public static class RouteRegistry
 }
 
 public record RouteInfo(string Route, string Method);
+
+public static class APIVersion
+{
+    public const string Version = "1.2.8";
+}

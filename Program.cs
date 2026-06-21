@@ -26,21 +26,18 @@ forwardedOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedOptions);
 
 var admin = app.MapGroup("/admin");
-string version = "1.2.7";
 
 // In-memory state (resets when you restart the app)
 var state = new ServerState
 {
     ServerName = "AEnlight API Server",
     Status = ServerStatus.Stopped,
-    Version = version
 };
 
 var health = new HealthState
 {
     ServerName = "AEnlight API Server",
     Status = "healthy",
-    Version = version
 };
 
 var InstanceId = GetInstanceId();

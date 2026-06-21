@@ -88,5 +88,12 @@ All notable changes to this project will be documented in this file.
 
 ## [1.2.8] - 2026-06-22
 
+### Added
+- `version` field on `/info`
+
+### Changed
+- Centralize the API version in a single `APIVersion.Version` constant; `/status`, `/health`, and `/info` all read from it
+- Update developer contact email
+
 ### Fixed
 - Display actual message in message field instead of InstanceID
