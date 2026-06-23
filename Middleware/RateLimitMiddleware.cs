@@ -5,9 +5,9 @@ public class RateLimitMiddleware
 {
     private static readonly Dictionary<string, TimeSpan> _cooldowns = new()
     {
-        ["/ping"]   = TimeSpan.FromSeconds(2),
-        ["/status"] = TimeSpan.FromSeconds(5),
-        ["/info"]   = TimeSpan.FromSeconds(5),
+        ["/ping"]   = TimeSpan.FromSeconds(1),
+        ["/status"] = TimeSpan.FromSeconds(1),
+        ["/info"]   = TimeSpan.FromSeconds(1),
     };
 
     // Key = ip + "|" + route
@@ -31,7 +31,7 @@ public class RateLimitMiddleware
         // Admin: rate-limit all /admin/* uniformly
         if (path.StartsWithSegments("/admin"))
         {
-            cooldown = TimeSpan.FromSeconds(15);
+            cooldown = TimeSpan.FromSeconds(1);
         }
         else if (_cooldowns.TryGetValue(path.Value ?? "", out var specificCooldown)) {
                 cooldown = specificCooldown;

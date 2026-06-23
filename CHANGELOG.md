@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.2.9] - 2026-06-23
+
+### Changed
+- Reduce all rate limit cooldowns to 1 second for a smoother local and API testing experience.
+- Remove obsolete PostgreSQL `TrustServerCertificate` configuration while keeping TLS required for Render database connections.
+- Bump project and API version to `1.2.9`.
+
 ## [1.1.0] - 2026-02-13
 
 ### Added
