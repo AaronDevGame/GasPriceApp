@@ -11,6 +11,9 @@ All notable changes to this project will be documented in this file.
 - Remove obsolete PostgreSQL `TrustServerCertificate` configuration while keeping TLS required for Render database connections.
 - Bump project and API version to `1.2.9`.
 
+### Fixed
+- Run rate limiting before admin authentication so failed `/admin/*` attempts are throttled.
+
 ## [1.1.0] - 2026-02-13
 
 ### Added

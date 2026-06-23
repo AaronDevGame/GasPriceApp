@@ -45,9 +45,8 @@ var InstanceId = GetInstanceId();
 var auth = new AuthService(app.Configuration);
 
 // Middleware
-
-app.UseMiddleware<AdminAuthMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
+app.UseMiddleware<AdminAuthMiddleware>();
 
 app.MapGet("/ping", () => new ApiResponse<object>());
 
