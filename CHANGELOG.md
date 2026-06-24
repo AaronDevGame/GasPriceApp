@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.4.0] - 2026-06-24
+
+### Added
+- Add `player_name` persistence for guest accounts, including a unique database index and migration backfill for existing records.
+- Accept optional `playerName` in `POST /login` request bodies and return the saved `playerName` in login responses.
+- Generate unique fallback names in the `Player ####` format when no player name is provided.
+
+### Changed
+- Validate player names by trimming input, limiting names to 24 characters, allowing normal special/non-English characters, and blocking control characters.
+- Reorder the `guests` table so `player_id` and `player_name` appear next to `token`.
+- Bump project and API version to `1.4.0`.
+
 ## [1.3.0] - 2026-06-24
 
 ### Added

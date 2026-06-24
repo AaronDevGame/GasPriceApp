@@ -20,6 +20,10 @@ public class AppDbContext : DbContext
             e.Property(g => g.PlayerId)
                 .HasColumnName("player_id");
             e.HasIndex(g => g.PlayerId).IsUnique();
+            e.Property(g => g.PlayerName)
+                .HasColumnName("player_name")
+                .HasMaxLength(24);
+            e.HasIndex(g => g.PlayerName).IsUnique();
             e.Property(g => g.IpAddress).HasColumnName("ip_address");
             e.Property(g => g.UserAgent).HasColumnName("user_agent");
             e.Property(g => g.DeviceType).HasColumnName("device_type");
