@@ -4,6 +4,7 @@ public class Guest
 {
     public string DeviceId { get; set; } = "";   // primary key
     public string Token { get; set; } = "";
+    public long PlayerId { get; set; }           // display-safe numeric id
 
     public string? IpAddress { get; set; }
     public string? UserAgent { get; set; }

@@ -1,0 +1,34 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8080"
+      ADMIN_API_KEY: "dev-admin-key"
+      AUTH_SECRET: "dev-auth-secret-change-me"
+      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=backendserver;Username=backendserver;Password=backendserver"
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: "backendserver"
+      POSTGRES_USER: "backendserver"
+      POSTGRES_PASSWORD: "backendserver"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U backendserver -d backendserver"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:

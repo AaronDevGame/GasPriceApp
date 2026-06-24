@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.3.0] - 2026-06-24
+
+### Added
+- Add a display-safe numeric `player_id` for guest accounts, persisted with a unique database index and backfilled through the `AddPlayerId` EF Core migration.
+- Return `playerId` from `POST /login` responses alongside the guest device id and token.
+- Add a local Docker Compose stack for the API and PostgreSQL.
+
+### Changed
+- Update Docker runtime defaults to use `PORT=8080`, expose port `8080`, and let the app bind from the runtime port setting.
+- Add startup diagnostics around app building, database migration, and port binding.
+- Bump project and API version to `1.3.0`.
+
 ## [1.2.9] - 2026-06-23
 
 ### Changed

@@ -13,6 +13,8 @@ WORKDIR /app
 
 COPY --from=build /out ./
 
-ENV ASPNETCORE_URLS=http://0.0.0.0:${PORT}
+ENV PORT=8080
+
+EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "BackendServer.dll"]

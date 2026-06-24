@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 
 public class AuthService
 {
@@ -33,12 +34,17 @@ public class AuthService
 public record AuthResult
 {
     public string DeviceId { get; init; } = "";
+    public long PlayerId { get; init; }
     public string Token { get; init; } = "";
     public string TokenType { get; init; } = "guest";
 }
 
 public static class AuthEndpoints
 {
+    private const long MinPlayerId = 100_000_000_000_000;
+    private const long MaxPlayerIdExclusive = 1_000_000_000_000_000;
+    private const int MaxPlayerIdAttempts = 10;
+
     public const string DeviceIdHeader = "X-Device-Id";
     public const string DeviceIdCookie = "device_id";
     public const string SessionCookie = "session_active";
@@ -63,7 +69,12 @@ public static class AuthEndpoints
             var guest = await db.Guests.FindAsync(deviceId);
             if (guest is null)
             {
-                guest = new Guest { DeviceId = deviceId, CreatedAt = now };
+                guest = new Guest
+                {
+                    DeviceId = deviceId,
+                    PlayerId = await GenerateUniquePlayerIdAsync(db),
+                    CreatedAt = now
+                };
                 db.Guests.Add(guest);
             }
 
@@ -77,7 +88,7 @@ public static class AuthEndpoints
             await db.SaveChangesAsync();
 
             return ApiResults.Ok(
-                new AuthResult { DeviceId = deviceId, Token = token },
+                new AuthResult { DeviceId = deviceId, PlayerId = guest.PlayerId, Token = token },
                 alreadyLoggedIn ? "already_logged_in" : "guest_login",
                 instanceId);
         });
@@ -103,6 +114,34 @@ public static class AuthEndpoints
 
             return ApiResults.Ok<object?>(null, "logged_out", instanceId);
         });
+    }
+
+    private static async Task<long> GenerateUniquePlayerIdAsync(AppDbContext db)
+    {
+        for (var attempt = 0; attempt < MaxPlayerIdAttempts; attempt++)
+        {
+            var playerId = GeneratePlayerId();
+            if (!await db.Guests.AnyAsync(g => g.PlayerId == playerId))
+                return playerId;
+        }
+
+        throw new InvalidOperationException("Could not generate a unique player ID.");
+    }
+
+    private static long GeneratePlayerId()
+    {
+        var range = (ulong)(MaxPlayerIdExclusive - MinPlayerId);
+        var limit = ulong.MaxValue - (ulong.MaxValue % range);
+        var bytes = new byte[sizeof(ulong)];
+
+        while (true)
+        {
+            RandomNumberGenerator.Fill(bytes);
+            var value = BitConverter.ToUInt64(bytes, 0);
+
+            if (value < limit)
+                return MinPlayerId + (long)(value % range);
+        }
     }
 
     // Resolves a stable identifier for the calling device, no frontend required.

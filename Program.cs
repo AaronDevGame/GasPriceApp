@@ -5,16 +5,22 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 
+Console.Error.WriteLine("startup: entering program");
 var builder = WebApplication.CreateBuilder(args);
+Console.Error.WriteLine("startup: builder created");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(DbConfig.ResolveConnectionString(builder.Configuration)));
 
+Console.Error.WriteLine("startup: building app");
 var app = builder.Build();
+Console.Error.WriteLine("startup: app built");
 
 // Apply any pending migrations on startup so the schema exists locally and on Render.
+Console.Error.WriteLine("startup: migrating database");
 using (var scope = app.Services.CreateScope())
     scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+Console.Error.WriteLine("startup: database migrated");
 
 // Behind Render's proxy the real client IP is in X-Forwarded-For; surface it as RemoteIpAddress.
 var forwardedOptions = new ForwardedHeadersOptions
@@ -111,6 +117,7 @@ admin.MapFallback((HttpContext context) => ApiResults.NotFound("The requested en
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 app.Urls.Add($"http://0.0.0.0:{port}");
 
+Console.Error.WriteLine($"startup: running on {port}");
 app.Run();
 
 
