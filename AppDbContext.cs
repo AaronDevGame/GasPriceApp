@@ -7,6 +7,7 @@ public class AppDbContext : DbContext
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     public DbSet<Guest> Guests => Set<Guest>();
+    public DbSet<PlayerData> PlayerData => Set<PlayerData>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -17,6 +18,7 @@ public class AppDbContext : DbContext
             e.HasKey(g => g.DeviceId);
             e.Property(g => g.DeviceId).HasColumnName("device_id");
             e.Property(g => g.Token).HasColumnName("token");
+            e.HasIndex(g => g.Token);
             e.Property(g => g.PlayerId)
                 .HasColumnName("player_id");
             e.HasIndex(g => g.PlayerId).IsUnique();
@@ -32,6 +34,40 @@ public class AppDbContext : DbContext
             e.Property(g => g.LoginCount).HasColumnName("login_count");
             e.Property(g => g.LastLogoutAt).HasColumnName("last_logout_at");
             e.Property(g => g.LogoutCount).HasColumnName("logout_count");
+        });
+
+        modelBuilder.Entity<PlayerData>(e =>
+        {
+            e.ToTable("player_data");
+            e.HasKey(p => p.DeviceId);
+            e.Property(p => p.DeviceId).HasColumnName("device_id");
+            e.Property(p => p.PlayerId).HasColumnName("player_id");
+            e.HasIndex(p => p.PlayerId).IsUnique();
+            e.Property(p => p.Health)
+                .HasColumnName("health")
+                .HasDefaultValue(PlayerDataDefaults.Health);
+            e.Property(p => p.Money)
+                .HasColumnName("money")
+                .HasDefaultValue(PlayerDataDefaults.Money);
+            e.Property(p => p.PositionJson)
+                .HasColumnName("position_json")
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'{}'::jsonb");
+            e.Property(p => p.InventoryJson)
+                .HasColumnName("inventory_json")
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'[]'::jsonb");
+            e.Property(p => p.ExtraDataJson)
+                .HasColumnName("extra_data_json")
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'{}'::jsonb");
+            e.Property(p => p.CreatedAt).HasColumnName("created_at");
+            e.Property(p => p.UpdatedAt).HasColumnName("updated_at");
+
+            e.HasOne<Guest>()
+                .WithOne()
+                .HasForeignKey<PlayerData>(p => p.DeviceId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

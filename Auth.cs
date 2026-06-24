@@ -119,6 +119,7 @@ public static class AuthEndpoints
             guest.LastLoginAt = now;
             guest.LoginCount += 1;
 
+            await PlayerDataStore.EnsureForGuestAsync(db, guest, now);
             await db.SaveChangesAsync();
             response.Cookies.Append(SessionCookie, "1", SessionCookieOptions(request));
 

@@ -78,4 +78,5 @@ public static class AuthErrors
 {
     public const string MissingAuthorizationHeader = "missing_authorization_header";
     public const string InvalidAdminKey = "invalid_admin_key";
+    public const string InvalidPlayerToken = "invalid_player_token";
 }

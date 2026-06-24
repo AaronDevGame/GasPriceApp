@@ -65,6 +65,7 @@ app.MapGet("/info", () => ApiResults.Ok(ApiMetadata.Info));
 app.MapGet("/routes", () =>ApiResults.Ok(RouteRegistry.Public, "public_routes", InstanceId));
 
 app.MapAuthEndpoints(auth, InstanceId);
+app.MapPlayerDataEndpoints(InstanceId);
 
 app.MapFallback((HttpContext context) => ApiResults.NotFound("The requested endpoint does not exist.", InstanceId, context.Request.Path));
 

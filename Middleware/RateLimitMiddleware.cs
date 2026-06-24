@@ -8,6 +8,7 @@ public class RateLimitMiddleware
         ["/ping"]   = TimeSpan.FromSeconds(1),
         ["/status"] = TimeSpan.FromSeconds(1),
         ["/info"]   = TimeSpan.FromSeconds(1),
+        ["/player/data"] = TimeSpan.FromSeconds(1),
     };
 
     // Key = ip + "|" + route

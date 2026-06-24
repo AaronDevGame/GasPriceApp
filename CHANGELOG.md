@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.5.0] - 2026-06-24
+
+### Added
+- Add hybrid `player_data` persistence for gameplay state, including health, money, JSONB position, JSONB inventory, and JSONB extra data.
+- Add token-authenticated `GET /player/data` and `PATCH /player/data` routes for player-owned save data.
+- Create missing player data on login and backfill existing guests through the `AddPlayerData` EF Core migration.
+- Index guest tokens for player route authentication and player data `player_id` for stable lookup.
+
+### Changed
+- Bump project and API version to `1.5.0`.
+
 ## [1.4.0] - 2026-06-24
 
 ### Added
