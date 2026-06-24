@@ -18,7 +18,6 @@ public class AppDbContext : DbContext
             e.HasKey(g => g.DeviceId);
             e.Property(g => g.DeviceId).HasColumnName("device_id");
             e.Property(g => g.Token).HasColumnName("token");
-            e.HasIndex(g => g.Token);
             e.Property(g => g.PlayerId)
                 .HasColumnName("player_id");
             e.HasIndex(g => g.PlayerId).IsUnique();

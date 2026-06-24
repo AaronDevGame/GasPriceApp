@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 
 public record PlayerDataResponse(
     long PlayerId,
@@ -66,6 +65,10 @@ public static class PlayerDataEndpoints
         if (!request.Headers.TryGetValue("Authorization", out var authHeader))
             return PlayerAuthResult.Invalid(AuthErrors.MissingAuthorizationHeader);
 
+        if (!request.Headers.TryGetValue(AuthEndpoints.DeviceIdHeader, out var deviceIdHeader) ||
+            string.IsNullOrWhiteSpace(deviceIdHeader.ToString()))
+            return PlayerAuthResult.Invalid(AuthErrors.MissingDeviceIdHeader);
+
         var parts = authHeader.ToString().Split(' ', 2);
         if (parts.Length != 2 ||
             !parts[0].Equals("Bearer", StringComparison.OrdinalIgnoreCase) ||
@@ -73,9 +76,11 @@ public static class PlayerDataEndpoints
             return PlayerAuthResult.Invalid(AuthErrors.InvalidPlayerToken);
 
         var token = parts[1].Trim();
-        var guest = await db.Guests.FirstOrDefaultAsync(g => g.Token == token);
-        return guest is null
-            ? PlayerAuthResult.Invalid(AuthErrors.InvalidPlayerToken)
+        var deviceId = deviceIdHeader.ToString().Trim();
+        var guest = await db.Guests.FindAsync(deviceId);
+
+        return guest is null || guest.Token != token
+            ? PlayerAuthResult.Invalid(AuthErrors.InvalidPlayerCredentials)
             : PlayerAuthResult.Valid(guest);
     }
 

@@ -85,8 +85,6 @@ namespace BackendServer.Migrations
                     b.HasIndex("PlayerName")
                         .IsUnique();
 
-                    b.HasIndex("Token");
-
                     b.ToTable("guests", (string)null);
                 });
 

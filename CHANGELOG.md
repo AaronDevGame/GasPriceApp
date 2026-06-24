@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.5.1] - 2026-06-25
+
+### Changed
+- Require `X-Device-Id` alongside `Authorization: Bearer <token>` for `/player/data` reads and updates.
+- Validate that the provided token and device id belong to the same guest before returning or patching player data.
+- Bump project and API version to `1.5.1`.
+
 ## [1.5.0] - 2026-06-24
 
 ### Added

@@ -62,11 +62,6 @@ namespace BackendServer.Migrations
                 """);
 
             migrationBuilder.CreateIndex(
-                name: "IX_guests_token",
-                table: "guests",
-                column: "token");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_player_data_player_id",
                 table: "player_data",
                 column: "player_id",
@@ -78,10 +73,6 @@ namespace BackendServer.Migrations
         {
             migrationBuilder.DropTable(
                 name: "player_data");
-
-            migrationBuilder.DropIndex(
-                name: "IX_guests_token",
-                table: "guests");
         }
     }
 }
