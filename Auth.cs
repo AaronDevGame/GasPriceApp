@@ -46,6 +46,11 @@ public record LoginRequest
     public string? PlayerName { get; init; }
 }
 
+public record AuthStatusResult(
+    bool HasGuestLogin,
+    string? PlayerName = null,
+    long? PlayerId = null);
+
 public static class AuthEndpoints
 {
     private const long MinPlayerId = 100_000_000_000_000;
@@ -63,6 +68,24 @@ public static class AuthEndpoints
 
     public static void MapAuthEndpoints(this WebApplication app, AuthService auth, string instanceId)
     {
+        app.MapGet("/auth/status", async (HttpRequest request, AppDbContext db) =>
+        {
+            if (!TryGetDeviceId(request, out var deviceId))
+                return ApiResults.Ok(new AuthStatusResult(false), "auth_status", instanceId);
+
+            var guest = await db.Guests
+                .AsNoTracking()
+                .FirstOrDefaultAsync(g => g.DeviceId == deviceId);
+
+            if (guest is null)
+                return ApiResults.Ok(new AuthStatusResult(false), "auth_status", instanceId);
+
+            return ApiResults.Ok(
+                new AuthStatusResult(true, guest.PlayerName, guest.PlayerId),
+                "auth_status",
+                instanceId);
+        });
+
         app.MapPost("/login", async (HttpRequest request, HttpResponse response, AppDbContext db) =>
         {
             LoginRequest? loginRequest;

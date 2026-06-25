@@ -87,6 +87,7 @@ public static class RouteRegistry
         new("/status", "GET"),
         new("/info", "GET"),
         new("/routes", "GET"),
+        new("/auth/status", "GET"),
         new("/login", "POST"),
         new("/logout", "POST"),
         new("/player/data", "GET"),
@@ -98,5 +99,5 @@ public record RouteInfo(string Route, string Method);
 
 public static class APIVersion
 {
-    public const string Version = "1.5.1";
+    public const string Version = "1.5.2";
 }

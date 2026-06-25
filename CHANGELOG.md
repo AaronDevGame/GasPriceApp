@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.5.2] - 2026-06-25
+
+### Added
+- Add `GET /auth/status` to check whether the current device id already has a guest login, returning `hasGuestLogin`, `playerName`, and `playerId`.
+
+### Changed
+- List `/auth/status` in the public route registry.
+- Bump project and API version to `1.5.2`.
+
 ## [1.5.1] - 2026-06-25
 
 ### Changed
