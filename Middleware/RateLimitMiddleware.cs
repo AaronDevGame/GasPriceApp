@@ -1,14 +1,20 @@
-using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
 
 public class RateLimitMiddleware
 {
     private static readonly Dictionary<string, TimeSpan> _cooldowns = new()
     {
-        ["/ping"]   = TimeSpan.FromSeconds(1),
-        ["/status"] = TimeSpan.FromSeconds(1),
-        ["/info"]   = TimeSpan.FromSeconds(1),
-        ["/player/data"] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.Ping] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.Health] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.Status] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.Info] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.Routes] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.AuthStatus] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.AuthGuestLogin] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.AuthLogout] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.LegacyLogin] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.LegacyLogout] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.PlayerData] = TimeSpan.FromSeconds(1),
     };
 
     // Key = ip + "|" + route
@@ -34,12 +40,13 @@ public class RateLimitMiddleware
         {
             cooldown = TimeSpan.FromSeconds(1);
         }
-        else if (_cooldowns.TryGetValue(path.Value ?? "", out var specificCooldown)) {
-                cooldown = specificCooldown;
-        } 
+        else if (_cooldowns.TryGetValue(path.Value ?? "", out var specificCooldown))
+        {
+            cooldown = specificCooldown;
+        }
         else
         {
-             cooldown = TimeSpan.FromSeconds(1); // unknown endpoints
+            cooldown = TimeSpan.FromSeconds(1); // unknown endpoints
         }
 
         // 1.5) Decide bucket key (prevents bypass by changing path)

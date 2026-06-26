@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.6.0] - 2026-06-26
+
+### Added
+- Add canonical guest auth routes: `POST /auth/guest/login` and `POST /auth/logout`.
+- Add canonical admin server lifecycle routes: `GET /admin/server/status`, `POST /admin/server/start`, `POST /admin/server/stop`, and `POST /admin/server/restart`.
+- Add protected `GET /admin/routes` for listing admin-only endpoints.
+
+### Changed
+- Keep `POST /login`, `POST /logout`, `POST /admin/start`, `POST /admin/stop`, and `POST /admin/restart` as legacy compatibility aliases.
+- Mark legacy aliases in route registry responses.
+- Centralize route names in `ApiRoutes` and include the new auth endpoints in rate limiting.
+- Bump project and API version to `1.6.0`.
+
 ## [1.5.2] - 2026-06-25
 
 ### Added

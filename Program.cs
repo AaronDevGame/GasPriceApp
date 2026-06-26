@@ -1,6 +1,3 @@
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
@@ -31,8 +28,6 @@ forwardedOptions.KnownIPNetworks.Clear();
 forwardedOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedOptions);
 
-var admin = app.MapGroup("/admin");
-
 // In-memory state (resets when you restart the app)
 var state = new ServerState
 {
@@ -48,30 +43,11 @@ var health = new HealthState
 
 var InstanceId = GetInstanceId();
 
-var auth = new AuthService(app.Configuration);
+IResult GetServerStatus() => ApiResults.Ok(state, "success", InstanceId);
 
-// Middleware
-app.UseMiddleware<RateLimitMiddleware>();
-app.UseMiddleware<AdminAuthMiddleware>();
-
-app.MapGet("/ping", () => new ApiResponse<object>());
-
-app.MapGet("/health", () => ApiResults.Ok(health, "success", InstanceId));
-
-app.MapGet("/status", () => ApiResults.Ok(state, "success", InstanceId));
-
-app.MapGet("/info", () => ApiResults.Ok(ApiMetadata.Info));
-
-app.MapGet("/routes", () =>ApiResults.Ok(RouteRegistry.Public, "public_routes", InstanceId));
-
-app.MapAuthEndpoints(auth, InstanceId);
-app.MapPlayerDataEndpoints(InstanceId);
-
-app.MapFallback((HttpContext context) => ApiResults.NotFound("The requested endpoint does not exist.", InstanceId, context.Request.Path));
-
-admin.MapPost("/start", (HttpRequest request) =>
+IResult StartServer()
 {
-    if(state.Status == ServerStatus.Running)
+    if (state.Status == ServerStatus.Running)
         return ApiResults.BadRequest("Server already running...", InstanceId, "Current status: running");
 
     var now = DateTime.UtcNow;
@@ -79,11 +55,11 @@ admin.MapPost("/start", (HttpRequest request) =>
     state.StartedAt = now;
     state.LastStartedAt = now;
     return ApiResults.Ok(state, "server is running...", InstanceId);
-});
+}
 
-admin.MapPost("/stop", (HttpRequest request) =>
+IResult StopServer()
 {
-    if(state.Status == ServerStatus.Stopped)
+    if (state.Status == ServerStatus.Stopped)
         return ApiResults.BadRequest("Server already stopped...", InstanceId);
 
     var now = DateTime.UtcNow;
@@ -94,11 +70,11 @@ admin.MapPost("/stop", (HttpRequest request) =>
     state.StartedAt = null;
     state.LastStoppedAt = now;
     return ApiResults.Ok(state, "server is stopped...", InstanceId);
-});
+}
 
-admin.MapPost("/restart", (HttpRequest request) =>
+IResult RestartServer()
 {
-    if(state.Status != ServerStatus.Running)
+    if (state.Status != ServerStatus.Running)
         return ApiResults.BadRequest("Server is not running...", InstanceId, "Start the server before restarting.");
 
     var now = DateTime.UtcNow;
@@ -109,10 +85,35 @@ admin.MapPost("/restart", (HttpRequest request) =>
     state.LastStartedAt = now;
     state.RestartCount++;
     return ApiResults.Ok(state, "server restarted...", InstanceId);
-});
+}
 
-admin.MapFallback((HttpContext context) => ApiResults.NotFound("The requested endpoint does not exist.", InstanceId, context.Request.Path));
+var auth = new AuthService(app.Configuration);
 
+// Middleware
+app.UseMiddleware<RateLimitMiddleware>();
+app.UseMiddleware<AdminAuthMiddleware>();
+
+app.MapGet(ApiRoutes.Ping, () => new ApiResponse<object>());
+app.MapGet(ApiRoutes.Health, () => ApiResults.Ok(health, "success", InstanceId));
+app.MapGet(ApiRoutes.Status, GetServerStatus);
+app.MapGet(ApiRoutes.Info, () => ApiResults.Ok(ApiMetadata.Info));
+app.MapGet(ApiRoutes.Routes, () => ApiResults.Ok(RouteRegistry.Public, "public_routes", InstanceId));
+
+app.MapAuthEndpoints(auth, InstanceId);
+app.MapPlayerDataEndpoints(InstanceId);
+
+app.MapGet(ApiRoutes.AdminRoutes, () => ApiResults.Ok(RouteRegistry.Admin, "admin_routes", InstanceId));
+app.MapGet(ApiRoutes.AdminServerStatus, GetServerStatus);
+app.MapPost(ApiRoutes.AdminServerStart, StartServer);
+app.MapPost(ApiRoutes.AdminServerStop, StopServer);
+app.MapPost(ApiRoutes.AdminServerRestart, RestartServer);
+
+// Compatibility aliases for older admin tools. Prefer /admin/server/* in new clients.
+app.MapPost(ApiRoutes.LegacyAdminStart, StartServer);
+app.MapPost(ApiRoutes.LegacyAdminStop, StopServer);
+app.MapPost(ApiRoutes.LegacyAdminRestart, RestartServer);
+
+app.MapFallback((HttpContext context) => ApiResults.NotFound("The requested endpoint does not exist.", InstanceId, context.Request.Path));
 
 
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";

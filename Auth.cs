@@ -68,7 +68,15 @@ public static class AuthEndpoints
 
     public static void MapAuthEndpoints(this WebApplication app, AuthService auth, string instanceId)
     {
-        app.MapGet("/auth/status", async (HttpRequest request, AppDbContext db) =>
+        app.MapGet(ApiRoutes.AuthStatus, GetAuthStatusAsync);
+        app.MapPost(ApiRoutes.AuthGuestLogin, LoginAsync);
+        app.MapPost(ApiRoutes.AuthLogout, LogoutAsync);
+
+        // Compatibility aliases for older clients. Prefer the /auth/* routes in new clients.
+        app.MapPost(ApiRoutes.LegacyLogin, LoginAsync);
+        app.MapPost(ApiRoutes.LegacyLogout, LogoutAsync);
+
+        async Task<IResult> GetAuthStatusAsync(HttpRequest request, AppDbContext db)
         {
             if (!TryGetDeviceId(request, out var deviceId))
                 return ApiResults.Ok(new AuthStatusResult(false), "auth_status", instanceId);
@@ -84,9 +92,9 @@ public static class AuthEndpoints
                 new AuthStatusResult(true, guest.PlayerName, guest.PlayerId),
                 "auth_status",
                 instanceId);
-        });
+        }
 
-        app.MapPost("/login", async (HttpRequest request, HttpResponse response, AppDbContext db) =>
+        async Task<IResult> LoginAsync(HttpRequest request, HttpResponse response, AppDbContext db)
         {
             LoginRequest? loginRequest;
             try
@@ -101,8 +109,8 @@ public static class AuthEndpoints
             var deviceId = ResolveDeviceId(request, response);
             var token = auth.GenerateToken(deviceId);
 
-            // "Already logged in" = an active session from a previous /login that
-            // hasn't been ended by /logout. The device_id (and therefore the token)
+            // "Already logged in" = an active session from a previous login that
+            // hasn't been ended by logout. The device_id (and therefore the token)
             // persists across logout; only this session marker is cleared.
             var alreadyLoggedIn = request.Cookies.ContainsKey(SessionCookie);
 
@@ -150,11 +158,11 @@ public static class AuthEndpoints
                 new AuthResult { DeviceId = deviceId, PlayerId = guest.PlayerId, PlayerName = guest.PlayerName, Token = token },
                 alreadyLoggedIn ? "already_logged_in" : "guest_login",
                 instanceId);
-        });
+        }
 
-        // Ends the session marker so the next /login reports guest_login again.
+        // Ends the session marker so the next login reports guest_login again.
         // The device_id cookie is intentionally kept, so re-login yields the same token.
-        app.MapPost("/logout", async (HttpRequest request, HttpResponse response, AppDbContext db) =>
+        async Task<IResult> LogoutAsync(HttpRequest request, HttpResponse response, AppDbContext db)
         {
             response.Cookies.Delete(SessionCookie);
 
@@ -172,7 +180,7 @@ public static class AuthEndpoints
             }
 
             return ApiResults.Ok<object?>(null, "logged_out", instanceId);
-        });
+        }
     }
 
     private static async Task<long> GenerateUniquePlayerIdAsync(AppDbContext db)

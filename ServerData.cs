@@ -78,26 +78,68 @@ public record ApiInfo
     public string Version {get; init; } = APIVersion.Version;
 }
 
+public static class ApiRoutes
+{
+    public const string Ping = "/ping";
+    public const string Health = "/health";
+    public const string Status = "/status";
+    public const string Info = "/info";
+    public const string Routes = "/routes";
+
+    public const string AuthStatus = "/auth/status";
+    public const string AuthGuestLogin = "/auth/guest/login";
+    public const string AuthLogout = "/auth/logout";
+
+    public const string LegacyLogin = "/login";
+    public const string LegacyLogout = "/logout";
+
+    public const string PlayerData = "/player/data";
+
+    public const string AdminServerStatus = "/admin/server/status";
+    public const string AdminServerStart = "/admin/server/start";
+    public const string AdminServerStop = "/admin/server/stop";
+    public const string AdminServerRestart = "/admin/server/restart";
+    public const string AdminRoutes = "/admin/routes";
+
+    public const string LegacyAdminStart = "/admin/start";
+    public const string LegacyAdminStop = "/admin/stop";
+    public const string LegacyAdminRestart = "/admin/restart";
+}
+
 public static class RouteRegistry
 {
     public static readonly RouteInfo[] Public =
     {
-        new("/ping", "GET"),
-        new("/health", "GET"),
-        new("/status", "GET"),
-        new("/info", "GET"),
-        new("/routes", "GET"),
-        new("/auth/status", "GET"),
-        new("/login", "POST"),
-        new("/logout", "POST"),
-        new("/player/data", "GET"),
-        new("/player/data", "PATCH"),
+        new(ApiRoutes.Ping, "GET"),
+        new(ApiRoutes.Health, "GET"),
+        new(ApiRoutes.Status, "GET"),
+        new(ApiRoutes.Info, "GET"),
+        new(ApiRoutes.Routes, "GET"),
+        new(ApiRoutes.AuthStatus, "GET"),
+        new(ApiRoutes.AuthGuestLogin, "POST"),
+        new(ApiRoutes.AuthLogout, "POST"),
+        new(ApiRoutes.LegacyLogin, "POST", true),
+        new(ApiRoutes.LegacyLogout, "POST", true),
+        new(ApiRoutes.PlayerData, "GET"),
+        new(ApiRoutes.PlayerData, "PATCH"),
+    };
+
+    public static readonly RouteInfo[] Admin =
+    {
+        new(ApiRoutes.AdminRoutes, "GET"),
+        new(ApiRoutes.AdminServerStatus, "GET"),
+        new(ApiRoutes.AdminServerStart, "POST"),
+        new(ApiRoutes.AdminServerStop, "POST"),
+        new(ApiRoutes.AdminServerRestart, "POST"),
+        new(ApiRoutes.LegacyAdminStart, "POST", true),
+        new(ApiRoutes.LegacyAdminStop, "POST", true),
+        new(ApiRoutes.LegacyAdminRestart, "POST", true),
     };
 }
 
-public record RouteInfo(string Route, string Method);
+public record RouteInfo(string Route, string Method, bool IsLegacy = false);
 
 public static class APIVersion
 {
-    public const string Version = "1.5.2";
+    public const string Version = "1.6.0";
 }

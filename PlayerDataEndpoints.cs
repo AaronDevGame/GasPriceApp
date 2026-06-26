@@ -14,7 +14,7 @@ public static class PlayerDataEndpoints
 {
     public static void MapPlayerDataEndpoints(this WebApplication app, string instanceId)
     {
-        app.MapGet("/player/data", async (HttpRequest request, AppDbContext db) =>
+        app.MapGet(ApiRoutes.PlayerData, async (HttpRequest request, AppDbContext db) =>
         {
             var auth = await AuthenticatePlayerAsync(request, db);
             if (!auth.IsValid || auth.Guest is null)
@@ -27,7 +27,7 @@ public static class PlayerDataEndpoints
             return ApiResults.Ok(ToResponse(playerData), "player_data", instanceId);
         });
 
-        app.MapPatch("/player/data", async (HttpRequest request, AppDbContext db) =>
+        app.MapPatch(ApiRoutes.PlayerData, async (HttpRequest request, AppDbContext db) =>
         {
             var auth = await AuthenticatePlayerAsync(request, db);
             if (!auth.IsValid || auth.Guest is null)
