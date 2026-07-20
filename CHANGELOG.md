@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.6.1] - 2026-07-21
+
+### Added
+- Add server processing time in milliseconds to the `GET /ping` response.
+
+### Changed
+- Bump project and API version to `1.6.1`.
+
 ## [1.6.0] - 2026-06-26
 
 ### Added
