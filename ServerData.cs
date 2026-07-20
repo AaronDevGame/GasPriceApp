@@ -12,6 +12,11 @@ public class ApiResponse<T>
     public ApiError? Error {get; set;}
 }
 
+public sealed class PingResponse : ApiResponse<object>
+{
+    public string Ping { get; init; } = "0.00ms";
+}
+
 public class ApiError
 {
     public string Error {get; set;} = "";

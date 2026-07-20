@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
@@ -88,12 +90,31 @@ IResult RestartServer()
 }
 
 var auth = new AuthService(app.Configuration);
+var pingStartedAtKey = new object();
 
 // Middleware
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path == ApiRoutes.Ping)
+        context.Items[pingStartedAtKey] = Stopwatch.GetTimestamp();
+
+    await next();
+});
 app.UseMiddleware<RateLimitMiddleware>();
 app.UseMiddleware<AdminAuthMiddleware>();
 
-app.MapGet(ApiRoutes.Ping, () => new ApiResponse<object>());
+app.MapGet(ApiRoutes.Ping, (HttpContext context) =>
+{
+    var startedAt = context.Items.TryGetValue(pingStartedAtKey, out var value) && value is long timestamp
+        ? timestamp
+        : Stopwatch.GetTimestamp();
+    var elapsedMilliseconds = Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
+
+    return new PingResponse
+    {
+        Ping = $"{elapsedMilliseconds.ToString("F2", CultureInfo.InvariantCulture)}ms"
+    };
+});
 app.MapGet(ApiRoutes.Health, () => ApiResults.Ok(health, "success", InstanceId));
 app.MapGet(ApiRoutes.Status, GetServerStatus);
 app.MapGet(ApiRoutes.Info, () => ApiResults.Ok(ApiMetadata.Info));
