@@ -14,7 +14,7 @@ public class ApiResponse<T>
 
 public sealed class PingResponse : ApiResponse<object>
 {
-    public string Ping { get; init; } = "0.00ms";
+    public string ProcessingTime { get; init; } = "0.00ms";
 }
 
 public class ApiError

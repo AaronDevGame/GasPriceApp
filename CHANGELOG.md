@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.6.2] - 2026-08-04
+
+### Changed
+- Change ping endpoint  `1.6.2`.
+
 ## [1.6.1] - 2026-07-21
 
 ### Added

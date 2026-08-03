@@ -112,7 +112,7 @@ app.MapGet(ApiRoutes.Ping, (HttpContext context) =>
 
     return new PingResponse
     {
-        Ping = $"{elapsedMilliseconds.ToString("F2", CultureInfo.InvariantCulture)}ms"
+        ProcessingTime = $"{elapsedMilliseconds.ToString("F2", CultureInfo.InvariantCulture)}ms"
     };
 });
 app.MapGet(ApiRoutes.Health, () => ApiResults.Ok(health, "success", InstanceId));
