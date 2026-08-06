@@ -15,11 +15,12 @@ Console.Error.WriteLine("startup: building app");
 var app = builder.Build();
 Console.Error.WriteLine("startup: app built");
 
-// Apply any pending migrations on startup so the schema exists locally and on Render.
-Console.Error.WriteLine("startup: migrating database");
-using (var scope = app.Services.CreateScope())
-    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
-Console.Error.WriteLine("startup: database migrated");
+// Database migrations are temporarily disabled while no PostgreSQL provider is configured.
+// Re-enable this block after connecting the service to Neon.
+// Console.Error.WriteLine("startup: migrating database");
+// using (var scope = app.Services.CreateScope())
+//     scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+// Console.Error.WriteLine("startup: database migrated");
 
 // Behind Render's proxy the real client IP is in X-Forwarded-For; surface it as RemoteIpAddress.
 var forwardedOptions = new ForwardedHeadersOptions
