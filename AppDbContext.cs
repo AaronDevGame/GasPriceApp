@@ -76,7 +76,7 @@ public static class DbConfig
     // Resolves the connection string, in priority order:
     //   1. DATABASE_URL  (Render provides this as a postgres:// URI)
     //   2. ConnectionStrings:Postgres  (explicit override)
-    //   3. local Homebrew default (localhost, current OS user, trust auth)
+    //   3. local PostgreSQL fallback (localhost, current OS user, trust auth)
     public static string ResolveConnectionString(IConfiguration config)
     {
         var url = Environment.GetEnvironmentVariable("DATABASE_URL");
@@ -118,7 +118,14 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
     public AppDbContext CreateDbContext(string[] args)
     {
+        var environment = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
+            ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+            ?? "Development";
+
         var config = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", optional: true)
+            .AddJsonFile($"appsettings.{environment}.json", optional: true)
             .AddEnvironmentVariables()
             .Build();
 

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.6.3] - 2026-08-13
+
+### Removed
+- Remove the legacy `POST /login` and `POST /logout` aliases; clients must use `POST /auth/guest/login` and `POST /auth/logout`.
+
+### Changed
+- Bump project and API version to `1.6.3`.
+
 ## [1.6.2] - 2026-08-04
 
 ### Changed

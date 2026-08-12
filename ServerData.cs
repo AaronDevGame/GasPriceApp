@@ -95,9 +95,6 @@ public static class ApiRoutes
     public const string AuthGuestLogin = "/auth/guest/login";
     public const string AuthLogout = "/auth/logout";
 
-    public const string LegacyLogin = "/login";
-    public const string LegacyLogout = "/logout";
-
     public const string PlayerData = "/player/data";
 
     public const string AdminServerStatus = "/admin/server/status";
@@ -123,8 +120,6 @@ public static class RouteRegistry
         new(ApiRoutes.AuthStatus, "GET"),
         new(ApiRoutes.AuthGuestLogin, "POST"),
         new(ApiRoutes.AuthLogout, "POST"),
-        new(ApiRoutes.LegacyLogin, "POST", true),
-        new(ApiRoutes.LegacyLogout, "POST", true),
         new(ApiRoutes.PlayerData, "GET"),
         new(ApiRoutes.PlayerData, "PATCH"),
     };
@@ -146,5 +141,5 @@ public record RouteInfo(string Route, string Method, bool IsLegacy = false);
 
 public static class APIVersion
 {
-    public const string Version = "1.6.2";
+    public const string Version = "1.6.3";
 }

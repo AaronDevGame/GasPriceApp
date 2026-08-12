@@ -72,10 +72,6 @@ public static class AuthEndpoints
         app.MapPost(ApiRoutes.AuthGuestLogin, LoginAsync);
         app.MapPost(ApiRoutes.AuthLogout, LogoutAsync);
 
-        // Compatibility aliases for older clients. Prefer the /auth/* routes in new clients.
-        app.MapPost(ApiRoutes.LegacyLogin, LoginAsync);
-        app.MapPost(ApiRoutes.LegacyLogout, LogoutAsync);
-
         async Task<IResult> GetAuthStatusAsync(HttpRequest request, AppDbContext db)
         {
             if (!TryGetDeviceId(request, out var deviceId))
