@@ -79,9 +79,12 @@ public static class PlayerDataEndpoints
         var deviceId = deviceIdHeader.ToString().Trim();
         var guest = await db.Guests.FindAsync(deviceId);
 
-        return guest is null || guest.Token != token
-            ? PlayerAuthResult.Invalid(AuthErrors.InvalidPlayerCredentials)
-            : PlayerAuthResult.Valid(guest);
+        if (guest is null || guest.Token != token)
+            return PlayerAuthResult.Invalid(AuthErrors.InvalidPlayerCredentials);
+
+        return guest.IsLoggedIn
+            ? PlayerAuthResult.Valid(guest)
+            : PlayerAuthResult.Invalid(AuthErrors.PlayerNotLoggedIn);
     }
 
     private static bool TryApplyPatch(PlayerData playerData, JsonElement root, out string error)

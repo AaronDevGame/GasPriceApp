@@ -14,6 +14,7 @@ public class Guest
     public DateTime CreatedAt { get; set; }
     public DateTime LastLoginAt { get; set; }
     public int LoginCount { get; set; }
+    public bool IsLoggedIn { get; set; }
 
     public DateTime? LastLogoutAt { get; set; }
     public int LogoutCount { get; set; }

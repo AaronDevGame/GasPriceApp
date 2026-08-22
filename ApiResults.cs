@@ -81,4 +81,5 @@ public static class AuthErrors
     public const string InvalidAdminKey = "invalid_admin_key";
     public const string InvalidPlayerToken = "invalid_player_token";
     public const string InvalidPlayerCredentials = "invalid_player_credentials";
+    public const string PlayerNotLoggedIn = "player_not_logged_in";
 }

@@ -31,6 +31,9 @@ public class AppDbContext : DbContext
             e.Property(g => g.CreatedAt).HasColumnName("created_at");
             e.Property(g => g.LastLoginAt).HasColumnName("last_login_at");
             e.Property(g => g.LoginCount).HasColumnName("login_count");
+            e.Property(g => g.IsLoggedIn)
+                .HasColumnName("is_logged_in")
+                .HasDefaultValue(false);
             e.Property(g => g.LastLogoutAt).HasColumnName("last_logout_at");
             e.Property(g => g.LogoutCount).HasColumnName("logout_count");
         });

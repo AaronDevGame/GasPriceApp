@@ -41,6 +41,7 @@ public record AuthResult
     public string TokenType { get; init; } = "guest";
     public DateTime CreatedAt { get; init; }
     public bool IsNewAccount { get; init; }
+    public bool IsLoggedIn { get; init; }
 }
 
 public record LoginRequest
@@ -50,10 +51,13 @@ public record LoginRequest
 
 public record AuthStatusResult(
     bool HasGuestLogin,
+    bool IsLoggedIn,
     string? PlayerName = null,
     long? PlayerId = null,
     string? AccountType = null,
     DateTime? CreatedAt = null);
+
+public record LogoutResult(bool IsLoggedIn);
 
 public static class AuthEndpoints
 {
@@ -101,7 +105,7 @@ public static class AuthEndpoints
                 return ApiResults.Unauthorized(AuthErrors.InvalidPlayerCredentials, instanceId);
 
             return ApiResults.Ok(
-                new AuthStatusResult(true, guest.PlayerName, guest.PlayerId, "guest", guest.CreatedAt),
+                new AuthStatusResult(true, guest.IsLoggedIn, guest.PlayerName, guest.PlayerId, "guest", guest.CreatedAt),
                 "auth_status",
                 instanceId);
         }
@@ -121,17 +125,13 @@ public static class AuthEndpoints
             var deviceId = ResolveDeviceId(request, response);
             var token = auth.GenerateToken(deviceId);
 
-            // "Already logged in" = an active session from a previous login that
-            // hasn't been ended by logout. The device_id (and therefore the token)
-            // persists across logout; only this session marker is cleared.
-            var alreadyLoggedIn = request.Cookies.ContainsKey(SessionCookie);
-
             // Upsert the guest record and record this login.
             var now = DateTime.UtcNow;
             var userAgent = request.Headers.UserAgent.ToString();
 
             var guest = await db.Guests.FindAsync(deviceId);
             var isNewAccount = guest is null;
+            var alreadyLoggedIn = guest?.IsLoggedIn == true;
             if (guest is null)
             {
                 var resolvedName = await ResolvePlayerNameAsync(db, deviceId, loginRequest?.PlayerName, null);
@@ -162,6 +162,7 @@ public static class AuthEndpoints
             guest.DeviceType = DetectDeviceType(userAgent);
             guest.LastLoginAt = now;
             guest.LoginCount += 1;
+            guest.IsLoggedIn = true;
 
             await PlayerDataStore.EnsureForGuestAsync(db, guest, now);
             await db.SaveChangesAsync();
@@ -175,32 +176,47 @@ public static class AuthEndpoints
                     PlayerName = guest.PlayerName,
                     Token = token,
                     CreatedAt = guest.CreatedAt,
-                    IsNewAccount = isNewAccount
+                    IsNewAccount = isNewAccount,
+                    IsLoggedIn = true
                 },
                 alreadyLoggedIn ? "already_logged_in" : "guest_login",
                 instanceId);
         }
 
-        // Ends the session marker so the next login reports guest_login again.
-        // The device_id cookie is intentionally kept, so re-login yields the same token.
+        // Ends the persisted session and clears the cookie marker. The device_id
+        // is intentionally kept, so re-login preserves the guest identity.
         async Task<IResult> LogoutAsync(HttpRequest request, HttpResponse response, AppDbContext db)
         {
+            if (!request.Headers.TryGetValue("Authorization", out var authHeader))
+                return ApiResults.Unauthorized(AuthErrors.MissingAuthorizationHeader, instanceId);
+
+            if (!request.Headers.TryGetValue(DeviceIdHeader, out var deviceIdHeader) ||
+                string.IsNullOrWhiteSpace(deviceIdHeader.ToString()))
+                return ApiResults.Unauthorized(AuthErrors.MissingDeviceIdHeader, instanceId);
+
+            var parts = authHeader.ToString().Split(' ', 2);
+            if (parts.Length != 2 ||
+                !parts[0].Equals("Bearer", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(parts[1]))
+                return ApiResults.Unauthorized(AuthErrors.InvalidPlayerToken, instanceId);
+
+            var token = parts[1].Trim();
+            var deviceId = deviceIdHeader.ToString().Trim();
+            var guest = await db.Guests.FindAsync(deviceId);
+            if (guest is null || guest.Token != token)
+                return ApiResults.Unauthorized(AuthErrors.InvalidPlayerCredentials, instanceId);
+
             response.Cookies.Delete(SessionCookie);
 
-            // The device_id is still present (we only clear the session marker), so
-            // we can record the logout against the guest record.
-            if (TryGetDeviceId(request, out var deviceId))
+            if (guest.IsLoggedIn)
             {
-                var guest = await db.Guests.FindAsync(deviceId);
-                if (guest is not null)
-                {
-                    guest.LastLogoutAt = DateTime.UtcNow;
-                    guest.LogoutCount += 1;
-                    await db.SaveChangesAsync();
-                }
+                guest.IsLoggedIn = false;
+                guest.LastLogoutAt = DateTime.UtcNow;
+                guest.LogoutCount += 1;
+                await db.SaveChangesAsync();
             }
 
-            return ApiResults.Ok<object?>(null, "logged_out", instanceId);
+            return ApiResults.Ok(new LogoutResult(false), "logged_out", instanceId);
         }
     }
 
@@ -351,27 +367,6 @@ public static class AuthEndpoints
         MaxAge = TimeSpan.FromDays(365),
         IsEssential = true
     };
-
-    // Reads an existing device id (header or cookie) without minting a new one.
-    private static bool TryGetDeviceId(HttpRequest request, out string deviceId)
-    {
-        if (request.Headers.TryGetValue(DeviceIdHeader, out var headerValue) &&
-            !string.IsNullOrWhiteSpace(headerValue.ToString()))
-        {
-            deviceId = headerValue.ToString();
-            return true;
-        }
-
-        if (request.Cookies.TryGetValue(DeviceIdCookie, out var cookieValue) &&
-            !string.IsNullOrWhiteSpace(cookieValue))
-        {
-            deviceId = cookieValue;
-            return true;
-        }
-
-        deviceId = "";
-        return false;
-    }
 
     // Best-effort device/platform category from the User-Agent. Browsers parse
     // reliably; native apps may send a generic UA or none, so this can be "Unknown".

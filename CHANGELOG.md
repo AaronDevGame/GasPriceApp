@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.6.5] - 2026-08-22
+
+### Added
+- Persist guest login state and return `isLoggedIn` from guest login, authentication status, and logout responses.
+
+### Changed
+- Require valid player credentials to log out and reject player-data access after logout.
+- Bump project and API version to `1.6.5`.
+
 ## [1.6.4] - 2026-08-22
 
 ### Added
