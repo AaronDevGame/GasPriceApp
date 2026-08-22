@@ -74,15 +74,27 @@ public static class AuthEndpoints
 
         async Task<IResult> GetAuthStatusAsync(HttpRequest request, AppDbContext db)
         {
-            if (!TryGetDeviceId(request, out var deviceId))
-                return ApiResults.Ok(new AuthStatusResult(false), "auth_status", instanceId);
+            if (!request.Headers.TryGetValue("Authorization", out var authHeader))
+                return ApiResults.Unauthorized(AuthErrors.MissingAuthorizationHeader, instanceId);
 
+            if (!request.Headers.TryGetValue(DeviceIdHeader, out var deviceIdHeader) ||
+                string.IsNullOrWhiteSpace(deviceIdHeader.ToString()))
+                return ApiResults.Unauthorized(AuthErrors.MissingDeviceIdHeader, instanceId);
+
+            var parts = authHeader.ToString().Split(' ', 2);
+            if (parts.Length != 2 ||
+                !parts[0].Equals("Bearer", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(parts[1]))
+                return ApiResults.Unauthorized(AuthErrors.InvalidPlayerToken, instanceId);
+
+            var token = parts[1].Trim();
+            var deviceId = deviceIdHeader.ToString().Trim();
             var guest = await db.Guests
                 .AsNoTracking()
                 .FirstOrDefaultAsync(g => g.DeviceId == deviceId);
 
-            if (guest is null)
-                return ApiResults.Ok(new AuthStatusResult(false), "auth_status", instanceId);
+            if (guest is null || guest.Token != token)
+                return ApiResults.Unauthorized(AuthErrors.InvalidPlayerCredentials, instanceId);
 
             return ApiResults.Ok(
                 new AuthStatusResult(true, guest.PlayerName, guest.PlayerId),

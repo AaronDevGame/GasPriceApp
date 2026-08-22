@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## Unreleased
+
+### Changed
+- Require `Authorization: Bearer <token>` and `X-Device-Id` for `GET /auth/status` instead of resolving device identity from cookies.
+
 ## [1.6.3] - 2026-08-13
 
 ### Removed
