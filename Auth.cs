@@ -39,6 +39,8 @@ public record AuthResult
     public string PlayerName { get; init; } = "";
     public string Token { get; init; } = "";
     public string TokenType { get; init; } = "guest";
+    public DateTime CreatedAt { get; init; }
+    public bool IsNewAccount { get; init; }
 }
 
 public record LoginRequest
@@ -49,7 +51,9 @@ public record LoginRequest
 public record AuthStatusResult(
     bool HasGuestLogin,
     string? PlayerName = null,
-    long? PlayerId = null);
+    long? PlayerId = null,
+    string? AccountType = null,
+    DateTime? CreatedAt = null);
 
 public static class AuthEndpoints
 {
@@ -97,7 +101,7 @@ public static class AuthEndpoints
                 return ApiResults.Unauthorized(AuthErrors.InvalidPlayerCredentials, instanceId);
 
             return ApiResults.Ok(
-                new AuthStatusResult(true, guest.PlayerName, guest.PlayerId),
+                new AuthStatusResult(true, guest.PlayerName, guest.PlayerId, "guest", guest.CreatedAt),
                 "auth_status",
                 instanceId);
         }
@@ -127,6 +131,7 @@ public static class AuthEndpoints
             var userAgent = request.Headers.UserAgent.ToString();
 
             var guest = await db.Guests.FindAsync(deviceId);
+            var isNewAccount = guest is null;
             if (guest is null)
             {
                 var resolvedName = await ResolvePlayerNameAsync(db, deviceId, loginRequest?.PlayerName, null);
@@ -163,7 +168,15 @@ public static class AuthEndpoints
             response.Cookies.Append(SessionCookie, "1", SessionCookieOptions(request));
 
             return ApiResults.Ok(
-                new AuthResult { DeviceId = deviceId, PlayerId = guest.PlayerId, PlayerName = guest.PlayerName, Token = token },
+                new AuthResult
+                {
+                    DeviceId = deviceId,
+                    PlayerId = guest.PlayerId,
+                    PlayerName = guest.PlayerName,
+                    Token = token,
+                    CreatedAt = guest.CreatedAt,
+                    IsNewAccount = isNewAccount
+                },
                 alreadyLoggedIn ? "already_logged_in" : "guest_login",
                 instanceId);
         }
