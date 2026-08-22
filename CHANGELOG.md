@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.6.4] - 2026-08-22
+
+### Added
+- Add `accountType` and guest account `createdAt` to successful `GET /auth/status` responses.
+- Add guest account `createdAt` and `isNewAccount` to `POST /auth/guest/login` responses.
+
+### Changed
+- Bump project and API version to `1.6.4`.
+
 ## [1.6.3] - 2026-08-13
 
 ### Removed
