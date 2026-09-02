@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Changed
+- Rename `token` to `accessToken` in `POST /auth/guest/login` responses; clients must read the new field name.
+- Replace the login response's hardcoded `tokenType` string with a string-serialized enum supporting `Guest`, `Email`, `Gmail`, and `AppleId`. Guest login now returns `"Guest"` instead of `"guest"`.
+
 ## [1.8.0] - 2026-09-03
 
 ### Added

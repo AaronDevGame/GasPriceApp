@@ -25,6 +25,15 @@ public class ApiError
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
+public enum TokenType
+{
+    Guest,
+    Email,
+    Gmail,
+    AppleId
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ServerStatus
 {
     Stopped,

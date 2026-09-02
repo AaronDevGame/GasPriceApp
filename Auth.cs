@@ -71,11 +71,11 @@ public record AuthResult
     public string DeviceId { get; init; } = "";
     public long PlayerId { get; init; }
     public string PlayerName { get; init; } = "";
-    public string Token { get; init; } = "";
+    public string AccessToken { get; init; } = "";
     public DateTime AccessTokenExpiresAt { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? GuestCredential { get; init; }
-    public string TokenType { get; init; } = "guest";
+    public TokenType TokenType { get; init; } = TokenType.Guest;
     public DateTime CreatedAt { get; init; }
     public bool IsNewAccount { get; init; }
     public bool IsLoggedIn { get; init; }
@@ -247,7 +247,7 @@ public static class AuthEndpoints
                     DeviceId = deviceId,
                     PlayerId = guest.PlayerId,
                     PlayerName = guest.PlayerName,
-                    Token = accessToken,
+                    AccessToken = accessToken,
                     AccessTokenExpiresAt = accessTokenExpiresAt,
                     GuestCredential = issuedGuestCredential,
                     CreatedAt = guest.CreatedAt,
