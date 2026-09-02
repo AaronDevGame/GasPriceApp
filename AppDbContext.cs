@@ -17,7 +17,10 @@ public class AppDbContext : DbContext
             e.ToTable("guests");
             e.HasKey(g => g.DeviceId);
             e.Property(g => g.DeviceId).HasColumnName("device_id");
-            e.Property(g => g.Token).HasColumnName("token");
+            e.Property(g => g.GuestCredentialHash).HasColumnName("guest_credential_hash");
+            e.Property(g => g.AccessTokenHash).HasColumnName("access_token_hash");
+            e.Property(g => g.AccessTokenExpiresAt).HasColumnName("access_token_expires_at");
+            e.Property(g => g.LegacyToken).HasColumnName("legacy_token");
             e.Property(g => g.PlayerId)
                 .HasColumnName("player_id");
             e.HasIndex(g => g.PlayerId).IsUnique();

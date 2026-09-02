@@ -82,4 +82,8 @@ public static class AuthErrors
     public const string InvalidPlayerToken = "invalid_player_token";
     public const string InvalidPlayerCredentials = "invalid_player_credentials";
     public const string PlayerNotLoggedIn = "player_not_logged_in";
+    public const string MissingGuestCredential = "missing_guest_credential";
+    public const string InvalidGuestCredential = "invalid_guest_credential";
+    public const string LegacyTokenRequired = "legacy_token_required";
+    public const string AccessTokenExpired = "access_token_expired";
 }

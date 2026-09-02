@@ -12,11 +12,11 @@ public record PlayerDataResponse(
 
 public static class PlayerDataEndpoints
 {
-    public static void MapPlayerDataEndpoints(this WebApplication app, string instanceId)
+    public static void MapPlayerDataEndpoints(this WebApplication app, AuthService authService, string instanceId)
     {
         app.MapGet(ApiRoutes.PlayerData, async (HttpRequest request, AppDbContext db) =>
         {
-            var auth = await AuthenticatePlayerAsync(request, db);
+            var auth = await AuthenticatePlayerAsync(request, db, authService);
             if (!auth.IsValid || auth.Guest is null)
                 return ApiResults.Unauthorized(auth.Error, instanceId);
 
@@ -29,7 +29,7 @@ public static class PlayerDataEndpoints
 
         app.MapPatch(ApiRoutes.PlayerData, async (HttpRequest request, AppDbContext db) =>
         {
-            var auth = await AuthenticatePlayerAsync(request, db);
+            var auth = await AuthenticatePlayerAsync(request, db, authService);
             if (!auth.IsValid || auth.Guest is null)
                 return ApiResults.Unauthorized(auth.Error, instanceId);
 
@@ -60,7 +60,10 @@ public static class PlayerDataEndpoints
         });
     }
 
-    private static async Task<PlayerAuthResult> AuthenticatePlayerAsync(HttpRequest request, AppDbContext db)
+    private static async Task<PlayerAuthResult> AuthenticatePlayerAsync(
+        HttpRequest request,
+        AppDbContext db,
+        AuthService authService)
     {
         if (!request.Headers.TryGetValue("Authorization", out var authHeader))
             return PlayerAuthResult.Invalid(AuthErrors.MissingAuthorizationHeader);
@@ -79,12 +82,18 @@ public static class PlayerDataEndpoints
         var deviceId = deviceIdHeader.ToString().Trim();
         var guest = await db.Guests.FindAsync(deviceId);
 
-        if (guest is null || guest.Token != token)
+        if (guest is null)
             return PlayerAuthResult.Invalid(AuthErrors.InvalidPlayerCredentials);
 
-        return guest.IsLoggedIn
+        if (!guest.IsLoggedIn)
+            return PlayerAuthResult.Invalid(AuthErrors.PlayerNotLoggedIn);
+
+        if (guest.AccessTokenHash is not null && guest.AccessTokenExpiresAt <= DateTime.UtcNow)
+            return PlayerAuthResult.Invalid(AuthErrors.AccessTokenExpired);
+
+        return authService.IsValidAccessToken(guest, token, DateTime.UtcNow)
             ? PlayerAuthResult.Valid(guest)
-            : PlayerAuthResult.Invalid(AuthErrors.PlayerNotLoggedIn);
+            : PlayerAuthResult.Invalid(AuthErrors.InvalidPlayerCredentials);
     }
 
     private static bool TryApplyPatch(PlayerData playerData, JsonElement root, out string error)

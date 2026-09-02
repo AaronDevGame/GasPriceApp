@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.7.0] - 2026-09-02
+
+### Added
+- Issue a one-time, 256-bit random guest credential for new guest accounts and return a one-hour access-token expiration timestamp.
+- Allow existing guests to securely upgrade by presenting their previous bearer token once.
+
+### Changed
+- Require `X-Guest-Credential` when logging into an existing upgraded guest account.
+- Replace deterministic device-derived bearer tokens with random access tokens and store only credential and access-token SHA-256 hashes.
+- Revoke access tokens on logout and reject expired tokens on authenticated endpoints.
+- Bump project and API version to `1.7.0`.
+
 ## [1.6.6] - 2026-09-02
 
 ### Added

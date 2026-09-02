@@ -89,7 +89,7 @@ IResult RestartServer()
     return ApiResults.Ok(state, "server restarted...", InstanceId);
 }
 
-var auth = new AuthService(app.Configuration);
+var auth = new AuthService();
 var pingStartedAtKey = new object();
 
 // Middleware
@@ -121,7 +121,7 @@ app.MapGet(ApiRoutes.Info, () => ApiResults.Ok(ApiMetadata.Info));
 app.MapGet(ApiRoutes.Routes, () => ApiResults.Ok(RouteRegistry.Public, "public_routes", InstanceId));
 
 app.MapAuthEndpoints(auth, InstanceId);
-app.MapPlayerDataEndpoints(InstanceId);
+app.MapPlayerDataEndpoints(auth, InstanceId);
 
 app.MapGet(ApiRoutes.AdminRoutes, () => ApiResults.Ok(RouteRegistry.Admin, "admin_routes", InstanceId));
 app.MapAdminChangelogEndpoint();

@@ -1,9 +1,16 @@
-// A guest record, one row per device. The device_id is the stable identity the
-// token is derived from; the rest is tracking/analytics captured on login/logout.
+// A guest record, one row per app installation. DeviceId identifies the record;
+// the credential and access-token hashes prove ownership and authorize a session.
 public class Guest
 {
     public string DeviceId { get; set; } = "";   // primary key
-    public string Token { get; set; } = "";
+    public string? GuestCredentialHash { get; set; }
+    public string? AccessTokenHash { get; set; }
+    public DateTime? AccessTokenExpiresAt { get; set; }
+
+    // Transitional support for accounts created before hashed credentials.
+    // Cleared as soon as the account completes its first upgraded login.
+    public string? LegacyToken { get; set; }
+
     public long PlayerId { get; set; }           // display-safe numeric id
     public string PlayerName { get; set; } = "";
 

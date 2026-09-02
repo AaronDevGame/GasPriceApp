@@ -6,7 +6,6 @@ services:
     environment:
       PORT: "8080"
       ADMIN_API_KEY: "dev-admin-key"
-      AUTH_SECRET: "dev-auth-secret-change-me"
       ConnectionStrings__Postgres: "Host=db;Port=5432;Database=backendserver;Username=backendserver;Password=backendserver"
     ports:
       - "8080:8080"
