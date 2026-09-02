@@ -96,6 +96,7 @@ public static class ApiRoutes
     public const string AuthLogout = "/auth/logout";
 
     public const string PlayerData = "/player/data";
+    public const string PlayerProfile = "/player/profile";
 
     public const string AdminServerStatus = "/admin/server/status";
     public const string AdminServerStart = "/admin/server/start";
@@ -123,6 +124,7 @@ public static class RouteRegistry
         new(ApiRoutes.AuthLogout, "POST"),
         new(ApiRoutes.PlayerData, "GET"),
         new(ApiRoutes.PlayerData, "PATCH"),
+        new(ApiRoutes.PlayerProfile, "PATCH"),
     };
 
     public static readonly RouteInfo[] Admin =

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## Unreleased
+
+### Added
+- Add authenticated `PATCH /player/profile` for changing a guest player's name.
+
+### Changed
+- Use `playerName` from `POST /auth/guest/login` only when creating a guest account; subsequent logins preserve the existing name.
+
 ## [1.7.0] - 2026-09-02
 
 ### Added

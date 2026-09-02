@@ -122,6 +122,7 @@ app.MapGet(ApiRoutes.Routes, () => ApiResults.Ok(RouteRegistry.Public, "public_r
 
 app.MapAuthEndpoints(auth, InstanceId);
 app.MapPlayerDataEndpoints(auth, InstanceId);
+app.MapPlayerProfileEndpoints(auth, InstanceId);
 
 app.MapGet(ApiRoutes.AdminRoutes, () => ApiResults.Ok(RouteRegistry.Admin, "admin_routes", InstanceId));
 app.MapAdminChangelogEndpoint();

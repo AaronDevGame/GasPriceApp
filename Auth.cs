@@ -101,12 +101,6 @@ public static class AuthEndpoints
     private const long MinPlayerId = 100_000_000_000_000;
     private const long MaxPlayerIdExclusive = 1_000_000_000_000_000;
     private const int MaxPlayerIdAttempts = 10;
-    private const int MaxPlayerNameLength = 24;
-    private const int MinDefaultPlayerNameNumber = 1000;
-    private const int MaxDefaultPlayerNameNumberExclusive = 10000;
-    private const int MaxPlayerNameAttempts = 20;
-    private const string DefaultPlayerNamePrefix = "Player ";
-
     public const string DeviceIdHeader = "X-Device-Id";
     public const string GuestCredentialHeader = "X-Guest-Credential";
     public const string DeviceIdCookie = "device_id";
@@ -159,16 +153,6 @@ public static class AuthEndpoints
 
         async Task<IResult> LoginAsync(HttpRequest request, HttpResponse response, AppDbContext db)
         {
-            LoginRequest? loginRequest;
-            try
-            {
-                loginRequest = await ReadLoginRequestAsync(request);
-            }
-            catch (BadHttpRequestException ex)
-            {
-                return ApiResults.BadRequest(ex.Message, instanceId);
-            }
-
             var deviceId = ResolveDeviceId(request, response);
 
             // Upsert the guest record and record this login.
@@ -181,7 +165,20 @@ public static class AuthEndpoints
             string? issuedGuestCredential = null;
             if (guest is null)
             {
-                var resolvedName = await ResolvePlayerNameAsync(db, deviceId, loginRequest?.PlayerName, null);
+                LoginRequest? loginRequest;
+                try
+                {
+                    loginRequest = await ReadLoginRequestAsync(request);
+                }
+                catch (BadHttpRequestException ex)
+                {
+                    return ApiResults.BadRequest(ex.Message, instanceId);
+                }
+
+                var resolvedName = await PlayerNameService.ResolveInitialNameAsync(
+                    db,
+                    deviceId,
+                    loginRequest?.PlayerName);
                 if (!resolvedName.IsValid)
                     return ApiResults.BadRequest(resolvedName.Error, instanceId);
 
@@ -226,11 +223,8 @@ public static class AuthEndpoints
                         return ApiResults.Unauthorized(AuthErrors.InvalidGuestCredential, instanceId);
                 }
 
-                var resolvedName = await ResolvePlayerNameAsync(db, deviceId, loginRequest?.PlayerName, guest.PlayerName);
-                if (!resolvedName.IsValid)
-                    return ApiResults.BadRequest(resolvedName.Error, instanceId);
-
-                guest.PlayerName = resolvedName.Name;
+                // PlayerName is creation-only on this endpoint. Existing guests
+                // must use PATCH /player/profile to rename themselves.
             }
 
             var accessToken = auth.GenerateSecret();
@@ -393,74 +387,6 @@ public static class AuthEndpoints
         }
     }
 
-    private static async Task<PlayerNameResult> ResolvePlayerNameAsync(
-        AppDbContext db,
-        string deviceId,
-        string? requestedPlayerName,
-        string? currentPlayerName)
-    {
-        if (!string.IsNullOrWhiteSpace(requestedPlayerName))
-            return await ResolveRequestedPlayerNameAsync(db, deviceId, requestedPlayerName);
-
-        if (!string.IsNullOrWhiteSpace(currentPlayerName))
-            return PlayerNameResult.Valid(currentPlayerName.Trim());
-
-        return PlayerNameResult.Valid(await GenerateUniqueDefaultPlayerNameAsync(db));
-    }
-
-    private static async Task<PlayerNameResult> ResolveRequestedPlayerNameAsync(
-        AppDbContext db,
-        string deviceId,
-        string requestedPlayerName)
-    {
-        var playerName = requestedPlayerName.Trim();
-
-        if (playerName.Length > MaxPlayerNameLength)
-            return PlayerNameResult.Invalid($"Player name must be {MaxPlayerNameLength} characters or fewer.");
-
-        if (playerName.Any(char.IsControl))
-            return PlayerNameResult.Invalid("Player name contains invalid characters.");
-
-        var isTaken = await db.Guests.AnyAsync(g => g.PlayerName == playerName && g.DeviceId != deviceId);
-        if (isTaken)
-            return PlayerNameResult.Invalid("Player name is already taken.");
-
-        return PlayerNameResult.Valid(playerName);
-    }
-
-    private static async Task<string> GenerateUniqueDefaultPlayerNameAsync(AppDbContext db)
-    {
-        for (var attempt = 0; attempt < MaxPlayerNameAttempts; attempt++)
-        {
-            var playerName = GenerateDefaultPlayerName();
-            if (!await db.Guests.AnyAsync(g => g.PlayerName == playerName))
-                return playerName;
-        }
-
-        var existingDefaultNames = await db.Guests
-            .Where(g => g.PlayerName.StartsWith(DefaultPlayerNamePrefix))
-            .Select(g => g.PlayerName)
-            .ToListAsync();
-        var usedDefaultNames = existingDefaultNames.ToHashSet(StringComparer.Ordinal);
-
-        for (var number = MinDefaultPlayerNameNumber; number < MaxDefaultPlayerNameNumberExclusive; number++)
-        {
-            var playerName = $"{DefaultPlayerNamePrefix}{number}";
-            if (!usedDefaultNames.Contains(playerName))
-                return playerName;
-        }
-
-        throw new InvalidOperationException("Could not generate a unique player name.");
-    }
-
-    private static string GenerateDefaultPlayerName()
-    {
-        var number = RandomNumberGenerator.GetInt32(
-            MinDefaultPlayerNameNumber,
-            MaxDefaultPlayerNameNumberExclusive);
-        return $"{DefaultPlayerNamePrefix}{number}";
-    }
-
     private static CookieOptions SessionCookieOptions(HttpRequest request) => new()
     {
         HttpOnly = true,
@@ -490,9 +416,4 @@ public static class AuthEndpoints
         return "Unknown";
     }
 
-    private sealed record PlayerNameResult(bool IsValid, string Name, string Error)
-    {
-        public static PlayerNameResult Valid(string name) => new(true, name, "");
-        public static PlayerNameResult Invalid(string error) => new(false, "", error);
-    }
 }
