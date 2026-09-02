@@ -124,6 +124,7 @@ app.MapAuthEndpoints(auth, InstanceId);
 app.MapPlayerDataEndpoints(InstanceId);
 
 app.MapGet(ApiRoutes.AdminRoutes, () => ApiResults.Ok(RouteRegistry.Admin, "admin_routes", InstanceId));
+app.MapAdminChangelogEndpoint();
 app.MapGet(ApiRoutes.AdminServerStatus, GetServerStatus);
 app.MapPost(ApiRoutes.AdminServerStart, StartServer);
 app.MapPost(ApiRoutes.AdminServerStop, StopServer);

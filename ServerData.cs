@@ -102,6 +102,7 @@ public static class ApiRoutes
     public const string AdminServerStop = "/admin/server/stop";
     public const string AdminServerRestart = "/admin/server/restart";
     public const string AdminRoutes = "/admin/routes";
+    public const string AdminChangelog = "/admin/changelog";
 
     public const string LegacyAdminStart = "/admin/start";
     public const string LegacyAdminStop = "/admin/stop";
@@ -127,6 +128,7 @@ public static class RouteRegistry
     public static readonly RouteInfo[] Admin =
     {
         new(ApiRoutes.AdminRoutes, "GET"),
+        new(ApiRoutes.AdminChangelog, "GET"),
         new(ApiRoutes.AdminServerStatus, "GET"),
         new(ApiRoutes.AdminServerStart, "POST"),
         new(ApiRoutes.AdminServerStop, "POST"),
@@ -141,5 +143,5 @@ public record RouteInfo(string Route, string Method, bool IsLegacy = false);
 
 public static class APIVersion
 {
-    public const string Version = "1.6.5";
+    public const string Version = "1.6.6";
 }

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [1.6.6] - 2026-09-02
+
+### Added
+- Add protected `GET /admin/changelog` for retrieving this changelog as Markdown.
+
+### Changed
+- Bump project and API version to `1.6.6`.
+
 ## [1.6.5] - 2026-08-22
 
 ### Added
