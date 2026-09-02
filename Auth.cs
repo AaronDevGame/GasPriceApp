@@ -110,7 +110,6 @@ public static class AuthEndpoints
     public const string DeviceIdHeader = "X-Device-Id";
     public const string GuestCredentialHeader = "X-Guest-Credential";
     public const string DeviceIdCookie = "device_id";
-    public const string SessionCookie = "session_active";
 
     public static void MapAuthEndpoints(this WebApplication app, AuthService auth, string instanceId)
     {
@@ -247,7 +246,6 @@ public static class AuthEndpoints
 
             await PlayerDataStore.EnsureForGuestAsync(db, guest, now);
             await db.SaveChangesAsync();
-            response.Cookies.Append(SessionCookie, "1", SessionCookieOptions(request));
 
             return ApiResults.Ok(
                 new AuthResult
@@ -266,9 +264,9 @@ public static class AuthEndpoints
                 instanceId);
         }
 
-        // Ends the persisted session and clears the cookie marker. The device_id
-        // is intentionally kept, so re-login preserves the guest identity.
-        async Task<IResult> LogoutAsync(HttpRequest request, HttpResponse response, AppDbContext db)
+        // Ends the persisted session. The device_id is intentionally kept, so
+        // re-login preserves the guest identity.
+        async Task<IResult> LogoutAsync(HttpRequest request, AppDbContext db)
         {
             if (!request.Headers.TryGetValue("Authorization", out var authHeader))
                 return ApiResults.Unauthorized(AuthErrors.MissingAuthorizationHeader, instanceId);
@@ -288,8 +286,6 @@ public static class AuthEndpoints
             var guest = await db.Guests.FindAsync(deviceId);
             if (guest is null || !auth.IsValidAccessToken(guest, token, DateTime.UtcNow))
                 return ApiResults.Unauthorized(AuthErrors.InvalidPlayerCredentials, instanceId);
-
-            response.Cookies.Delete(SessionCookie);
 
             if (guest.IsLoggedIn)
             {
@@ -370,7 +366,7 @@ public static class AuthEndpoints
             return cookieValue;
 
         var newDeviceId = Guid.NewGuid().ToString();
-        response.Cookies.Append(DeviceIdCookie, newDeviceId, SessionCookieOptions(request));
+        response.Cookies.Append(DeviceIdCookie, newDeviceId, DeviceCookieOptions(request));
         return newDeviceId;
     }
 
@@ -461,7 +457,7 @@ public static class AuthEndpoints
         return $"{DefaultPlayerNamePrefix}{number}";
     }
 
-    private static CookieOptions SessionCookieOptions(HttpRequest request) => new()
+    private static CookieOptions DeviceCookieOptions(HttpRequest request) => new()
     {
         HttpOnly = true,
         Secure = request.IsHttps,   // HTTPS in production (Render); still works on http locally

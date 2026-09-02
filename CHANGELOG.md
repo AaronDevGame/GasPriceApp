@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## Unreleased
+
+### Removed
+- Remove the unused `session_active` cookie from guest login and logout responses.
+
 ## [1.7.0] - 2026-09-02
 
 ### Added
