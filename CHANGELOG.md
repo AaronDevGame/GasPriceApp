@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+- Return `lastLoginAt` in authenticated `GET /auth/status` responses, using the UTC timestamp saved on the most recent successful guest login.
+
 ### Changed
 - Rename `token` to `accessToken` in `POST /auth/guest/login` responses; clients must read the new field name.
 - Replace the login response's hardcoded `tokenType` string with a string-serialized enum supporting `Guest`, `Email`, `Gmail`, and `AppleId`. Guest login now returns `"Guest"` instead of `"guest"`.

@@ -92,7 +92,8 @@ public record AuthStatusResult(
     string? PlayerName = null,
     long? PlayerId = null,
     string? AccountType = null,
-    DateTime? CreatedAt = null);
+    DateTime? CreatedAt = null,
+    DateTime? LastLoginAt = null);
 
 public record LogoutResult(bool IsLoggedIn);
 
@@ -145,7 +146,7 @@ public static class AuthEndpoints
                 return ApiResults.Unauthorized(AuthErrors.InvalidPlayerCredentials, instanceId);
 
             return ApiResults.Ok(
-                new AuthStatusResult(true, guest.IsLoggedIn, guest.PlayerName, guest.PlayerId, "guest", guest.CreatedAt),
+                new AuthStatusResult(true, guest.IsLoggedIn, guest.PlayerName, guest.PlayerId, "guest", guest.CreatedAt, guest.LastLoginAt),
                 "auth_status",
                 instanceId);
         }
