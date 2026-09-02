@@ -104,7 +104,6 @@ public static class AuthEndpoints
     public const string DeviceIdHeader = "X-Device-Id";
     public const string GuestCredentialHeader = "X-Guest-Credential";
     public const string DeviceIdCookie = "device_id";
-    public const string SessionCookie = "session_active";
 
     public static void MapAuthEndpoints(this WebApplication app, AuthService auth, string instanceId)
     {
@@ -241,7 +240,6 @@ public static class AuthEndpoints
 
             await PlayerDataStore.EnsureForGuestAsync(db, guest, now);
             await db.SaveChangesAsync();
-            response.Cookies.Append(SessionCookie, "1", SessionCookieOptions(request));
 
             return ApiResults.Ok(
                 new AuthResult
@@ -260,9 +258,9 @@ public static class AuthEndpoints
                 instanceId);
         }
 
-        // Ends the persisted session and clears the cookie marker. The device_id
-        // is intentionally kept, so re-login preserves the guest identity.
-        async Task<IResult> LogoutAsync(HttpRequest request, HttpResponse response, AppDbContext db)
+        // Ends the persisted session. The device_id is intentionally kept, so
+        // re-login preserves the guest identity.
+        async Task<IResult> LogoutAsync(HttpRequest request, AppDbContext db)
         {
             if (!request.Headers.TryGetValue("Authorization", out var authHeader))
                 return ApiResults.Unauthorized(AuthErrors.MissingAuthorizationHeader, instanceId);
@@ -282,8 +280,6 @@ public static class AuthEndpoints
             var guest = await db.Guests.FindAsync(deviceId);
             if (guest is null || !auth.IsValidAccessToken(guest, token, DateTime.UtcNow))
                 return ApiResults.Unauthorized(AuthErrors.InvalidPlayerCredentials, instanceId);
-
-            response.Cookies.Delete(SessionCookie);
 
             if (guest.IsLoggedIn)
             {
@@ -364,7 +360,7 @@ public static class AuthEndpoints
             return cookieValue;
 
         var newDeviceId = Guid.NewGuid().ToString();
-        response.Cookies.Append(DeviceIdCookie, newDeviceId, SessionCookieOptions(request));
+        response.Cookies.Append(DeviceIdCookie, newDeviceId, DeviceCookieOptions(request));
         return newDeviceId;
     }
 
@@ -387,7 +383,79 @@ public static class AuthEndpoints
         }
     }
 
+<<<<<<< HEAD
     private static CookieOptions SessionCookieOptions(HttpRequest request) => new()
+=======
+    private static async Task<PlayerNameResult> ResolvePlayerNameAsync(
+        AppDbContext db,
+        string deviceId,
+        string? requestedPlayerName,
+        string? currentPlayerName)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedPlayerName))
+            return await ResolveRequestedPlayerNameAsync(db, deviceId, requestedPlayerName);
+
+        if (!string.IsNullOrWhiteSpace(currentPlayerName))
+            return PlayerNameResult.Valid(currentPlayerName.Trim());
+
+        return PlayerNameResult.Valid(await GenerateUniqueDefaultPlayerNameAsync(db));
+    }
+
+    private static async Task<PlayerNameResult> ResolveRequestedPlayerNameAsync(
+        AppDbContext db,
+        string deviceId,
+        string requestedPlayerName)
+    {
+        var playerName = requestedPlayerName.Trim();
+
+        if (playerName.Length > MaxPlayerNameLength)
+            return PlayerNameResult.Invalid($"Player name must be {MaxPlayerNameLength} characters or fewer.");
+
+        if (playerName.Any(char.IsControl))
+            return PlayerNameResult.Invalid("Player name contains invalid characters.");
+
+        var isTaken = await db.Guests.AnyAsync(g => g.PlayerName == playerName && g.DeviceId != deviceId);
+        if (isTaken)
+            return PlayerNameResult.Invalid("Player name is already taken.");
+
+        return PlayerNameResult.Valid(playerName);
+    }
+
+    private static async Task<string> GenerateUniqueDefaultPlayerNameAsync(AppDbContext db)
+    {
+        for (var attempt = 0; attempt < MaxPlayerNameAttempts; attempt++)
+        {
+            var playerName = GenerateDefaultPlayerName();
+            if (!await db.Guests.AnyAsync(g => g.PlayerName == playerName))
+                return playerName;
+        }
+
+        var existingDefaultNames = await db.Guests
+            .Where(g => g.PlayerName.StartsWith(DefaultPlayerNamePrefix))
+            .Select(g => g.PlayerName)
+            .ToListAsync();
+        var usedDefaultNames = existingDefaultNames.ToHashSet(StringComparer.Ordinal);
+
+        for (var number = MinDefaultPlayerNameNumber; number < MaxDefaultPlayerNameNumberExclusive; number++)
+        {
+            var playerName = $"{DefaultPlayerNamePrefix}{number}";
+            if (!usedDefaultNames.Contains(playerName))
+                return playerName;
+        }
+
+        throw new InvalidOperationException("Could not generate a unique player name.");
+    }
+
+    private static string GenerateDefaultPlayerName()
+    {
+        var number = RandomNumberGenerator.GetInt32(
+            MinDefaultPlayerNameNumber,
+            MaxDefaultPlayerNameNumberExclusive);
+        return $"{DefaultPlayerNamePrefix}{number}";
+    }
+
+    private static CookieOptions DeviceCookieOptions(HttpRequest request) => new()
+>>>>>>> refactor/remove-session-cookie
     {
         HttpOnly = true,
         Secure = request.IsHttps,   // HTTPS in production (Render); still works on http locally

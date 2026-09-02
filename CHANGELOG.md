@@ -6,11 +6,16 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+<<<<<<< HEAD
 ### Added
 - Add authenticated `PATCH /player/profile` for changing a guest player's name.
 
 ### Changed
 - Use `playerName` from `POST /auth/guest/login` only when creating a guest account; subsequent logins preserve the existing name.
+=======
+### Removed
+- Remove the unused `session_active` cookie from guest login and logout responses.
+>>>>>>> refactor/remove-session-cookie
 
 ## [1.7.0] - 2026-09-02
 
