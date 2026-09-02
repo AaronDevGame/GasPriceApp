@@ -50,11 +50,11 @@ public static class ApiResults
             }
         }, statusCode: StatusCodes.Status404NotFound);
 
-    public static IResult TooManyRequest(string error, string? detail = null)
+    public static IResult TooManyRequest(string error, string? detail = null, string message = "too_many_request")
         => Results.Json(new ApiResponse<object>
         {
             Code = ErrorCodes.TooManyRequest,
-            Message = "too_many_request",
+            Message = message,
             Error = new ApiError
             {
                 Error = error,

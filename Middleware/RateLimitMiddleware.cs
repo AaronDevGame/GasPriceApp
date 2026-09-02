@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Http;
 
 public class RateLimitMiddleware
 {
-    private static readonly Dictionary<string, TimeSpan> _cooldowns = new()
+    private static readonly Dictionary<string, TimeSpan> _cooldowns = new(StringComparer.OrdinalIgnoreCase)
     {
         [ApiRoutes.Ping] = TimeSpan.FromSeconds(1),
         [ApiRoutes.Health] = TimeSpan.FromSeconds(1),
@@ -17,19 +17,32 @@ public class RateLimitMiddleware
     };
 
     // Key = ip + "|" + route
-    private static readonly Dictionary<string, DateTime> _lastRequest = new();
-    private static DateTime _lastCleanup = DateTime.UtcNow;
+    private readonly Dictionary<string, DateTimeOffset> _lastRequest = new();
+    private readonly Dictionary<string, Queue<DateTimeOffset>> _guestLoginAttempts = new();
+    private DateTimeOffset _lastCleanup;
     private readonly RequestDelegate _next;
+    private readonly TimeProvider _timeProvider;
+    private readonly int _guestLoginsPerMinute;
+    private readonly int _guestLoginsPerHour;
 
-    public RateLimitMiddleware(RequestDelegate next)
+    public RateLimitMiddleware(RequestDelegate next, IConfiguration configuration, TimeProvider timeProvider)
     {
         _next = next;
+        _timeProvider = timeProvider;
+        _lastCleanup = timeProvider.GetUtcNow();
+        _guestLoginsPerMinute = configuration.GetValue<int?>("RateLimiting:GuestLogin:PermitLimitPerMinute") ?? 5;
+        _guestLoginsPerHour = configuration.GetValue<int?>("RateLimiting:GuestLogin:PermitLimitPerHour") ?? 30;
+        if (_guestLoginsPerMinute <= 0 || _guestLoginsPerHour <= 0)
+            throw new InvalidOperationException("Guest login rate limits must be positive integers.");
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var path = context.Request.Path;
+        var address = context.Connection.RemoteIpAddress;
+        var ip = (address?.IsIPv4MappedToIPv6 == true ? address.MapToIPv4() : address)?.ToString() ?? "unknown";
+        // Routing accepts case changes and trailing slashes; they must share a bucket.
+        var path = new PathString((context.Request.Path.Value ?? "").TrimEnd('/').ToLowerInvariant());
+        var isGuestLogin = path == ApiRoutes.AuthGuestLogin;
 
         // 1) Decide cooldown
         TimeSpan cooldown;
@@ -55,13 +68,12 @@ public class RateLimitMiddleware
             "/unknown";
 
         var key = $"{ip}|{keyPath}";
-        var now = DateTime.UtcNow;
-
         bool blocked = false;
         int retryAfterSeconds = 0;
 
         lock (_lastRequest)
         {
+            var now = _timeProvider.GetUtcNow();
             if ((now - _lastCleanup).TotalMinutes >= 1)
             {
                 var cutoff = now.AddMinutes(-10);
@@ -88,6 +100,15 @@ public class RateLimitMiddleware
                 // Console.WriteLine($"[CLEANUP] Remaining count: {_lastRequest.Count}");
 
                 _lastCleanup = now;
+
+                // Keep login history for the full hourly window, independently
+                // of the shorter cooldown history. Remove inactive IP buckets.
+                foreach (var loginIp in _guestLoginAttempts.Keys.ToArray())
+                {
+                    TrimLoginAttempts(_guestLoginAttempts[loginIp], now);
+                    if (_guestLoginAttempts[loginIp].Count == 0)
+                        _guestLoginAttempts.Remove(loginIp);
+                }
             }
 
             if (_lastRequest.TryGetValue(key, out var lastTime))
@@ -98,36 +119,56 @@ public class RateLimitMiddleware
                     blocked = true;
                     retryAfterSeconds = (int)Math.Ceiling((cooldown - elapsed).TotalSeconds);
                 }
-                else
-                {
-                    _lastRequest[key] = now;
-                }
             }
-            else
+
+            if (isGuestLogin)
             {
-                _lastRequest[key] = now;
+                if (!_guestLoginAttempts.TryGetValue(ip, out var attempts))
+                {
+                    attempts = new Queue<DateTimeOffset>();
+                    _guestLoginAttempts[ip] = attempts;
+                }
+
+                TrimLoginAttempts(attempts, now);
+                var recentAttempts = attempts.Where(time => time > now.AddMinutes(-1)).ToArray();
+                if (recentAttempts.Length >= _guestLoginsPerMinute)
+                    retryAfterSeconds = Math.Max(retryAfterSeconds,
+                        RetryAfter(recentAttempts[recentAttempts.Length - _guestLoginsPerMinute].AddMinutes(1), now));
+                if (attempts.Count >= _guestLoginsPerHour)
+                    retryAfterSeconds = Math.Max(retryAfterSeconds,
+                        RetryAfter(attempts.Peek().AddHours(1), now));
+
+                blocked |= retryAfterSeconds > 0;
+                // Reserve before invoking the endpoint so concurrent requests
+                // cannot exceed the limit. Failed logins consume permits too.
+                if (!blocked)
+                    attempts.Enqueue(now);
             }
+
+            if (!blocked)
+                _lastRequest[key] = now;
         }
 
         if (blocked)
         {
             context.Response.Headers["Retry-After"] = retryAfterSeconds.ToString();
-            context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-
-            await context.Response.WriteAsJsonAsync(new ApiResponse<object>
-            {
-                Code = ErrorCodes.TooManyRequest,
-                Message = "too_many_requests",
-                Error = new ApiError
-                {
-                    Error = "Too many requests",
-                    Detail = $"Try again in {retryAfterSeconds} seconds."
-                }
-            });
+            await ApiResults.TooManyRequest(
+                "Too many requests",
+                $"Try again in {retryAfterSeconds} seconds.",
+                message: "too_many_requests").ExecuteAsync(context);
 
             return;
         }
 
         await _next(context);
     }
+
+    private static void TrimLoginAttempts(Queue<DateTimeOffset> attempts, DateTimeOffset now)
+    {
+        while (attempts.TryPeek(out var oldest) && oldest <= now.AddHours(-1))
+            attempts.Dequeue();
+    }
+
+    private static int RetryAfter(DateTimeOffset availableAt, DateTimeOffset now) =>
+        Math.Max(1, (int)Math.Ceiling((availableAt - now).TotalSeconds));
 }

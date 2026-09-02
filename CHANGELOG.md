@@ -6,13 +6,19 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.8.2] - 2026-09-03
+
 ### Added
+- Limit guest login to configurable rolling windows of 5 attempts per minute and 30 per hour per client IP, in addition to the existing one-second cooldown. Changing device headers or cookies does not reset these limits; excess requests return `429` with `Retry-After`.
 - Return `lastLoginAt` in authenticated `GET /auth/status` responses, using the UTC timestamp saved on the most recent successful guest login.
 
 ### Changed
-- Bump project and API version to `1.8.1`.
+- Bump project and API version to `1.8.2`.
 - Rename `token` to `accessToken` in `POST /auth/guest/login` responses; clients must read the new field name.
 - Replace the login response's hardcoded `tokenType` string with a string-serialized enum supporting `Guest`, `Email`, `Gmail`, and `AppleId`. Guest login now returns `"Guest"` instead of `"guest"`.
+
+### Fixed
+- Share rate-limit buckets across route casing and trailing-slash variants, and IPv4/IPv4-mapped IPv6 representations.
 
 ## [1.8.0] - 2026-09-03
 

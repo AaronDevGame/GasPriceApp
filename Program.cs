@@ -10,6 +10,7 @@ Console.Error.WriteLine("startup: builder created");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(DbConfig.ResolveConnectionString(builder.Configuration)));
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 
 Console.Error.WriteLine("startup: building app");
 var app = builder.Build();
