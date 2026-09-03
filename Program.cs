@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 
@@ -22,14 +21,8 @@ using (var scope = app.Services.CreateScope())
     scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
 Console.Error.WriteLine("startup: database migrated");
 
-// Behind Render's proxy the real client IP is in X-Forwarded-For; surface it as RemoteIpAddress.
-var forwardedOptions = new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-};
-forwardedOptions.KnownIPNetworks.Clear();
-forwardedOptions.KnownProxies.Clear();
-app.UseForwardedHeaders(forwardedOptions);
+// Resolve the client address before rate limiting and guest persistence.
+app.UseClientIpForwarding(builder.Configuration);
 
 // In-memory state (resets when you restart the app)
 var state = new ServerState

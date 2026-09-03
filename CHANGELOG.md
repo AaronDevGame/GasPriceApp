@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.8.3] - 2026-09-03
+
+### Changed
+- Bump project and API version to `1.8.3`.
+
+### Fixed
+- Resolve client IPs on Render public web services using the edge-supplied `CF-Connecting-IP` header, so guest records and rate limits use the client address instead of changing internal proxy addresses.
+- Restrict forwarded-header trust to configured proxies (Render defaults to its private `10.0.0.0/8` ingress network); direct local requests ignore forwarding headers. Normalize IPv4-mapped IPv6 addresses before saving them.
+
 ## [1.8.2] - 2026-09-03
 
 ### Added
