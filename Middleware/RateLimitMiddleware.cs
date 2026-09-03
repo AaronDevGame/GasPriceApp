@@ -31,7 +31,7 @@ public class RateLimitMiddleware
         _timeProvider = timeProvider;
         _lastCleanup = timeProvider.GetUtcNow();
         _guestLoginsPerMinute = configuration.GetValue<int?>("RateLimiting:GuestLogin:PermitLimitPerMinute") ?? 5;
-        _guestLoginsPerHour = configuration.GetValue<int?>("RateLimiting:GuestLogin:PermitLimitPerHour") ?? 30;
+        _guestLoginsPerHour = configuration.GetValue<int?>("RateLimiting:GuestLogin:PermitLimitPerHour") ?? 10;
         if (_guestLoginsPerMinute <= 0 || _guestLoginsPerHour <= 0)
             throw new InvalidOperationException("Guest login rate limits must be positive integers.");
     }

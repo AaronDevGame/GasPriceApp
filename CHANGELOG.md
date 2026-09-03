@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Changed
+- Temporarily reduce the guest-login hourly limit from 30 to 10 attempts per client IP for testing; retain the 5-per-minute limit and one-second cooldown.
+
+### Fixed
+- Accept edge-supplied client IPs through IPv4 and IPv6 loopback proxies on Render public web services, so a local ingress proxy does not leave guest records and rate limits using `127.0.0.1` or `::1`. Direct local development requests still ignore forwarding headers by default.
+
 ## [1.8.3] - 2026-09-03
 
 ### Changed

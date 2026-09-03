@@ -24,11 +24,15 @@ public static class ClientIpForwarding
         var networks = configuration.GetSection("ReverseProxy:KnownNetworks").Get<string[]>();
         var proxies = configuration.GetSection("ReverseProxy:KnownProxies").Get<string[]>();
 
-        // Render's ingress uses private 10/8 addresses. This trust applies only
-        // to a Render public web service, whose internet traffic crosses its edge.
+        // Render may deliver edge requests through private 10/8 or a local proxy.
+        // This trust applies only to a Render public web service.
         // Explicit configuration replaces this default rather than widening it.
         if (networks is null && proxies is null && isRenderWebService)
+        {
             options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("10.0.0.0/8"));
+            options.KnownProxies.Add(IPAddress.Loopback);
+            options.KnownProxies.Add(IPAddress.IPv6Loopback);
+        }
 
         foreach (var network in networks ?? [])
             options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));

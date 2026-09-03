@@ -2,7 +2,7 @@
 
 `POST /auth/guest/login` shares limits across all devices using the same client
 IP address. The defaults allow one request per second, at most 5 admitted
-attempts in any rolling minute, and at most 30 in any rolling hour. Both new
+attempts in any rolling minute, and at most 10 in any rolling hour. Both new
 account creation and existing-account login count, including requests that
 subsequently fail validation or authentication. Rejected requests do not extend
 the waiting period.
@@ -16,7 +16,7 @@ Configure positive integer values in `appsettings.json` under
 `RateLimiting:GuestLogin`, or use environment variables:
 
 - `RateLimiting__GuestLogin__PermitLimitPerMinute` (default `5`)
-- `RateLimiting__GuestLogin__PermitLimitPerHour` (default `30`)
+- `RateLimiting__GuestLogin__PermitLimitPerHour` (default `10`, temporarily reduced for testing)
 
 Restart the app after changing these values. Players behind the same public IP
 (for example, a school or mobile carrier) share the allowance. Adjust the
@@ -32,12 +32,15 @@ client address. It avoids interpreting the chain of caller-supplied and
 internal addresses in `X-Forwarded-For`. See
 [Render's client-IP guidance](https://render.com/articles/host-pocketbase-on-render).
 
-Forwarding on Render is accepted only from the private `10.0.0.0/8` ingress
-network by default, not from arbitrary internet peers. This range is a
-deployment assumption based on the observed Render proxy addresses, not a
-published guarantee of immutable ingress ranges. The backend must remain
-behind Render's public edge; other services able to connect over its private
-network must be trusted. A header alone cannot authenticate a private-network
+Forwarding on Render is accepted from the private `10.0.0.0/8` ingress network
+and local proxies at `127.0.0.1` and `::1` by default, not from arbitrary internet
+peers. IPv4-mapped loopback is supported too. These are deployment assumptions
+based on the observed addresses, not a published guarantee of immutable ingress
+ranges. Loopback is trusted only in Render public-web-service mode (or by
+explicit proxy configuration); local development continues to ignore forwarded
+headers by default. The backend must remain behind Render's public edge;
+processes able to connect over its local or private network must be trusted.
+A header alone cannot authenticate a private-network
 caller. Do not expose a separate route to the container that bypasses the edge.
 
 `ReverseProxy:KnownNetworks` (CIDR strings) and `ReverseProxy:KnownProxies`
