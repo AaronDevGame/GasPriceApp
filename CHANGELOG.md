@@ -6,7 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.8.4] - 2026-09-03
+
 ### Changed
+- Bump project and API version to `1.8.4`.
 - Temporarily reduce the guest-login hourly limit from 30 to 10 attempts per client IP for testing; retain the 5-per-minute limit and one-second cooldown.
 
 ### Fixed
