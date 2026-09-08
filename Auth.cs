@@ -68,7 +68,7 @@ public class AuthService
 
 public record AuthResult
 {
-    public string DeviceId { get; init; } = "";
+    public string AppInstanceId { get; init; } = "";
     public long PlayerId { get; init; }
     public string PlayerName { get; init; } = "";
     public string AccessToken { get; init; } = "";
@@ -102,9 +102,9 @@ public static class AuthEndpoints
     private const long MinPlayerId = 100_000_000_000_000;
     private const long MaxPlayerIdExclusive = 1_000_000_000_000_000;
     private const int MaxPlayerIdAttempts = 10;
-    public const string DeviceIdHeader = "X-Device-Id";
+    public const string AppInstanceIdHeader = "X-App-Instance-Id";
     public const string GuestCredentialHeader = "X-Guest-Credential";
-    public const string DeviceIdCookie = "device_id";
+    public const string AppInstanceIdCookie = "app_instance_id";
 
     public static void MapAuthEndpoints(this WebApplication app, AuthService auth, string instanceId)
     {
@@ -117,9 +117,11 @@ public static class AuthEndpoints
             if (!request.Headers.TryGetValue("Authorization", out var authHeader))
                 return ApiResults.Unauthorized(AuthErrors.MissingAuthorizationHeader, instanceId);
 
-            if (!request.Headers.TryGetValue(DeviceIdHeader, out var deviceIdHeader) ||
-                string.IsNullOrWhiteSpace(deviceIdHeader.ToString()))
-                return ApiResults.Unauthorized(AuthErrors.MissingDeviceIdHeader, instanceId);
+            if (!request.Headers.TryGetValue(AppInstanceIdHeader, out var appInstanceIdHeader))
+                return ApiResults.Unauthorized(AuthErrors.MissingAppInstanceIdHeader, instanceId);
+
+            if (!TryNormalizeAppInstanceId(appInstanceIdHeader.ToString(), out var appInstanceId))
+                return ApiResults.BadRequest(AuthErrors.InvalidAppInstanceId, instanceId);
 
             var parts = authHeader.ToString().Split(' ', 2);
             if (parts.Length != 2 ||
@@ -128,10 +130,9 @@ public static class AuthEndpoints
                 return ApiResults.Unauthorized(AuthErrors.InvalidPlayerToken, instanceId);
 
             var token = parts[1].Trim();
-            var deviceId = deviceIdHeader.ToString().Trim();
             var guest = await db.Guests
                 .AsNoTracking()
-                .FirstOrDefaultAsync(g => g.DeviceId == deviceId);
+                .FirstOrDefaultAsync(g => g.AppInstanceId == appInstanceId);
 
             if (guest is null)
                 return ApiResults.Unauthorized(AuthErrors.InvalidPlayerCredentials, instanceId);
@@ -153,13 +154,14 @@ public static class AuthEndpoints
 
         async Task<IResult> LoginAsync(HttpRequest request, HttpResponse response, AppDbContext db)
         {
-            var deviceId = ResolveDeviceId(request, response);
+            if (!TryResolveAppInstanceId(request, response, out var appInstanceId))
+                return ApiResults.BadRequest(AuthErrors.InvalidAppInstanceId, instanceId);
 
             // Upsert the guest record and record this login.
             var now = DateTime.UtcNow;
             var userAgent = request.Headers.UserAgent.ToString();
 
-            var guest = await db.Guests.FindAsync(deviceId);
+            var guest = await db.Guests.FindAsync(appInstanceId);
             var isNewAccount = guest is null;
             var alreadyLoggedIn = guest?.IsLoggedIn == true;
             string? issuedGuestCredential = null;
@@ -177,14 +179,14 @@ public static class AuthEndpoints
 
                 var resolvedName = await PlayerNameService.ResolveInitialNameAsync(
                     db,
-                    deviceId,
+                    appInstanceId,
                     loginRequest?.PlayerName);
                 if (!resolvedName.IsValid)
                     return ApiResults.BadRequest(resolvedName.Error, instanceId);
 
                 guest = new Guest
                 {
-                    DeviceId = deviceId,
+                    AppInstanceId = appInstanceId,
                     PlayerId = await GenerateUniquePlayerIdAsync(db),
                     PlayerName = resolvedName.Name,
                     CreatedAt = now
@@ -245,7 +247,7 @@ public static class AuthEndpoints
             return ApiResults.Ok(
                 new AuthResult
                 {
-                    DeviceId = deviceId,
+                    AppInstanceId = appInstanceId,
                     PlayerId = guest.PlayerId,
                     PlayerName = guest.PlayerName,
                     AccessToken = accessToken,
@@ -259,16 +261,18 @@ public static class AuthEndpoints
                 instanceId);
         }
 
-        // Ends the persisted session. The device_id is intentionally kept, so
+        // Ends the persisted session. The app_instance_id is intentionally kept, so
         // re-login preserves the guest identity.
         async Task<IResult> LogoutAsync(HttpRequest request, AppDbContext db)
         {
             if (!request.Headers.TryGetValue("Authorization", out var authHeader))
                 return ApiResults.Unauthorized(AuthErrors.MissingAuthorizationHeader, instanceId);
 
-            if (!request.Headers.TryGetValue(DeviceIdHeader, out var deviceIdHeader) ||
-                string.IsNullOrWhiteSpace(deviceIdHeader.ToString()))
-                return ApiResults.Unauthorized(AuthErrors.MissingDeviceIdHeader, instanceId);
+            if (!request.Headers.TryGetValue(AppInstanceIdHeader, out var appInstanceIdHeader))
+                return ApiResults.Unauthorized(AuthErrors.MissingAppInstanceIdHeader, instanceId);
+
+            if (!TryNormalizeAppInstanceId(appInstanceIdHeader.ToString(), out var appInstanceId))
+                return ApiResults.BadRequest(AuthErrors.InvalidAppInstanceId, instanceId);
 
             var parts = authHeader.ToString().Split(' ', 2);
             if (parts.Length != 2 ||
@@ -277,8 +281,7 @@ public static class AuthEndpoints
                 return ApiResults.Unauthorized(AuthErrors.InvalidPlayerToken, instanceId);
 
             var token = parts[1].Trim();
-            var deviceId = deviceIdHeader.ToString().Trim();
-            var guest = await db.Guests.FindAsync(deviceId);
+            var guest = await db.Guests.FindAsync(appInstanceId);
             if (guest is null || !auth.IsValidAccessToken(guest, token, DateTime.UtcNow))
                 return ApiResults.Unauthorized(AuthErrors.InvalidPlayerCredentials, instanceId);
 
@@ -341,28 +344,44 @@ public static class AuthEndpoints
         }
     }
 
-    // Resolves a stable identifier for the calling device, no frontend required.
+    // Resolves a stable identifier for this installation, no frontend required.
     // Order of preference:
-    //   1. X-Device-Id header  (a real client can supply its own stable id)
-    //   2. device_id cookie    (set by us on a previous request)
-    //   3. a freshly minted GUID, persisted as a cookie so the same device is
-    //      recognized next time (browsers and Postman resend cookies automatically)
-    // Stable per-installation identity: X-Device-Id header, then the device_id
+    //   1. X-App-Instance-Id header  (a native client can supply its own stable id)
+    //   2. app_instance_id cookie    (set by us on a previous request)
+    //   3. a freshly minted GUID, persisted as a cookie so the same installation
+    //      is recognized next time (browsers and Postman resend cookies automatically)
+    // Stable per-installation identity: X-App-Instance-Id header, then the
+    // app_instance_id
     // cookie, then a freshly minted GUID persisted as a cookie. This identifier
     // persists across logout but is never used as an authentication secret.
-    private static string ResolveDeviceId(HttpRequest request, HttpResponse response)
+    private static bool TryResolveAppInstanceId(
+        HttpRequest request,
+        HttpResponse response,
+        out string appInstanceId)
     {
-        if (request.Headers.TryGetValue(DeviceIdHeader, out var headerValue) &&
-            !string.IsNullOrWhiteSpace(headerValue.ToString()))
-            return headerValue.ToString();
+        if (request.Headers.TryGetValue(AppInstanceIdHeader, out var headerValue))
+            return TryNormalizeAppInstanceId(headerValue.ToString(), out appInstanceId);
 
-        if (request.Cookies.TryGetValue(DeviceIdCookie, out var cookieValue) &&
-            !string.IsNullOrWhiteSpace(cookieValue))
-            return cookieValue;
+        if (request.Cookies.TryGetValue(AppInstanceIdCookie, out var cookieValue))
+            return TryNormalizeAppInstanceId(cookieValue, out appInstanceId);
 
-        var newDeviceId = Guid.NewGuid().ToString();
-        response.Cookies.Append(DeviceIdCookie, newDeviceId, DeviceCookieOptions(request));
-        return newDeviceId;
+        appInstanceId = Guid.NewGuid().ToString("D");
+        response.Cookies.Append(AppInstanceIdCookie, appInstanceId, AppInstanceCookieOptions(request));
+        return true;
+    }
+
+    public static bool TryNormalizeAppInstanceId(string? value, out string appInstanceId)
+    {
+        appInstanceId = "";
+        if (value is null || value.Length != 36 || !Guid.TryParseExact(value, "D", out var guid))
+            return false;
+
+        var canonical = guid.ToString("D");
+        if (canonical[14] != '4' || canonical[19] is not ('8' or '9' or 'a' or 'b'))
+            return false;
+
+        appInstanceId = canonical;
+        return true;
     }
 
     private static async Task<LoginRequest?> ReadLoginRequestAsync(HttpRequest request)
@@ -384,7 +403,7 @@ public static class AuthEndpoints
         }
     }
 
-    private static CookieOptions DeviceCookieOptions(HttpRequest request) => new()
+    private static CookieOptions AppInstanceCookieOptions(HttpRequest request) => new()
     {
         HttpOnly = true,
         Secure = request.IsHttps,   // HTTPS in production (Render); still works on http locally

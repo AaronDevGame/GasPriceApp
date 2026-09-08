@@ -1,6 +1,6 @@
 public class PlayerData
 {
-    public string DeviceId { get; set; } = "";
+    public string AppInstanceId { get; set; } = "";
     public long PlayerId { get; set; }
     public int Health { get; set; } = PlayerDataDefaults.Health;
     public long Money { get; set; } = PlayerDataDefaults.Money;
@@ -21,7 +21,7 @@ public static class PlayerDataDefaults
 
     public static PlayerData Create(Guest guest, DateTime now) => new()
     {
-        DeviceId = guest.DeviceId,
+        AppInstanceId = guest.AppInstanceId,
         PlayerId = guest.PlayerId,
         Health = Health,
         Money = Money,
@@ -37,7 +37,7 @@ public static class PlayerDataStore
 {
     public static async Task<PlayerData> EnsureForGuestAsync(AppDbContext db, Guest guest, DateTime now)
     {
-        var playerData = await db.PlayerData.FindAsync(guest.DeviceId);
+        var playerData = await db.PlayerData.FindAsync(guest.AppInstanceId);
         if (playerData is null)
         {
             playerData = PlayerDataDefaults.Create(guest, now);

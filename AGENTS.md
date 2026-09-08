@@ -54,7 +54,7 @@ When behavior changes, also exercise the affected endpoint against a local insta
 
 ## Authentication and security
 
-- Public player-data endpoints require both `Authorization: Bearer <token>` and `X-Device-Id`.
+- Public player-data endpoints require both `Authorization: Bearer <token>` and `X-App-Instance-Id`.
 - Admin endpoints under `/admin` require `ADMIN_API_KEY` through `AdminAuthMiddleware`.
 - Never commit production secrets, tokens, database credentials, or copied environment files.
 - The development values in `docker-compose.yml` are local-only defaults.

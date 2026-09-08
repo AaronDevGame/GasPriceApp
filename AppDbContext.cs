@@ -15,8 +15,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Guest>(e =>
         {
             e.ToTable("guests");
-            e.HasKey(g => g.DeviceId);
-            e.Property(g => g.DeviceId).HasColumnName("device_id");
+            e.HasKey(g => g.AppInstanceId);
+            e.Property(g => g.AppInstanceId).HasColumnName("app_instance_id");
             e.Property(g => g.GuestCredentialHash).HasColumnName("guest_credential_hash");
             e.Property(g => g.AccessTokenHash).HasColumnName("access_token_hash");
             e.Property(g => g.AccessTokenExpiresAt).HasColumnName("access_token_expires_at");
@@ -44,8 +44,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<PlayerData>(e =>
         {
             e.ToTable("player_data");
-            e.HasKey(p => p.DeviceId);
-            e.Property(p => p.DeviceId).HasColumnName("device_id");
+            e.HasKey(p => p.AppInstanceId);
+            e.Property(p => p.AppInstanceId).HasColumnName("app_instance_id");
             e.Property(p => p.PlayerId).HasColumnName("player_id");
             e.HasIndex(p => p.PlayerId).IsUnique();
             e.Property(p => p.Health)
@@ -71,7 +71,7 @@ public class AppDbContext : DbContext
 
             e.HasOne<Guest>()
                 .WithOne()
-                .HasForeignKey<PlayerData>(p => p.DeviceId)
+                .HasForeignKey<PlayerData>(p => p.AppInstanceId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

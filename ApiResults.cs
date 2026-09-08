@@ -77,7 +77,8 @@ public static class ApiMetadata
 public static class AuthErrors
 {
     public const string MissingAuthorizationHeader = "missing_authorization_header";
-    public const string MissingDeviceIdHeader = "missing_device_id_header";
+    public const string MissingAppInstanceIdHeader = "missing_app_instance_id_header";
+    public const string InvalidAppInstanceId = "invalid_app_instance_id";
     public const string InvalidAdminKey = "invalid_admin_key";
     public const string InvalidPlayerToken = "invalid_player_token";
     public const string InvalidPlayerCredentials = "invalid_player_credentials";

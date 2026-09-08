@@ -15,7 +15,9 @@ public static class PlayerProfileEndpoints
         {
             var auth = await PlayerAuthentication.AuthenticateAsync(request, db, authService);
             if (!auth.IsValid || auth.Guest is null)
-                return ApiResults.Unauthorized(auth.Error, instanceId);
+                return auth.IsBadRequest
+                    ? ApiResults.BadRequest(auth.Error, instanceId)
+                    : ApiResults.Unauthorized(auth.Error, instanceId);
 
             if (!request.HasJsonContentType())
                 return ApiResults.BadRequest("Request body must be JSON.", instanceId);
@@ -36,7 +38,7 @@ public static class PlayerProfileEndpoints
 
             var nameResult = await PlayerNameService.ValidateRequestedNameAsync(
                 db,
-                auth.Guest.DeviceId,
+                auth.Guest.AppInstanceId,
                 requestedPlayerName);
             if (!nameResult.IsValid)
                 return ApiResults.BadRequest(nameResult.Error, instanceId);

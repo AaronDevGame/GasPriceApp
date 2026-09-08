@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.8.5] - 2026-09-08
+
+### Changed
+- Bump project and API version to `1.8.5`.
+- Rename the installation-scoped `DeviceId` contract to `AppInstanceId`, including the `X-App-Instance-Id` request header, `appInstanceId` login-response property, `app_instance_id` cookie, and persisted database columns.
+- Require app-instance IDs to be UUID v4 values in canonical `8-4-4-4-12` form. Valid uppercase input is normalized to lowercase; malformed IDs now return `400 Bad Request` on login and authenticated player endpoints.
+- Existing non-UUID device identifiers are no longer accepted by public authentication endpoints.
+
 ## [1.8.4] - 2026-09-03
 
 ### Changed

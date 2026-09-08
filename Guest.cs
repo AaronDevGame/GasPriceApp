@@ -1,8 +1,8 @@
-// A guest record, one row per app installation. DeviceId identifies the record;
+// A guest record, one row per app installation. AppInstanceId identifies the record;
 // the credential and access-token hashes prove ownership and authorize a session.
 public class Guest
 {
-    public string DeviceId { get; set; } = "";   // primary key
+    public string AppInstanceId { get; set; } = "";   // primary key
     public string? GuestCredentialHash { get; set; }
     public string? AccessTokenHash { get; set; }
     public DateTime? AccessTokenExpiresAt { get; set; }

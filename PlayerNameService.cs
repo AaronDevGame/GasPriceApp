@@ -11,18 +11,18 @@ public static class PlayerNameService
 
     public static async Task<PlayerNameResult> ResolveInitialNameAsync(
         AppDbContext db,
-        string deviceId,
+        string appInstanceId,
         string? requestedPlayerName)
     {
         if (!string.IsNullOrWhiteSpace(requestedPlayerName))
-            return await ValidateRequestedNameAsync(db, deviceId, requestedPlayerName);
+            return await ValidateRequestedNameAsync(db, appInstanceId, requestedPlayerName);
 
         return PlayerNameResult.Valid(await GenerateUniqueDefaultNameAsync(db));
     }
 
     public static async Task<PlayerNameResult> ValidateRequestedNameAsync(
         AppDbContext db,
-        string deviceId,
+        string appInstanceId,
         string requestedPlayerName)
     {
         var playerName = requestedPlayerName.Trim();
@@ -37,7 +37,7 @@ public static class PlayerNameService
             return PlayerNameResult.Invalid("Player name contains invalid characters.");
 
         var isTaken = await db.Guests.AnyAsync(g =>
-            g.PlayerName == playerName && g.DeviceId != deviceId);
+            g.PlayerName == playerName && g.AppInstanceId != appInstanceId);
         if (isTaken)
             return PlayerNameResult.Invalid("Player name is already taken.");
 

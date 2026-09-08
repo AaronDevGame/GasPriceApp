@@ -18,7 +18,9 @@ public static class PlayerDataEndpoints
         {
             var auth = await PlayerAuthentication.AuthenticateAsync(request, db, authService);
             if (!auth.IsValid || auth.Guest is null)
-                return ApiResults.Unauthorized(auth.Error, instanceId);
+                return auth.IsBadRequest
+                    ? ApiResults.BadRequest(auth.Error, instanceId)
+                    : ApiResults.Unauthorized(auth.Error, instanceId);
 
             var now = DateTime.UtcNow;
             var playerData = await PlayerDataStore.EnsureForGuestAsync(db, auth.Guest, now);
@@ -31,7 +33,9 @@ public static class PlayerDataEndpoints
         {
             var auth = await PlayerAuthentication.AuthenticateAsync(request, db, authService);
             if (!auth.IsValid || auth.Guest is null)
-                return ApiResults.Unauthorized(auth.Error, instanceId);
+                return auth.IsBadRequest
+                    ? ApiResults.BadRequest(auth.Error, instanceId)
+                    : ApiResults.Unauthorized(auth.Error, instanceId);
 
             if (!request.HasJsonContentType())
                 return ApiResults.BadRequest("Request body must be JSON.", instanceId);

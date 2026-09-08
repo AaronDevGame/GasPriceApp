@@ -7,7 +7,7 @@ account creation and existing-account login count, including requests that
 subsequently fail validation or authentication. Rejected requests do not extend
 the waiting period.
 
-Changing `X-Device-Id`, the `device_id` cookie, route casing, or the trailing
+Changing `X-App-Instance-Id`, the `app_instance_id` cookie, route casing, or the trailing
 slash does not give the client a new allowance. A rejected request receives
 HTTP `429`, the existing API error envelope, and `Retry-After` in seconds.
 Clients should wait for that duration before retrying.

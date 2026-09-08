@@ -154,5 +154,5 @@ public record RouteInfo(string Route, string Method, bool IsLegacy = false);
 
 public static class APIVersion
 {
-    public const string Version = "1.8.4";
+    public const string Version = "1.8.5";
 }
