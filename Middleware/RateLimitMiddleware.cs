@@ -14,6 +14,7 @@ public class RateLimitMiddleware
         [ApiRoutes.AuthLogout] = TimeSpan.FromSeconds(1),
         [ApiRoutes.PlayerData] = TimeSpan.FromSeconds(1),
         [ApiRoutes.PlayerProfile] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.AiChat] = TimeSpan.FromSeconds(5),
     };
 
     // Key = ip + "|" + route

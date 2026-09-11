@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.8.6] - 2026-09-11
+
+### Added
+- Add authenticated `POST /ai/chat` for one-shot, text-only questions through the OpenAI Responses API, with strict request validation, bounded output, disabled response storage, and token-usage reporting.
+
+### Changed
+- Apply a five-second per-client-IP cooldown to `POST /ai/chat` to limit AI usage costs.
+- Bump project and API version to `1.8.6`.
+
 ## [1.8.5] - 2026-09-08
 
 ### Changed

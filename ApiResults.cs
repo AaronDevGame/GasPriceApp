@@ -61,6 +61,48 @@ public static class ApiResults
                 Detail = detail
             }
         }, statusCode: StatusCodes.Status429TooManyRequests);
+
+    public static IResult BadGateway(string error, string instanceId, string? detail = null)
+        => Error(
+            ErrorCodes.BadGateway,
+            "bad_gateway",
+            error,
+            instanceId,
+            detail);
+
+    public static IResult ServiceUnavailable(string error, string instanceId, string? detail = null)
+        => Error(
+            ErrorCodes.ServiceUnavailable,
+            "service_unavailable",
+            error,
+            instanceId,
+            detail);
+
+    public static IResult GatewayTimeout(string error, string instanceId, string? detail = null)
+        => Error(
+            ErrorCodes.GatewayTimeout,
+            "gateway_timeout",
+            error,
+            instanceId,
+            detail);
+
+    private static IResult Error(
+        int statusCode,
+        string message,
+        string error,
+        string instanceId,
+        string? detail)
+        => Results.Json(new ApiResponse<object>
+        {
+            Code = statusCode,
+            Message = message,
+            InstanceId = instanceId,
+            Error = new ApiError
+            {
+                Error = error,
+                Detail = detail
+            }
+        }, statusCode: statusCode);
 }
 
 public static class ApiMetadata

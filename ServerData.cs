@@ -106,6 +106,7 @@ public static class ApiRoutes
 
     public const string PlayerData = "/player/data";
     public const string PlayerProfile = "/player/profile";
+    public const string AiChat = "/ai/chat";
 
     public const string AdminServerStatus = "/admin/server/status";
     public const string AdminServerStart = "/admin/server/start";
@@ -134,6 +135,7 @@ public static class RouteRegistry
         new(ApiRoutes.PlayerData, "GET"),
         new(ApiRoutes.PlayerData, "PATCH"),
         new(ApiRoutes.PlayerProfile, "PATCH"),
+        new(ApiRoutes.AiChat, "POST"),
     };
 
     public static readonly RouteInfo[] Admin =
@@ -154,5 +156,5 @@ public record RouteInfo(string Route, string Method, bool IsLegacy = false);
 
 public static class APIVersion
 {
-    public const string Version = "1.8.5";
+    public const string Version = "1.8.6";
 }
