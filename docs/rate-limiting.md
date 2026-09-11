@@ -1,8 +1,8 @@
 # Guest login limits
 
 `POST /auth/guest/login` shares limits across all devices using the same client
-IP address. The defaults allow one request per second, at most 5 admitted
-attempts in any rolling minute, and at most 10 in any rolling hour. Both new
+IP address. The defaults allow one request per second and at most 10 admitted
+attempts in any rolling five-minute window. Both new
 account creation and existing-account login count, including requests that
 subsequently fail validation or authentication. Rejected requests do not extend
 the waiting period.
@@ -15,8 +15,7 @@ Clients should wait for that duration before retrying.
 Configure positive integer values in `appsettings.json` under
 `RateLimiting:GuestLogin`, or use environment variables:
 
-- `RateLimiting__GuestLogin__PermitLimitPerMinute` (default `5`)
-- `RateLimiting__GuestLogin__PermitLimitPerHour` (default `10`, temporarily reduced for testing)
+- `RateLimiting__GuestLogin__PermitLimitPerFiveMinutes` (default `10`)
 
 Restart the app after changing these values. Players behind the same public IP
 (for example, a school or mobile carrier) share the allowance. Adjust the

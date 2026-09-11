@@ -23,18 +23,16 @@ public class RateLimitMiddleware
     private DateTimeOffset _lastCleanup;
     private readonly RequestDelegate _next;
     private readonly TimeProvider _timeProvider;
-    private readonly int _guestLoginsPerMinute;
-    private readonly int _guestLoginsPerHour;
+    private readonly int _guestLoginsPerFiveMinutes;
 
     public RateLimitMiddleware(RequestDelegate next, IConfiguration configuration, TimeProvider timeProvider)
     {
         _next = next;
         _timeProvider = timeProvider;
         _lastCleanup = timeProvider.GetUtcNow();
-        _guestLoginsPerMinute = configuration.GetValue<int?>("RateLimiting:GuestLogin:PermitLimitPerMinute") ?? 5;
-        _guestLoginsPerHour = configuration.GetValue<int?>("RateLimiting:GuestLogin:PermitLimitPerHour") ?? 10;
-        if (_guestLoginsPerMinute <= 0 || _guestLoginsPerHour <= 0)
-            throw new InvalidOperationException("Guest login rate limits must be positive integers.");
+        _guestLoginsPerFiveMinutes = configuration.GetValue<int?>("RateLimiting:GuestLogin:PermitLimitPerFiveMinutes") ?? 10;
+        if (_guestLoginsPerFiveMinutes <= 0)
+            throw new InvalidOperationException("The guest login rate limit must be a positive integer.");
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -102,7 +100,7 @@ public class RateLimitMiddleware
 
                 _lastCleanup = now;
 
-                // Keep login history for the full hourly window, independently
+                // Keep login history for the full five-minute window, independently
                 // of the shorter cooldown history. Remove inactive IP buckets.
                 foreach (var loginIp in _guestLoginAttempts.Keys.ToArray())
                 {
@@ -131,13 +129,9 @@ public class RateLimitMiddleware
                 }
 
                 TrimLoginAttempts(attempts, now);
-                var recentAttempts = attempts.Where(time => time > now.AddMinutes(-1)).ToArray();
-                if (recentAttempts.Length >= _guestLoginsPerMinute)
+                if (attempts.Count >= _guestLoginsPerFiveMinutes)
                     retryAfterSeconds = Math.Max(retryAfterSeconds,
-                        RetryAfter(recentAttempts[recentAttempts.Length - _guestLoginsPerMinute].AddMinutes(1), now));
-                if (attempts.Count >= _guestLoginsPerHour)
-                    retryAfterSeconds = Math.Max(retryAfterSeconds,
-                        RetryAfter(attempts.Peek().AddHours(1), now));
+                        RetryAfter(attempts.Peek().AddMinutes(5), now));
 
                 blocked |= retryAfterSeconds > 0;
                 // Reserve before invoking the endpoint so concurrent requests
@@ -166,7 +160,7 @@ public class RateLimitMiddleware
 
     private static void TrimLoginAttempts(Queue<DateTimeOffset> attempts, DateTimeOffset now)
     {
-        while (attempts.TryPeek(out var oldest) && oldest <= now.AddHours(-1))
+        while (attempts.TryPeek(out var oldest) && oldest <= now.AddMinutes(-5))
             attempts.Dequeue();
     }
 

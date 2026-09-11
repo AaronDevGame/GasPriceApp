@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.8.7] - 2026-09-11
+
+### Changed
+- Replace the guest-login hourly and per-minute limits with a single limit of 10 attempts per client IP in any rolling five-minute window; retain the one-second cooldown.
+- Bump project and API version to `1.8.7`.
+
 ## [1.8.6] - 2026-09-11
 
 ### Added
