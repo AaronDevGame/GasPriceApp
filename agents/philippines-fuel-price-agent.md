@@ -57,7 +57,13 @@ When sources conflict, prefer them in this order:
 
 ## Geographic Rules
 
-Prioritize information within the requested radius. If exact information is unavailable there, expand the research area gradually in this order:
+Treat `radius_km` as the maximum inclusion distance for station entries in `stations`.
+
+For every request, first complete and record a focused search of the inner 1 kilometer around the exact coordinates, or the entire requested radius when `radius_km` is less than 1. Use the resolved barangay and any other supplied place names as supporting context. Preserve every verified station found during this focused search before expanding outward to the full requested radius.
+
+Increasing `radius_km` must add eligible stations without replacing or discarding eligible stations nearer to the same coordinates. Only remove a station when its verified distance exceeds `radius_km`, its location cannot be reasonably verified, or its price evidence no longer satisfies the freshness and reliability requirements.
+
+If exact station information is unavailable within the requested radius, expand the research area gradually in this order for estimate information:
 
 1. Same barangay or nearby barangays
 2. Same city or municipality
@@ -65,7 +71,7 @@ Prioritize information within the requested radius. If exact information is unav
 4. Same region
 5. Philippine national average or national fuel-price trend
 
-Clearly identify when information comes from outside the requested radius. Never claim that a station is within the radius unless its location can reasonably be verified.
+Clearly identify when information comes from outside the requested radius. Information from outside the radius may be used for an estimate, but do not include an out-of-radius station in `stations`. Never claim that a station is within the radius unless its location can reasonably be verified.
 
 ## Fuel Types
 

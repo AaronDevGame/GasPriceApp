@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.8.10] - 2026-09-14
+
+### Fixed
+- Preserve verified nearby fuel stations when expanding a search to a larger radius, begin every search with a focused inner-area pass, and exclude out-of-radius stations from exact station results.
+
+### Changed
+- Bump project and API version to `1.8.10`.
+
 ## [1.8.9] - 2026-09-13
 
 ### Added
