@@ -3,7 +3,13 @@ using System.Text.Json;
 public sealed record AiChatResponse(
     string Message,
     string Model,
-    AiChatTokenUsage? Usage);
+    AiChatTokenUsage? Usage,
+    bool UsedWebSearch,
+    IReadOnlyList<AiChatSource> Sources);
+
+public sealed record AiChatSource(
+    string? Title,
+    string Url);
 
 public sealed record AiChatTokenUsage(
     int InputTokens,
@@ -60,7 +66,12 @@ public static class AiChatEndpoints
             {
                 var response = await openAi.CreateResponseAsync(message, cancellationToken);
                 return ApiResults.Ok(
-                    new AiChatResponse(response.Message, response.Model, response.Usage),
+                    new AiChatResponse(
+                        response.Message,
+                        response.Model,
+                        response.Usage,
+                        response.UsedWebSearch,
+                        response.Sources),
                     "ai_chat_response",
                     instanceId);
             }

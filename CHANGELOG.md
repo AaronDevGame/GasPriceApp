@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.8.8] - 2026-09-13
+
+### Added
+- Enable live web search for time-sensitive AI chat questions, capped at three tool calls per response, and return cited source links with each response.
+
+### Changed
+- Bump project and API version to `1.8.8`.
+
 ## [1.8.7] - 2026-09-11
 
 ### Changed
