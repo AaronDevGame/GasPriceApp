@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.8.9] - 2026-09-13
+
+### Added
+- Add authenticated `POST /ai/fuel-prices` for researched Philippine fuel prices by latitude, longitude, and search radius, using the dedicated fuel-price agent and structured JSON output.
+
+### Changed
+- Bump project and API version to `1.8.9`.
+
 ## [1.8.8] - 2026-09-13
 
 ### Added
