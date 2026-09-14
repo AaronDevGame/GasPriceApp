@@ -108,7 +108,9 @@ public sealed class OpenAiResponsesClient
         var input = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             ["latitude"] = fuelPriceRequest.Latitude,
-            ["longitude"] = fuelPriceRequest.Longitude
+            ["longitude"] = fuelPriceRequest.Longitude,
+            ["city"] = fuelPriceRequest.City,
+            ["province"] = fuelPriceRequest.Province
         });
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "v1/responses")

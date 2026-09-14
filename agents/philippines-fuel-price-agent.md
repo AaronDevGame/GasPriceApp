@@ -4,7 +4,7 @@ Resolve the supplied coordinates to a Philippine city and province, then find cu
 
 ## Rules
 
-- Echo the input coordinates and populate `resolved_area`, `city`, and `province` from reliable geographic evidence. Never invent a location.
+- Treat the supplied city and province as location hints, verify them against the coordinates, and populate `resolved_area`, `city`, and `province` from reliable geographic evidence. Never invent a location.
 - Search for current absolute PHP-per-liter prices for the resolved city first.
 - If no credible city price exists, search the resolved province. Do not expand beyond the province.
 - Set `status` and `estimate_area` to the geographic level actually supported by the price evidence.

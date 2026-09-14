@@ -8,6 +8,7 @@ public class AppDbContext : DbContext
 
     public DbSet<Guest> Guests => Set<Guest>();
     public DbSet<PlayerData> PlayerData => Set<PlayerData>();
+    public DbSet<FuelPriceCache> FuelPriceCaches => Set<FuelPriceCache>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -73,6 +74,38 @@ public class AppDbContext : DbContext
                 .WithOne()
                 .HasForeignKey<PlayerData>(p => p.AppInstanceId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FuelPriceCache>(e =>
+        {
+            e.ToTable("fuel_price_cache");
+            e.HasKey(c => c.Id);
+            e.Property(c => c.Id).HasColumnName("id");
+            e.Property(c => c.Scope)
+                .HasColumnName("scope")
+                .HasMaxLength(16);
+            e.Property(c => c.City)
+                .HasColumnName("city")
+                .HasMaxLength(100);
+            e.Property(c => c.Province)
+                .HasColumnName("province")
+                .HasMaxLength(100);
+            e.Property(c => c.CityKey)
+                .HasColumnName("city_key")
+                .HasMaxLength(100);
+            e.Property(c => c.ProvinceKey)
+                .HasColumnName("province_key")
+                .HasMaxLength(100);
+            e.Property(c => c.ResultJson)
+                .HasColumnName("result_json")
+                .HasColumnType("jsonb");
+            e.Property(c => c.Model)
+                .HasColumnName("model")
+                .HasMaxLength(100);
+            e.Property(c => c.CachedAt).HasColumnName("cached_at");
+            e.Property(c => c.RefreshAfter).HasColumnName("refresh_after");
+
+            e.HasIndex(c => new { c.Scope, c.ProvinceKey, c.CityKey, c.CachedAt });
         });
     }
 }
