@@ -69,9 +69,12 @@ public static class FuelPriceEndpoints
                     ((cityKey != null &&
                       c.Scope == FuelPriceCacheScopes.City &&
                       c.CityKey == cityKey) ||
-                     c.Scope == FuelPriceCacheScopes.Province) &&
+                     c.Scope == FuelPriceCacheScopes.Province ||
+                     (cityKey == null && c.Scope == FuelPriceCacheScopes.City)) &&
                     c.RefreshAfter > now)
-                .OrderBy(c => c.Scope == FuelPriceCacheScopes.City ? 0 : 1)
+                .OrderBy(c => cityKey != null
+                    ? (c.Scope == FuelPriceCacheScopes.City ? 0 : 1)
+                    : (c.Scope == FuelPriceCacheScopes.Province ? 0 : 1))
                 .ThenByDescending(c => c.CachedAt)
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -112,23 +115,27 @@ public static class FuelPriceEndpoints
                 var cachedAt = timeProvider.GetUtcNow().UtcDateTime;
                 var refreshAfter = GetRefreshAfter(cachedAt);
                 var responseCacheScope = TryGetResponseCacheScope(response.Result);
+                var responseCity = TryGetResponseLocation(response.Result, "city");
+                var responseProvince = TryGetResponseLocation(response.Result, "province");
+                var responseCityKey = NormalizeLocation(responseCity);
+                var responseProvinceKey = NormalizeLocation(responseProvince);
                 var cacheStored =
                     HasUsablePrices(response.Result) &&
                     responseCacheScope is not null &&
-                    ResponseMatchesRequestLocation(
-                        response.Result,
-                        responseCacheScope,
-                        cityKey,
-                        provinceKey);
+                    responseProvinceKey == provinceKey &&
+                    (responseCacheScope != FuelPriceCacheScopes.City ||
+                     (responseCityKey is not null &&
+                      (cityKey is null || responseCityKey == cityKey)));
 
                 if (cacheStored)
                 {
+                    var isCityCache = responseCacheScope == FuelPriceCacheScopes.City;
                     db.FuelPriceCaches.Add(new FuelPriceCache
                     {
                         Scope = responseCacheScope!,
-                        City = fuelRequest.City,
-                        Province = fuelRequest.Province,
-                        CityKey = cityKey,
+                        City = isCityCache ? responseCity : null,
+                        Province = responseProvince!,
+                        CityKey = isCityCache ? responseCityKey : null,
                         ProvinceKey = provinceKey,
                         ResultJson = response.Result.GetRawText(),
                         Model = response.Model,
@@ -381,28 +388,17 @@ public static class FuelPriceEndpoints
         };
     }
 
-    private static bool ResponseMatchesRequestLocation(
-        JsonElement result,
-        string cacheScope,
-        string? cityKey,
-        string provinceKey)
+    private static string? TryGetResponseLocation(JsonElement result, string field)
     {
         if (!result.TryGetProperty("location", out var location) ||
             location.ValueKind != JsonValueKind.Object ||
-            !location.TryGetProperty("province", out var responseProvince) ||
-            responseProvince.ValueKind != JsonValueKind.String ||
-            NormalizeLocation(responseProvince.GetString()) != provinceKey)
+            !location.TryGetProperty(field, out var value) ||
+            value.ValueKind != JsonValueKind.String)
         {
-            return false;
+            return null;
         }
 
-        if (cacheScope == FuelPriceCacheScopes.Province)
-            return true;
-
-        return cityKey is not null &&
-               location.TryGetProperty("city", out var responseCity) &&
-               responseCity.ValueKind == JsonValueKind.String &&
-               NormalizeLocation(responseCity.GetString()) == cityKey;
+        return value.GetString()?.Trim();
     }
 
     private static DateTime GetRefreshAfter(DateTime cachedAtUtc)
