@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.9.2] - 2026-09-14
+
+### Changed
+- Apply a government-to-fuel-company-to-aggregator source waterfall to AI fuel-price research and report the selected source tier.
+- Bump project and API version to `1.9.2`.
+
 ## [1.9.1] - 2026-09-14
 
 ### Changed

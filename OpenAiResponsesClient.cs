@@ -448,6 +448,10 @@ internal static class FuelPriceJsonSchema
               "type": "string",
               "enum": ["city_estimate", "provincial_estimate", "unavailable"]
             },
+            "source_tier": {
+              "type": "string",
+              "enum": ["government", "fuel_company", "aggregator", "unavailable"]
+            },
             "estimate_area": {
               "type": "object",
               "properties": {
@@ -491,7 +495,7 @@ internal static class FuelPriceJsonSchema
             },
             "data_as_of": { "type": ["string", "null"] }
           },
-          "required": ["location", "status", "estimate_area", "prices", "basis", "confidence", "sources", "data_as_of"],
+          "required": ["location", "status", "source_tier", "estimate_area", "prices", "basis", "confidence", "sources", "data_as_of"],
           "additionalProperties": false,
           "$defs": {
             "price_range": {
