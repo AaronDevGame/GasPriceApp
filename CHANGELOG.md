@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.8.11] - 2026-09-14
+
+### Changed
+- Replace coordinate-, radius-, and station-based AI fuel-price research with city-to-national estimates and an unavailable fallback.
+- Redefine the fuel-price agent as a web-research fallback for the future trusted-source-first backend pipeline.
+- Bump project and API version to `1.8.11`.
+
 ## [1.8.10] - 2026-09-14
 
 ### Fixed

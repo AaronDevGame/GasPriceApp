@@ -107,13 +107,15 @@ public sealed class OpenAiResponsesClient
 
         var input = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
-            ["latitude"] = fuelPriceRequest.Latitude,
-            ["longitude"] = fuelPriceRequest.Longitude,
-            ["radius_km"] = fuelPriceRequest.RadiusKm,
-            ["barangay"] = fuelPriceRequest.Barangay,
-            ["municipality"] = fuelPriceRequest.Municipality,
-            ["city"] = fuelPriceRequest.City,
-            ["province"] = fuelPriceRequest.Province
+            ["location"] = new Dictionary<string, object?>
+            {
+                ["city"] = fuelPriceRequest.City,
+                ["province"] = fuelPriceRequest.Province,
+                ["region"] = fuelPriceRequest.Region,
+                ["country"] = "Philippines"
+            },
+            ["requested_at"] = DateTimeOffset.UtcNow.ToString("O"),
+            ["freshness_cutoff"] = DateTimeOffset.UtcNow.AddDays(-8).ToString("O")
         });
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "v1/responses")
@@ -349,139 +351,71 @@ internal static class FuelPriceJsonSchema
             "location": {
               "type": "object",
               "properties": {
-                "latitude": { "type": "number" },
-                "longitude": { "type": "number" },
-                "radius_km": { "type": "number" },
-                "resolved_area": { "type": ["string", "null"] }
+                "city": { "type": ["string", "null"] },
+                "province": { "type": ["string", "null"] },
+                "region": { "type": ["string", "null"] },
+                "country": { "type": "string", "enum": ["Philippines"] }
               },
-              "required": ["latitude", "longitude", "radius_km", "resolved_area"],
+              "required": ["city", "province", "region", "country"],
               "additionalProperties": false
             },
             "status": {
               "type": "string",
-              "enum": ["exact", "local_estimate", "regional_estimate", "insufficient_data"]
+              "enum": ["city_estimate", "provincial_estimate", "regional_estimate", "national_estimate", "unavailable"]
             },
-            "summary": {
+            "estimate_area": {
               "type": "object",
               "properties": {
-                "diesel": { "$ref": "#/$defs/price_range" },
-                "gasoline_91": { "$ref": "#/$defs/price_range" },
-                "gasoline_95": { "$ref": "#/$defs/price_range" }
+                "level": {
+                  "type": "string",
+                  "enum": ["city", "province", "region", "national", "unavailable"]
+                },
+                "name": { "type": ["string", "null"] }
               },
-              "required": ["diesel", "gasoline_91", "gasoline_95"],
+              "required": ["level", "name"],
               "additionalProperties": false
             },
-            "stations": {
+            "prices": {
               "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "station_name": { "type": ["string", "null"] },
-                  "brand": { "type": ["string", "null"] },
-                  "address": { "type": ["string", "null"] },
-                  "latitude": { "type": ["number", "null"] },
-                  "longitude": { "type": ["number", "null"] },
-                  "distance_km": { "type": ["number", "null"] },
-                  "prices": {
-                    "type": "array",
-                    "items": { "$ref": "#/$defs/exact_price" }
-                  },
-                  "reported_at": { "type": ["string", "null"] },
-                  "source": { "$ref": "#/$defs/source_reference" },
-                  "confidence": { "$ref": "#/$defs/confidence" }
-                },
-                "required": [
-                  "station_name",
-                  "brand",
-                  "address",
-                  "latitude",
-                  "longitude",
-                  "distance_km",
-                  "prices",
-                  "reported_at",
-                  "source",
-                  "confidence"
-                ],
-                "additionalProperties": false
-              }
+              "items": { "$ref": "#/$defs/price_range" }
             },
-            "estimate": {
-              "type": "object",
-              "properties": {
-                "area": { "type": ["string", "null"] },
-                "prices": {
-                  "type": "array",
-                  "items": { "$ref": "#/$defs/estimated_price" }
-                },
-                "basis": { "type": ["string", "null"] },
-                "confidence": { "$ref": "#/$defs/confidence" }
-              },
-              "required": ["area", "prices", "basis", "confidence"],
-              "additionalProperties": false
+            "basis": { "type": ["string", "null"] },
+            "confidence": {
+              "type": "string",
+              "enum": ["high", "medium", "low", "none"]
             },
             "sources": {
               "type": "array",
               "items": {
                 "type": "object",
                 "properties": {
-                  "name": { "type": ["string", "null"] },
-                  "url": { "type": ["string", "null"] },
-                  "published_at": { "type": ["string", "null"] }
+                  "name": { "type": "string" },
+                  "url": { "type": "string" },
+                  "published_at": { "type": "string" },
+                  "geographic_coverage": { "type": "string" }
                 },
-                "required": ["name", "url", "published_at"],
+                "required": ["name", "url", "published_at", "geographic_coverage"],
                 "additionalProperties": false
               }
             },
-            "last_updated": { "type": ["string", "null"] }
+            "data_as_of": { "type": ["string", "null"] }
           },
-          "required": ["location", "status", "summary", "stations", "estimate", "sources", "last_updated"],
+          "required": ["location", "status", "estimate_area", "prices", "basis", "confidence", "sources", "data_as_of"],
           "additionalProperties": false,
           "$defs": {
-            "confidence": {
-              "type": "string",
-              "enum": ["high", "medium", "low"]
-            },
             "price_range": {
               "type": "object",
               "properties": {
-                "min_price": { "type": ["number", "null"] },
-                "max_price": { "type": ["number", "null"] },
-                "currency": { "type": "string", "enum": ["PHP"] },
-                "unit": { "type": "string", "enum": ["liter"] }
-              },
-              "required": ["min_price", "max_price", "currency", "unit"],
-              "additionalProperties": false
-            },
-            "exact_price": {
-              "type": "object",
-              "properties": {
-                "fuel_type": { "type": ["string", "null"] },
-                "price": { "type": ["number", "null"] },
-                "currency": { "type": "string", "enum": ["PHP"] },
-                "unit": { "type": "string", "enum": ["liter"] }
-              },
-              "required": ["fuel_type", "price", "currency", "unit"],
-              "additionalProperties": false
-            },
-            "estimated_price": {
-              "type": "object",
-              "properties": {
-                "fuel_type": { "type": ["string", "null"] },
-                "min_price": { "type": ["number", "null"] },
-                "max_price": { "type": ["number", "null"] },
+                "fuel_type": {
+                  "type": "string",
+                  "enum": ["diesel", "gasoline", "gasoline_91", "gasoline_95", "gasoline_97_plus", "kerosene"]
+                },
+                "min_price": { "type": "number" },
+                "max_price": { "type": "number" },
                 "currency": { "type": "string", "enum": ["PHP"] },
                 "unit": { "type": "string", "enum": ["liter"] }
               },
               "required": ["fuel_type", "min_price", "max_price", "currency", "unit"],
-              "additionalProperties": false
-            },
-            "source_reference": {
-              "type": "object",
-              "properties": {
-                "name": { "type": ["string", "null"] },
-                "url": { "type": ["string", "null"] }
-              },
-              "required": ["name", "url"],
               "additionalProperties": false
             }
           }
