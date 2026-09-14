@@ -80,6 +80,14 @@ public static class FuelPriceEndpoints
 
             if (cached is not null)
             {
+                await db.FuelPriceCaches
+                    .Where(c => c.Id == cached.Id)
+                    .ExecuteUpdateAsync(
+                        setters => setters.SetProperty(
+                            c => c.HitCount,
+                            c => c.HitCount + 1),
+                        cancellationToken);
+
                 using var cachedDocument = JsonDocument.Parse(cached.ResultJson);
                 return ApiResults.Ok(
                     new FuelPriceApiResponse(

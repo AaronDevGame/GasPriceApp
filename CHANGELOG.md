@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Cache usable AI fuel-price responses by city and province, retaining cache history while refreshing entries after seven days or the next Tuesday at 6:00 AM Philippine time.
 - Report cache provenance and freshness timestamps in fuel-price responses.
+- Track how many responses are served from each fuel-price cache record.
 
 ### Changed
 - Require `province` and accept nullable `city` in fuel-price requests so cache lookups can happen before AI research.

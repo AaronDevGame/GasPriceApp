@@ -104,6 +104,9 @@ public class AppDbContext : DbContext
                 .HasMaxLength(100);
             e.Property(c => c.CachedAt).HasColumnName("cached_at");
             e.Property(c => c.RefreshAfter).HasColumnName("refresh_after");
+            e.Property(c => c.HitCount)
+                .HasColumnName("hit_count")
+                .HasDefaultValue(0L);
 
             e.HasIndex(c => new { c.Scope, c.ProvinceKey, c.CityKey, c.CachedAt });
         });

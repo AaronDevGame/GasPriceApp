@@ -10,6 +10,7 @@ public sealed class FuelPriceCache
     public string Model { get; set; } = "";
     public DateTime CachedAt { get; set; }
     public DateTime RefreshAfter { get; set; }
+    public long HitCount { get; set; }
 }
 
 public static class FuelPriceCacheScopes
