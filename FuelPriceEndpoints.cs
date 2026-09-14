@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
@@ -80,29 +81,35 @@ public static class FuelPriceEndpoints
 
             if (cached is not null)
             {
-                await db.FuelPriceCaches
-                    .Where(c => c.Id == cached.Id)
-                    .ExecuteUpdateAsync(
-                        setters => setters.SetProperty(
-                            c => c.HitCount,
-                            c => c.HitCount + 1),
-                        cancellationToken);
-
                 using var cachedDocument = JsonDocument.Parse(cached.ResultJson);
-                return ApiResults.Ok(
-                    new FuelPriceApiResponse(
-                        cachedDocument.RootElement.Clone(),
-                        cached.Model,
-                        null,
-                        null,
-                        false,
-                        true,
-                        true,
-                        cached.Scope,
-                        cached.CachedAt,
-                        cached.RefreshAfter),
-                    "fuel_price_response",
-                    instanceId);
+                if (TryGetFreshDataAsOf(
+                        cachedDocument.RootElement,
+                        now,
+                        out var cachedDataAsOfUtc))
+                {
+                    await db.FuelPriceCaches
+                        .Where(c => c.Id == cached.Id)
+                        .ExecuteUpdateAsync(
+                            setters => setters.SetProperty(
+                                c => c.HitCount,
+                                c => c.HitCount + 1),
+                            cancellationToken);
+
+                    return ApiResults.Ok(
+                        new FuelPriceApiResponse(
+                            cachedDocument.RootElement.Clone(),
+                            cached.Model,
+                            null,
+                            null,
+                            false,
+                            true,
+                            true,
+                            cached.Scope,
+                            cached.CachedAt,
+                            cached.RefreshAfter),
+                        "fuel_price_response",
+                        instanceId);
+                }
             }
 
             if (!openAi.IsConfigured)
@@ -119,24 +126,40 @@ public static class FuelPriceEndpoints
 
             try
             {
-                var response = await openAi.CreateFuelPriceResponseAsync(fuelRequest, cancellationToken);
+                var response = await openAi.CreateFuelPriceResponseAsync(
+                    fuelRequest,
+                    now,
+                    cancellationToken);
                 var cachedAt = timeProvider.GetUtcNow().UtcDateTime;
-                var refreshAfter = GetRefreshAfter(cachedAt);
+                var hasUsablePrices = HasUsablePrices(response.Result);
+                var dataAsOfUtc = default(DateTime);
+                if (hasUsablePrices &&
+                    !TryGetFreshDataAsOf(response.Result, cachedAt, out dataAsOfUtc))
+                {
+                    return ApiResults.BadGateway(
+                        "ai_invalid_response",
+                        instanceId,
+                        "The fuel-price agent did not provide evidence verified within the last seven days.");
+                }
+
                 var responseCacheScope = TryGetResponseCacheScope(response.Result);
                 var responseCity = TryGetResponseLocation(response.Result, "city");
                 var responseProvince = TryGetResponseLocation(response.Result, "province");
                 var responseCityKey = NormalizeLocation(responseCity);
                 var responseProvinceKey = NormalizeLocation(responseProvince);
                 var cacheStored =
-                    HasUsablePrices(response.Result) &&
+                    hasUsablePrices &&
                     responseCacheScope is not null &&
                     responseProvinceKey == provinceKey &&
                     (responseCacheScope != FuelPriceCacheScopes.City ||
                      (responseCityKey is not null &&
                       (cityKey is null || responseCityKey == cityKey)));
+                DateTime? refreshAfter = null;
 
                 if (cacheStored)
                 {
+                    var cacheRefreshAfter = GetRefreshAfter(cachedAt, dataAsOfUtc);
+                    refreshAfter = cacheRefreshAfter;
                     var isCityCache = responseCacheScope == FuelPriceCacheScopes.City;
                     db.FuelPriceCaches.Add(new FuelPriceCache
                     {
@@ -148,7 +171,7 @@ public static class FuelPriceEndpoints
                         ResultJson = response.Result.GetRawText(),
                         Model = response.Model,
                         CachedAt = cachedAt,
-                        RefreshAfter = refreshAfter
+                        RefreshAfter = cacheRefreshAfter
                     });
                     await db.SaveChangesAsync(cancellationToken);
                 }
@@ -167,7 +190,7 @@ public static class FuelPriceEndpoints
                         cacheStored,
                         cacheStored ? responseCacheScope : null,
                         cacheStored ? cachedAt : null,
-                        cacheStored ? refreshAfter : null),
+                        refreshAfter),
                     "fuel_price_response",
                     instanceId);
             }
@@ -409,7 +432,53 @@ public static class FuelPriceEndpoints
         return value.GetString()?.Trim();
     }
 
-    private static DateTime GetRefreshAfter(DateTime cachedAtUtc)
+    private static bool TryGetFreshDataAsOf(
+        JsonElement result,
+        DateTime nowUtc,
+        out DateTime dataAsOfUtc)
+    {
+        dataAsOfUtc = default;
+        if (!result.TryGetProperty("data_as_of", out var value) ||
+            value.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var candidate = value.GetString();
+        if (string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        if (DateOnly.TryParseExact(
+                candidate,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var date))
+        {
+            var philippines = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+            var localMidnight = DateTime.SpecifyKind(
+                date.ToDateTime(TimeOnly.MinValue),
+                DateTimeKind.Unspecified);
+            dataAsOfUtc = TimeZoneInfo.ConvertTimeToUtc(localMidnight, philippines);
+        }
+        else if (DateTimeOffset.TryParse(
+                     candidate,
+                     CultureInfo.InvariantCulture,
+                     DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                     out var timestamp))
+        {
+            dataAsOfUtc = timestamp.UtcDateTime;
+        }
+        else
+        {
+            return false;
+        }
+
+        var utcNow = DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc);
+        return dataAsOfUtc <= utcNow && dataAsOfUtc >= utcNow.AddDays(-7);
+    }
+
+    private static DateTime GetRefreshAfter(DateTime cachedAtUtc, DateTime dataAsOfUtc)
     {
         var utc = DateTime.SpecifyKind(cachedAtUtc, DateTimeKind.Utc);
         var philippines = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
@@ -421,7 +490,7 @@ public static class FuelPriceEndpoints
             nextTuesdayAtSix = nextTuesdayAtSix.AddDays(7);
 
         var weeklyRefreshUtc = TimeZoneInfo.ConvertTimeToUtc(nextTuesdayAtSix, philippines);
-        var sevenDaysUtc = utc.AddDays(7);
-        return weeklyRefreshUtc < sevenDaysUtc ? weeklyRefreshUtc : sevenDaysUtc;
+        var evidenceExpiryUtc = DateTime.SpecifyKind(dataAsOfUtc, DateTimeKind.Utc).AddDays(7);
+        return weeklyRefreshUtc < evidenceExpiryUtc ? weeklyRefreshUtc : evidenceExpiryUtc;
     }
 }

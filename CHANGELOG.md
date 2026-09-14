@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.9.5] - 2026-09-15
+
+### Changed
+- Require fuel-price evidence to have an exact date no more than seven days old, fall back from stale city evidence to the province, and expire cached results by both the Tuesday 6:00 AM refresh and the evidence-age limit.
+- Allow a third fuel-price web-search call when the provincial fallback needs additional research.
+- Bump project and API version to `1.9.5`.
+
 ## [1.9.4] - 2026-09-15
 
 ### Added
