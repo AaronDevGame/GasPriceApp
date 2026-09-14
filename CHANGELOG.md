@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.9.1] - 2026-09-14
+
+### Changed
+- Limit fuel-price AI research to at most two web-search calls per request.
+- Bump project and API version to `1.9.1`.
+
 ## [1.9.0] - 2026-09-14
 
 ### Changed
