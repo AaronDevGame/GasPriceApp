@@ -1,18 +1,18 @@
 using System.Text.Json;
 
 public sealed record FuelPriceSearchRequest(
-    string? City,
-    string? Province,
-    string? Region);
+    double Latitude,
+    double Longitude);
 
 public sealed record FuelPriceApiResponse(
-    JsonElement Estimate,
-    string RetrievalMethod);
+    JsonElement Result,
+    string Model,
+    AiChatTokenUsage? Usage,
+    OpenAiCostEstimate? EstimatedCost,
+    bool UsedWebSearch);
 
 public static class FuelPriceEndpoints
 {
-    private const int MaxAreaNameLength = 120;
-
     public static void MapFuelPriceEndpoints(
         this WebApplication app,
         AuthService authService,
@@ -67,7 +67,13 @@ public static class FuelPriceEndpoints
                 return ApiResults.Ok(
                     new FuelPriceApiResponse(
                         response.Result,
-                        "ai_web_fallback"),
+                        response.Model,
+                        response.Usage,
+                        OpenAiPricing.Estimate(
+                            response.Model,
+                            response.Usage,
+                            response.WebSearchCalls),
+                        response.UsedWebSearch),
                     "fuel_price_response",
                     instanceId);
             }
@@ -121,7 +127,7 @@ public static class FuelPriceEndpoints
         out FuelPriceSearchRequest request,
         out string error)
     {
-        request = new FuelPriceSearchRequest(null, null, null);
+        request = new FuelPriceSearchRequest(0, 0);
         error = "";
 
         if (root.ValueKind != JsonValueKind.Object)
@@ -130,9 +136,8 @@ public static class FuelPriceEndpoints
             return false;
         }
 
-        string? city = null;
-        string? province = null;
-        string? region = null;
+        double? latitude = null;
+        double? longitude = null;
         var fields = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var property in root.EnumerateObject())
@@ -145,17 +150,21 @@ public static class FuelPriceEndpoints
 
             switch (property.Name)
             {
-                case "city":
-                    if (!TryReadAreaName(property.Value, "City", out city, out error))
+                case "latitude":
+                    if (!TryReadFiniteNumber(property.Value, out var latitudeValue))
+                    {
+                        error = "Latitude must be a number.";
                         return false;
+                    }
+                    latitude = latitudeValue;
                     break;
-                case "province":
-                    if (!TryReadAreaName(property.Value, "Province", out province, out error))
+                case "longitude":
+                    if (!TryReadFiniteNumber(property.Value, out var longitudeValue))
+                    {
+                        error = "Longitude must be a number.";
                         return false;
-                    break;
-                case "region":
-                    if (!TryReadAreaName(property.Value, "Region", out region, out error))
-                        return false;
+                    }
+                    longitude = longitudeValue;
                     break;
                 default:
                     error = $"Unknown fuel-price field '{property.Name}'.";
@@ -163,47 +172,39 @@ public static class FuelPriceEndpoints
             }
         }
 
-        if (city is null && province is null && region is null)
+        if (latitude is null)
         {
-            error = "At least one of city, province, or region is required.";
+            error = "Latitude is required.";
             return false;
         }
 
-        request = new FuelPriceSearchRequest(city, province, region);
+        if (latitude is < -90 or > 90)
+        {
+            error = "Latitude must be between -90 and 90.";
+            return false;
+        }
+
+        if (longitude is null)
+        {
+            error = "Longitude is required.";
+            return false;
+        }
+
+        if (longitude is < -180 or > 180)
+        {
+            error = "Longitude must be between -180 and 180.";
+            return false;
+        }
+
+        request = new FuelPriceSearchRequest(latitude.Value, longitude.Value);
         return true;
     }
 
-    private static bool TryReadAreaName(
-        JsonElement value,
-        string displayName,
-        out string? areaName,
-        out string error)
+    private static bool TryReadFiniteNumber(JsonElement value, out double number)
     {
-        areaName = null;
-        error = "";
-
-        if (value.ValueKind == JsonValueKind.Null)
-            return true;
-
-        if (value.ValueKind != JsonValueKind.String)
-        {
-            error = $"{displayName} must be a string or null.";
-            return false;
-        }
-
-        areaName = value.GetString()?.Trim();
-        if (string.IsNullOrEmpty(areaName))
-        {
-            areaName = null;
-            return true;
-        }
-
-        if (areaName.Length > MaxAreaNameLength)
-        {
-            error = $"{displayName} must not exceed {MaxAreaNameLength} characters.";
-            return false;
-        }
-
-        return true;
+        number = 0;
+        return value.ValueKind == JsonValueKind.Number &&
+               value.TryGetDouble(out number) &&
+               double.IsFinite(number);
     }
 }

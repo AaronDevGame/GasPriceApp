@@ -13,6 +13,7 @@ public sealed record AiChatSource(
 
 public sealed record AiChatTokenUsage(
     int InputTokens,
+    int CachedInputTokens,
     int OutputTokens,
     int TotalTokens);
 

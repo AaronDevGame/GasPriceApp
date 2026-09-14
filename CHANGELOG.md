@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.9.0] - 2026-09-14
+
+### Changed
+- Resolve fuel-price coordinates to a city and province, search city prices before falling back to province prices, and remove radius and station-distance behavior.
+- Standardize estimates as diesel, regular gasoline (91 octane), and premium gasoline (95 octane), using null ranges when unavailable.
+- Include cached-token usage and an estimated USD cost breakdown for fuel-price AI requests.
+- Shorten fuel-price AI instructions and reduce output and web-search limits to lower token usage.
+- Bump project and API version to `1.9.0`.
+
 ## [1.8.11] - 2026-09-14
 
 ### Changed
