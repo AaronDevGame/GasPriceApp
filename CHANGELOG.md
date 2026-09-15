@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.9.8] - 2026-09-15
+
+### Fixed
+- Search Geoapify's city first, then fall back to its province and region when price evidence is unavailable; accept locations without a province when another area is present.
+
+### Changed
+- Limit fuel-price research to two requested web-search tool calls and log response IDs, search-call statuses, and source domains for diagnosing unavailable results.
+- Bump project and API version to `1.9.8`.
+
 ## [1.9.7] - 2026-09-15
 
 ### Fixed

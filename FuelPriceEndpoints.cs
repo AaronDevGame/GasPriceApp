@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 public sealed record FuelPriceSearchRequest(
     string? City,
-    string Province,
+    string? Province,
     string? Region);
 
 public sealed record FuelPriceCoordinates(double Latitude, double Longitude);
@@ -100,7 +100,7 @@ public static class FuelPriceEndpoints
 
             if (location is null)
                 return ApiResults.BadRequest(
-                    "Coordinates must resolve to a Philippine province.",
+                    "No Philippine city, province, or region was found for these coordinates.",
                     instanceId);
 
             var fuelRequest = new FuelPriceSearchRequest(
@@ -110,17 +110,21 @@ public static class FuelPriceEndpoints
 
             var now = timeProvider.GetUtcNow().UtcDateTime;
             var cityKey = NormalizeLocation(fuelRequest.City);
-            var provinceKey = NormalizeLocation(fuelRequest.Province)!;
+            var provinceKey = NormalizeLocation(fuelRequest.Province);
             var regionKey = NormalizeLocation(fuelRequest.Region);
 
             var cached = await db.FuelPriceCaches
                 .AsNoTracking()
                 .Where(c =>
-                    ((c.ProvinceKey == provinceKey &&
+                    ((provinceKey != null && c.ProvinceKey == provinceKey &&
                       ((cityKey != null &&
                         c.Scope == FuelPriceCacheScopes.City &&
                         c.CityKey == cityKey) ||
                        c.Scope == FuelPriceCacheScopes.Province)) ||
+                     (provinceKey == null && cityKey != null &&
+                      c.Scope == FuelPriceCacheScopes.City &&
+                      c.ProvinceKey == "" && c.CityKey == cityKey &&
+                      c.RegionKey == regionKey) ||
                      (regionKey != null &&
                       c.Scope == FuelPriceCacheScopes.Region &&
                       c.RegionKey == regionKey)) &&
@@ -229,10 +233,10 @@ public static class FuelPriceEndpoints
                     {
                         Scope = responseCacheScope!,
                         City = isCityCache ? responseCity : null,
-                        Province = responseProvince ?? fuelRequest.Province,
+                        Province = responseProvince ?? fuelRequest.Province ?? "",
                         Region = responseRegion,
                         CityKey = isCityCache ? responseCityKey : null,
-                        ProvinceKey = provinceKey,
+                        ProvinceKey = provinceKey ?? "",
                         RegionKey = regionKey,
                         ResultJson = response.Result.GetRawText(),
                         Model = response.Model,

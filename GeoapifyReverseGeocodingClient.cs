@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-public sealed record ResolvedFuelLocation(string? City, string Province, string? Region);
+public sealed record ResolvedFuelLocation(string? City, string? Province, string? Region);
 
 public sealed class GeoapifyReverseGeocodingClient
 {
@@ -59,13 +59,13 @@ public sealed class GeoapifyReverseGeocodingClient
         var region = ReadString(properties, "region");
 
         // Geoapify can identify NCR as a state without returning a region.
-        if (IsNcr(province) || (province is null && IsNcr(region)))
+        if (IsNcr(province))
         {
             province = "Metro Manila";
             region = "National Capital Region";
         }
 
-        if (string.IsNullOrWhiteSpace(province))
+        if (city is null && province is null && region is null)
             return null;
 
         return new ResolvedFuelLocation(city, province, region);
