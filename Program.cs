@@ -15,6 +15,11 @@ builder.Services.AddHttpClient<OpenAiResponsesClient>(client =>
     client.BaseAddress = new Uri("https://api.openai.com/");
     client.Timeout = TimeSpan.FromSeconds(45);
 });
+builder.Services.AddHttpClient<GeoapifyReverseGeocodingClient>(client =>
+{
+    client.BaseAddress = new Uri("https://api.geoapify.com/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+}).RemoveAllLoggers(); // Geoapify requires the API key in the query string.
 
 Console.Error.WriteLine("startup: building app");
 var app = builder.Build();

@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.9.6] - 2026-09-15
+
+### Added
+- Reverse-geocode fuel-price coordinates through Geoapify using `GEOAPIFY_API_KEY`, retaining Philippine city or municipality, province, and region names.
+- Add region metadata to fuel-price cache entries and allow explicitly regional price evidence as a third cache scope.
+
+### Changed
+- Accept only latitude and longitude in authenticated fuel-price request bodies; resolve location server-side before city, province, and region cache lookup or AI research.
+- Return each caller's own coordinates and reverse-geocoded location even when prices come from a shared cache entry.
+- Include OpenStreetMap and Geoapify attribution with the resolved location.
+- Bump project and API version to `1.9.6`.
+
 ## [1.9.5] - 2026-09-15
 
 ### Changed

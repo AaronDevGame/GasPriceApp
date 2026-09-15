@@ -1,12 +1,14 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 
 public sealed record FuelPriceSearchRequest(
-    double Latitude,
-    double Longitude,
     string? City,
-    string Province);
+    string Province,
+    string Region);
+
+public sealed record FuelPriceCoordinates(double Latitude, double Longitude);
 
 public sealed record FuelPriceApiResponse(
     JsonElement Result,
@@ -31,6 +33,7 @@ public static class FuelPriceEndpoints
             HttpRequest request,
             AppDbContext db,
             OpenAiResponsesClient openAi,
+            GeoapifyReverseGeocodingClient geoapify,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -56,26 +59,73 @@ public static class FuelPriceEndpoints
             }
 
             using var _ = requestDocument;
-            if (!TryReadRequest(requestDocument.RootElement, out var fuelRequest, out var error))
+            if (!TryReadRequest(requestDocument.RootElement, out var coordinates, out var error))
                 return ApiResults.BadRequest(error, instanceId);
+
+            if (!geoapify.IsConfigured)
+                return ApiResults.ServiceUnavailable(
+                    "geocoding_not_configured",
+                    instanceId,
+                    "The reverse-geocoding service has not been configured.");
+
+            ResolvedFuelLocation? location;
+            try
+            {
+                location = await geoapify.ResolveAsync(
+                    coordinates.Latitude,
+                    coordinates.Longitude,
+                    cancellationToken);
+            }
+            catch (HttpRequestException)
+            {
+                return ApiResults.ServiceUnavailable(
+                    "geocoding_unavailable",
+                    instanceId,
+                    "The reverse-geocoding service is temporarily unavailable.");
+            }
+            catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return ApiResults.GatewayTimeout(
+                    "geocoding_timeout",
+                    instanceId,
+                    "The reverse-geocoding service did not respond in time.");
+            }
+            catch (JsonException)
+            {
+                return ApiResults.BadGateway(
+                    "geocoding_invalid_response",
+                    instanceId,
+                    "The reverse-geocoding service returned invalid JSON.");
+            }
+
+            if (location is null)
+                return ApiResults.BadRequest(
+                    "Coordinates must resolve to a Philippine province and region.",
+                    instanceId);
+
+            var fuelRequest = new FuelPriceSearchRequest(
+                location.City,
+                location.Province,
+                location.Region);
 
             var now = timeProvider.GetUtcNow().UtcDateTime;
             var cityKey = NormalizeLocation(fuelRequest.City);
             var provinceKey = NormalizeLocation(fuelRequest.Province)!;
+            var regionKey = NormalizeLocation(fuelRequest.Region)!;
 
             var cached = await db.FuelPriceCaches
                 .AsNoTracking()
                 .Where(c =>
-                    c.ProvinceKey == provinceKey &&
-                    ((cityKey != null &&
-                      c.Scope == FuelPriceCacheScopes.City &&
-                      c.CityKey == cityKey) ||
-                     c.Scope == FuelPriceCacheScopes.Province ||
-                     (cityKey == null && c.Scope == FuelPriceCacheScopes.City)) &&
+                    ((c.ProvinceKey == provinceKey &&
+                      ((cityKey != null &&
+                        c.Scope == FuelPriceCacheScopes.City &&
+                        c.CityKey == cityKey) ||
+                       c.Scope == FuelPriceCacheScopes.Province)) ||
+                     (c.Scope == FuelPriceCacheScopes.Region &&
+                      c.RegionKey == regionKey)) &&
                     c.RefreshAfter > now)
-                .OrderBy(c => cityKey != null
-                    ? (c.Scope == FuelPriceCacheScopes.City ? 0 : 1)
-                    : (c.Scope == FuelPriceCacheScopes.Province ? 0 : 1))
+                .OrderBy(c => c.Scope == FuelPriceCacheScopes.City ? 0 :
+                    c.Scope == FuelPriceCacheScopes.Province ? 1 : 2)
                 .ThenByDescending(c => c.CachedAt)
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -97,7 +147,7 @@ public static class FuelPriceEndpoints
 
                     return ApiResults.Ok(
                         new FuelPriceApiResponse(
-                            cachedDocument.RootElement.Clone(),
+                            WithRequestLocation(cachedDocument.RootElement, coordinates, location),
                             cached.Model,
                             null,
                             null,
@@ -143,17 +193,29 @@ public static class FuelPriceEndpoints
                 }
 
                 var responseCacheScope = TryGetResponseCacheScope(response.Result);
+                var responseEstimateNameKey = NormalizeLocation(
+                    TryGetEstimateAreaName(response.Result));
                 var responseCity = TryGetResponseLocation(response.Result, "city");
                 var responseProvince = TryGetResponseLocation(response.Result, "province");
+                var responseRegion = TryGetResponseLocation(response.Result, "region");
                 var responseCityKey = NormalizeLocation(responseCity);
                 var responseProvinceKey = NormalizeLocation(responseProvince);
+                var responseRegionKey = NormalizeLocation(responseRegion);
                 var cacheStored =
                     hasUsablePrices &&
                     responseCacheScope is not null &&
-                    responseProvinceKey == provinceKey &&
+                    responseRegionKey == regionKey &&
+                    responseEstimateNameKey == (responseCacheScope switch
+                    {
+                        FuelPriceCacheScopes.City => cityKey,
+                        FuelPriceCacheScopes.Province => provinceKey,
+                        FuelPriceCacheScopes.Region => regionKey,
+                        _ => null
+                    }) &&
+                    (responseCacheScope == FuelPriceCacheScopes.Region ||
+                     responseProvinceKey == provinceKey) &&
                     (responseCacheScope != FuelPriceCacheScopes.City ||
-                     (responseCityKey is not null &&
-                      (cityKey is null || responseCityKey == cityKey)));
+                     (cityKey is not null && responseCityKey == cityKey));
                 DateTime? refreshAfter = null;
 
                 if (cacheStored)
@@ -165,9 +227,11 @@ public static class FuelPriceEndpoints
                     {
                         Scope = responseCacheScope!,
                         City = isCityCache ? responseCity : null,
-                        Province = responseProvince!,
+                        Province = responseProvince ?? fuelRequest.Province,
+                        Region = responseRegion,
                         CityKey = isCityCache ? responseCityKey : null,
                         ProvinceKey = provinceKey,
+                        RegionKey = regionKey,
                         ResultJson = response.Result.GetRawText(),
                         Model = response.Model,
                         CachedAt = cachedAt,
@@ -178,7 +242,7 @@ public static class FuelPriceEndpoints
 
                 return ApiResults.Ok(
                     new FuelPriceApiResponse(
-                        response.Result,
+                        WithRequestLocation(response.Result, coordinates, location),
                         response.Model,
                         response.Usage,
                         OpenAiPricing.Estimate(
@@ -241,10 +305,10 @@ public static class FuelPriceEndpoints
 
     private static bool TryReadRequest(
         JsonElement root,
-        out FuelPriceSearchRequest request,
+        out FuelPriceCoordinates request,
         out string error)
     {
-        request = new FuelPriceSearchRequest(0, 0, null, "");
+        request = new FuelPriceCoordinates(0, 0);
         error = "";
 
         if (root.ValueKind != JsonValueKind.Object)
@@ -255,8 +319,6 @@ public static class FuelPriceEndpoints
 
         double? latitude = null;
         double? longitude = null;
-        string? city = null;
-        string? province = null;
         var fields = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var property in root.EnumerateObject())
@@ -284,25 +346,6 @@ public static class FuelPriceEndpoints
                         return false;
                     }
                     longitude = longitudeValue;
-                    break;
-                case "city":
-                    if (property.Value.ValueKind == JsonValueKind.Null)
-                    {
-                        city = null;
-                        break;
-                    }
-                    if (!TryReadLocation(property.Value, out city))
-                    {
-                        error = "City must be null or a non-empty string of at most 100 characters.";
-                        return false;
-                    }
-                    break;
-                case "province":
-                    if (!TryReadLocation(property.Value, out province))
-                    {
-                        error = "Province must be a non-empty string of at most 100 characters.";
-                        return false;
-                    }
                     break;
                 default:
                     error = $"Unknown fuel-price field '{property.Name}'.";
@@ -335,13 +378,7 @@ public static class FuelPriceEndpoints
         }
 
 
-        if (province is null)
-        {
-            error = "Province is required.";
-            return false;
-        }
-
-        request = new FuelPriceSearchRequest(latitude.Value, longitude.Value, city, province);
+        request = new FuelPriceCoordinates(latitude.Value, longitude.Value);
         return true;
     }
 
@@ -351,20 +388,6 @@ public static class FuelPriceEndpoints
         return value.ValueKind == JsonValueKind.Number &&
                value.TryGetDouble(out number) &&
                double.IsFinite(number);
-    }
-
-    private static bool TryReadLocation(JsonElement value, out string? location)
-    {
-        location = null;
-        if (value.ValueKind != JsonValueKind.String)
-            return false;
-
-        var candidate = value.GetString()?.Trim();
-        if (string.IsNullOrWhiteSpace(candidate) || candidate.Length > 100)
-            return false;
-
-        location = candidate;
-        return true;
     }
 
     private static string? NormalizeLocation(string? location)
@@ -415,8 +438,20 @@ public static class FuelPriceEndpoints
         {
             FuelPriceCacheScopes.City => FuelPriceCacheScopes.City,
             FuelPriceCacheScopes.Province => FuelPriceCacheScopes.Province,
+            FuelPriceCacheScopes.Region => FuelPriceCacheScopes.Region,
             _ => null
         };
+    }
+
+    private static string? TryGetEstimateAreaName(JsonElement result)
+    {
+        if (!result.TryGetProperty("estimate_area", out var estimateArea) ||
+            estimateArea.ValueKind != JsonValueKind.Object ||
+            !estimateArea.TryGetProperty("name", out var name) ||
+            name.ValueKind != JsonValueKind.String)
+            return null;
+
+        return name.GetString()?.Trim();
     }
 
     private static string? TryGetResponseLocation(JsonElement result, string field)
@@ -430,6 +465,40 @@ public static class FuelPriceEndpoints
         }
 
         return value.GetString()?.Trim();
+    }
+
+    private static JsonElement WithRequestLocation(
+        JsonElement priceResult,
+        FuelPriceCoordinates coordinates,
+        ResolvedFuelLocation location)
+    {
+        var result = JsonNode.Parse(priceResult.GetRawText())!.AsObject();
+        result["location"] = new JsonObject
+        {
+            ["latitude"] = coordinates.Latitude,
+            ["longitude"] = coordinates.Longitude,
+            ["resolved_area"] = location.City is null
+                ? $"{location.Province}, {location.Region}"
+                : $"{location.City}, {location.Province}, {location.Region}",
+            ["city"] = location.City,
+            ["province"] = location.Province,
+            ["region"] = location.Region,
+            ["country"] = "Philippines",
+            ["geocoding_attribution"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["name"] = "OpenStreetMap contributors",
+                    ["url"] = "https://www.openstreetmap.org/copyright"
+                },
+                new JsonObject
+                {
+                    ["name"] = "Geoapify",
+                    ["url"] = "https://www.geoapify.com/"
+                }
+            }
+        };
+        return JsonSerializer.SerializeToElement(result);
     }
 
     private static bool TryGetFreshDataAsOf(

@@ -109,10 +109,9 @@ public sealed class OpenAiResponsesClient
         var input = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             ["requested_at_utc"] = DateTime.SpecifyKind(requestedAtUtc, DateTimeKind.Utc),
-            ["latitude"] = fuelPriceRequest.Latitude,
-            ["longitude"] = fuelPriceRequest.Longitude,
             ["city"] = fuelPriceRequest.City,
-            ["province"] = fuelPriceRequest.Province
+            ["province"] = fuelPriceRequest.Province,
+            ["region"] = fuelPriceRequest.Region
         });
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "v1/responses")
@@ -438,19 +437,17 @@ internal static class FuelPriceJsonSchema
             "location": {
               "type": "object",
               "properties": {
-                "latitude": { "type": "number" },
-                "longitude": { "type": "number" },
-                "resolved_area": { "type": ["string", "null"] },
                 "city": { "type": ["string", "null"] },
                 "province": { "type": ["string", "null"] },
+                "region": { "type": "string" },
                 "country": { "type": "string", "enum": ["Philippines"] }
               },
-              "required": ["latitude", "longitude", "resolved_area", "city", "province", "country"],
+              "required": ["city", "province", "region", "country"],
               "additionalProperties": false
             },
             "status": {
               "type": "string",
-              "enum": ["city_estimate", "provincial_estimate", "unavailable"]
+              "enum": ["city_estimate", "provincial_estimate", "regional_estimate", "unavailable"]
             },
             "source_tier": {
               "type": "string",
@@ -461,7 +458,7 @@ internal static class FuelPriceJsonSchema
               "properties": {
                 "level": {
                   "type": "string",
-                  "enum": ["city", "province", "unavailable"]
+                  "enum": ["city", "province", "region", "unavailable"]
                 },
                 "name": { "type": ["string", "null"] }
               },

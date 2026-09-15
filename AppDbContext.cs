@@ -90,11 +90,17 @@ public class AppDbContext : DbContext
             e.Property(c => c.Province)
                 .HasColumnName("province")
                 .HasMaxLength(100);
+            e.Property(c => c.Region)
+                .HasColumnName("region")
+                .HasMaxLength(100);
             e.Property(c => c.CityKey)
                 .HasColumnName("city_key")
                 .HasMaxLength(100);
             e.Property(c => c.ProvinceKey)
                 .HasColumnName("province_key")
+                .HasMaxLength(100);
+            e.Property(c => c.RegionKey)
+                .HasColumnName("region_key")
                 .HasMaxLength(100);
             e.Property(c => c.ResultJson)
                 .HasColumnName("result_json")
@@ -109,6 +115,7 @@ public class AppDbContext : DbContext
                 .HasDefaultValue(0L);
 
             e.HasIndex(c => new { c.Scope, c.ProvinceKey, c.CityKey, c.CachedAt });
+            e.HasIndex(c => new { c.Scope, c.RegionKey, c.CachedAt });
         });
     }
 }
