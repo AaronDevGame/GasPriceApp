@@ -439,7 +439,7 @@ internal static class FuelPriceJsonSchema
               "properties": {
                 "city": { "type": ["string", "null"] },
                 "province": { "type": ["string", "null"] },
-                "region": { "type": "string" },
+                "region": { "type": ["string", "null"] },
                 "country": { "type": "string", "enum": ["Philippines"] }
               },
               "required": ["city", "province", "region", "country"],

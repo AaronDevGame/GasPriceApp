@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.9.7] - 2026-09-15
+
+### Fixed
+- Accept Geoapify results without a region when a Philippine province is present, skipping regional cache lookup and AI fallback rather than rejecting valid coordinates.
+- Normalize Geoapify's `National Capital District` state to Metro Manila and National Capital Region for NCR cache lookups.
+
+### Changed
+- Bump project and API version to `1.9.7`.
+
 ## [1.9.6] - 2026-09-15
 
 ### Added

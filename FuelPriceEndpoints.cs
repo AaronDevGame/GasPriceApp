@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 public sealed record FuelPriceSearchRequest(
     string? City,
     string Province,
-    string Region);
+    string? Region);
 
 public sealed record FuelPriceCoordinates(double Latitude, double Longitude);
 
@@ -100,7 +100,7 @@ public static class FuelPriceEndpoints
 
             if (location is null)
                 return ApiResults.BadRequest(
-                    "Coordinates must resolve to a Philippine province and region.",
+                    "Coordinates must resolve to a Philippine province.",
                     instanceId);
 
             var fuelRequest = new FuelPriceSearchRequest(
@@ -111,7 +111,7 @@ public static class FuelPriceEndpoints
             var now = timeProvider.GetUtcNow().UtcDateTime;
             var cityKey = NormalizeLocation(fuelRequest.City);
             var provinceKey = NormalizeLocation(fuelRequest.Province)!;
-            var regionKey = NormalizeLocation(fuelRequest.Region)!;
+            var regionKey = NormalizeLocation(fuelRequest.Region);
 
             var cached = await db.FuelPriceCaches
                 .AsNoTracking()
@@ -121,7 +121,8 @@ public static class FuelPriceEndpoints
                         c.Scope == FuelPriceCacheScopes.City &&
                         c.CityKey == cityKey) ||
                        c.Scope == FuelPriceCacheScopes.Province)) ||
-                     (c.Scope == FuelPriceCacheScopes.Region &&
+                     (regionKey != null &&
+                      c.Scope == FuelPriceCacheScopes.Region &&
                       c.RegionKey == regionKey)) &&
                     c.RefreshAfter > now)
                 .OrderBy(c => c.Scope == FuelPriceCacheScopes.City ? 0 :
@@ -205,6 +206,7 @@ public static class FuelPriceEndpoints
                     hasUsablePrices &&
                     responseCacheScope is not null &&
                     responseRegionKey == regionKey &&
+                    (responseCacheScope != FuelPriceCacheScopes.Region || regionKey != null) &&
                     responseEstimateNameKey == (responseCacheScope switch
                     {
                         FuelPriceCacheScopes.City => cityKey,
@@ -477,9 +479,9 @@ public static class FuelPriceEndpoints
         {
             ["latitude"] = coordinates.Latitude,
             ["longitude"] = coordinates.Longitude,
-            ["resolved_area"] = location.City is null
-                ? $"{location.Province}, {location.Region}"
-                : $"{location.City}, {location.Province}, {location.Region}",
+            ["resolved_area"] = string.Join(", ",
+                new[] { location.City, location.Province, location.Region }
+                    .Where(part => !string.IsNullOrWhiteSpace(part))),
             ["city"] = location.City,
             ["province"] = location.Province,
             ["region"] = location.Region,

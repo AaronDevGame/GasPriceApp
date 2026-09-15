@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-public sealed record ResolvedFuelLocation(string? City, string Province, string Region);
+public sealed record ResolvedFuelLocation(string? City, string Province, string? Region);
 
 public sealed class GeoapifyReverseGeocodingClient
 {
@@ -58,18 +58,25 @@ public sealed class GeoapifyReverseGeocodingClient
         var province = ReadString(properties, "state");
         var region = ReadString(properties, "region");
 
-        // NCR has no province; use its region as the cache's province-equivalent.
-        if (string.IsNullOrWhiteSpace(province) &&
-            region is not null &&
-            (region.Contains("National Capital Region", StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(region, "Metro Manila", StringComparison.OrdinalIgnoreCase)))
+        // Geoapify can identify NCR as a state without returning a region.
+        if (IsNcr(province) || (province is null && IsNcr(region)))
+        {
             province = "Metro Manila";
+            region = "National Capital Region";
+        }
 
-        if (string.IsNullOrWhiteSpace(province) || string.IsNullOrWhiteSpace(region))
+        if (string.IsNullOrWhiteSpace(province))
             return null;
 
         return new ResolvedFuelLocation(city, province, region);
     }
+
+    private static bool IsNcr(string? value)
+        => value is not null &&
+           (string.Equals(value, "National Capital District", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "National Capital Region", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "Metro Manila", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "NCR", StringComparison.OrdinalIgnoreCase));
 
     private static string? ReadString(JsonElement element, string name)
     {
