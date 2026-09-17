@@ -480,3 +480,31 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Repository-local generated output
+**/[Oo]ut/
+**/[Oo]utput/
+
+# Unity project generated directories
+GasPriceFrontend/[Ll]ibrary/
+GasPriceFrontend/[Tt]emp/
+GasPriceFrontend/[Oo]bj/
+GasPriceFrontend/[Bb]uild/
+GasPriceFrontend/[Bb]uilds/
+GasPriceFrontend/[Ll]ogs/
+GasPriceFrontend/[Uu]ser[Ss]ettings/
+GasPriceFrontend/[Mm]emoryCaptures/
+GasPriceFrontend/[Rr]ecordings/
+
+# Unity-generated files and distributable packages
+GasPriceFrontend/[Aa]ssets/AssetStoreTools*
+*.booproj
+*.svd
+*.mdb
+*.opendb
+*.VC.db
+sysinfo.txt
+*.apk
+*.aab
+*.unitypackage
+*.app

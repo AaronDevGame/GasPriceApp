@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.9.9] - 2026-09-17
+
+### Changed
+- Restructure the repository as the GasPriceApp monorepo and relocate the backend project under `GasPriceBackend/` without changing backend behavior.
+- Bump project and API version to `1.9.9`.
+
 ## [1.9.8] - 2026-09-15
 
 ### Fixed

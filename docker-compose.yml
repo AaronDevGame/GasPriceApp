@@ -1,7 +1,7 @@
 services:
   api:
     build:
-      context: .
+      context: ./GasPriceBackend
       dockerfile: Dockerfile
     environment:
       PORT: "8080"
