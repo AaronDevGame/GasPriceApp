@@ -3,127 +3,101 @@ using UnityEngine;
 
 public static class APIEventsServer
 {
-    public static event Action<ApiResponse<EmptyData>> OnPingSuccess;
-    public static event Action<ApiResponse<EmptyData>> OnPingError;
+    public static event Action<APIEndpoint, string> OnRequestSucceeded;
+    public static event Action<APIEndpoint, string> OnRequestFailed;
 
-    public static event Action<ApiResponse<ServerData>> OnHealthSuccess;
-    public static event Action<ApiResponse<ServerData>> OnHealthError;
+    public static void Ping() => Get<EmptyData>(APIEndpoint.Ping, APIConstants.Endpoints.Ping);
+    public static void Health() => Get<ServerData>(APIEndpoint.Health, APIConstants.Endpoints.Health);
+    public static void Status() => Get<ServerData>(APIEndpoint.Status, APIConstants.Endpoints.Status);
+    public static void Info() => Get<ApiInfoDto>(APIEndpoint.Info, APIConstants.Endpoints.Info);
+    public static void Routes() => Get<RouteInfoDto[]>(APIEndpoint.Routes, APIConstants.Endpoints.Routes);
 
-    public static event Action<ApiResponse<ServerData>> OnStatusSuccess;
-    public static event Action<ApiResponse<ServerData>> OnStatusError;
-
-    public static event Action<ApiResponse<ServerData>> OnStartServerSuccess;
-    public static event Action<ApiResponse<ServerData>> OnStartServerError;
-
-    public static event Action<ApiResponse<ServerData>> OnStopServerSuccess;
-    public static event Action<ApiResponse<ServerData>> OnStopServerError;
-
-    public static void Ping()
+    public static void GuestLogin(string playerName = null)
     {
-        if (!TryGetManager(OnPingError, out APIManager apiManager))
-            return;
-
-        apiManager.Get<EmptyData>(
-            API.Endpoints.Ping,
-            onSuccess: InvokePingSuccess,
-            onError: InvokePingError);
+        WithManager(APIEndpoint.GuestLogin, manager => manager.Post<AuthResultDto>(
+            APIConstants.Endpoints.GuestLogin,
+            string.IsNullOrWhiteSpace(playerName) ? null : new GuestLoginRequestDto { playerName = playerName },
+            APIAuthorization.GuestLogin,
+            response =>
+            {
+                if (response.data != null)
+                    manager.SetPlayerSession(response.data.accessToken, response.data.appInstanceId, response.data.guestCredential);
+                string safeResult = response.data == null
+                    ? "Guest login succeeded."
+                    : $"Player: {response.data.playerName}\nPlayer ID: {response.data.playerId}\n" +
+                      $"Logged In: {response.data.isLoggedIn}\nToken Expires: {response.data.accessTokenExpiresAt}";
+                OnRequestSucceeded?.Invoke(APIEndpoint.GuestLogin, safeResult);
+            },
+            response => Failure(APIEndpoint.GuestLogin, response)));
     }
 
-    public static void Health()
+    public static void AuthStatus() => Get<AuthStatusDto>(APIEndpoint.AuthStatus, APIConstants.Endpoints.AuthStatus, APIAuthorization.Player);
+    public static void Logout()
     {
-        if (!TryGetManager(OnHealthError, out APIManager apiManager))
-            return;
-
-        apiManager.Get<ServerData>(
-            API.Endpoints.Health,
-            onSuccess: InvokeHealthSuccess,
-            onError: InvokeHealthError);
+        WithManager(APIEndpoint.Logout, manager => manager.Post<LogoutDto>(APIConstants.Endpoints.Logout, null,
+            APIAuthorization.Player,
+            response => { manager.ClearAccessToken(); Success(APIEndpoint.Logout, response); },
+            response => Failure(APIEndpoint.Logout, response)));
     }
 
-    public static void Status()
-    {
-        if (!TryGetManager(OnStatusError, out APIManager apiManager))
-            return;
+    public static void GetPlayerData() => Get<PlayerDataDto>(APIEndpoint.GetPlayerData, APIConstants.Endpoints.PlayerData, APIAuthorization.Player);
+    public static void PatchPlayerData(PlayerDataPatchDto request) => Patch<PlayerDataDto>(APIEndpoint.PatchPlayerData, APIConstants.Endpoints.PlayerData, request);
+    public static void PatchPlayerProfile(string playerName) => Patch<PlayerProfileDto>(APIEndpoint.PatchPlayerProfile,
+        APIConstants.Endpoints.PlayerProfile, new PlayerProfilePatchDto { playerName = playerName });
+    public static void AiChat(string message) => Post<AiChatResponseDto>(APIEndpoint.AiChat, APIConstants.Endpoints.AiChat,
+        new AiChatRequestDto { message = message }, APIAuthorization.Player);
+    public static void FuelPrices(double latitude, double longitude) => Post<FuelPriceResponseDto>(APIEndpoint.FuelPrices,
+        APIConstants.Endpoints.FuelPrices, new FuelPriceRequestDto { latitude = latitude, longitude = longitude }, APIAuthorization.Player);
 
-        apiManager.Get<ServerData>(
-            API.Endpoints.Status,
-            onSuccess: InvokeStatusSuccess,
-            onError: InvokeStatusError);
+    public static void AdminRoutes() => Get<RouteInfoDto[]>(APIEndpoint.AdminRoutes, APIConstants.Endpoints.Admin.Routes, APIAuthorization.Admin);
+    public static void AdminChangelog()
+    {
+        WithManager(APIEndpoint.AdminChangelog, manager => manager.GetText(APIConstants.Endpoints.Admin.Changelog,
+            APIAuthorization.Admin,
+            text => OnRequestSucceeded?.Invoke(APIEndpoint.AdminChangelog, text),
+            error => OnRequestFailed?.Invoke(APIEndpoint.AdminChangelog, error)));
     }
+    public static void AdminStatus() => Get<ServerData>(APIEndpoint.AdminStatus, APIConstants.Endpoints.Admin.Status, APIAuthorization.Admin);
+    public static void AdminStart() => Post<ServerData>(APIEndpoint.AdminStart, APIConstants.Endpoints.Admin.Start, null, APIAuthorization.Admin);
+    public static void AdminStop() => Post<ServerData>(APIEndpoint.AdminStop, APIConstants.Endpoints.Admin.Stop, null, APIAuthorization.Admin);
+    public static void AdminRestart() => Post<ServerData>(APIEndpoint.AdminRestart, APIConstants.Endpoints.Admin.Restart, null, APIAuthorization.Admin);
 
-    public static void StartServer(string adminBearerToken)
+    private static void Get<T>(APIEndpoint endpoint, string route, APIAuthorization authorization = APIAuthorization.None) =>
+        WithManager(endpoint, manager => manager.Get<T>(route, authorization,
+            response => Success(endpoint, response), response => Failure(endpoint, response)));
+
+    private static void Post<T>(APIEndpoint endpoint, string route, object body, APIAuthorization authorization) =>
+        WithManager(endpoint, manager => manager.Post<T>(route, body, authorization,
+            response => Success(endpoint, response), response => Failure(endpoint, response)));
+
+    private static void Patch<T>(APIEndpoint endpoint, string route, object body) =>
+        WithManager(endpoint, manager => manager.Patch<T>(route, body, APIAuthorization.Player,
+            response => Success(endpoint, response), response => Failure(endpoint, response)));
+
+    private static void WithManager(APIEndpoint endpoint, Action<APIManager> action)
     {
-        if (string.IsNullOrWhiteSpace(adminBearerToken))
+        if (APIManager.Instance == null)
         {
-            const string message = "Admin bearer token is empty.";
-            Debug.LogError(message);
-            InvokeStartServerError(CreateLocalError<ServerData>(message));
+            OnRequestFailed?.Invoke(endpoint, "APIManager instance is missing from the scene.");
             return;
         }
-
-        if (!TryGetManager(OnStartServerError, out APIManager apiManager))
-            return;
-
-        apiManager.Post<ServerData>(
-            API.Endpoints.Admin.Start,
-            headers: APIHeaders.Bearer(adminBearerToken),
-            onSuccess: InvokeStartServerSuccess,
-            onError: InvokeStartServerError);
-    }
-
-    public static void StopServer(string adminBearerToken)
-    {
-        if (string.IsNullOrWhiteSpace(adminBearerToken))
+        try { action(APIManager.Instance); }
+        catch (Exception exception)
         {
-            const string message = "Admin bearer token is empty.";
-            Debug.LogError(message);
-            InvokeStopServerError(CreateLocalError<ServerData>(message));
-            return;
+            Debug.LogException(exception);
+            OnRequestFailed?.Invoke(endpoint, exception.Message);
         }
-
-        if (!TryGetManager(OnStopServerError, out APIManager apiManager))
-            return;
-
-        apiManager.Post<ServerData>(
-            API.Endpoints.Admin.Stop,
-            headers: APIHeaders.Bearer(adminBearerToken),
-            onSuccess: InvokeStopServerSuccess,
-            onError: InvokeStopServerError);
     }
 
-    private static bool TryGetManager<T>(Action<ApiResponse<T>> onError, out APIManager apiManager)
-    {
-        apiManager = APIManager.Instance;
-        if (apiManager != null)
-            return true;
+    private static void Success<T>(APIEndpoint endpoint, ApiResponse<T> response) =>
+        OnRequestSucceeded?.Invoke(endpoint, response?.ToString() ?? "Empty response");
+    private static void Failure<T>(APIEndpoint endpoint, ApiResponse<T> response) =>
+        OnRequestFailed?.Invoke(endpoint, response?.ToString() ?? "Request failed before a response was received.");
+}
 
-        const string message = "APIManager instance is missing from the scene.";
-        Debug.LogError(message);
-        onError?.Invoke(CreateLocalError<T>(message));
-        return false;
-    }
-
-    private static ApiResponse<T> CreateLocalError<T>(string message)
-    {
-        return new ApiResponse<T>
-        {
-            code = 0,
-            message = message
-        };
-    }
-
-    private static void InvokePingSuccess(ApiResponse<EmptyData> response) => OnPingSuccess?.Invoke(response);
-    private static void InvokePingError(ApiResponse<EmptyData> response) => OnPingError?.Invoke(response);
-
-    private static void InvokeHealthSuccess(ApiResponse<ServerData> response) => OnHealthSuccess?.Invoke(response);
-    private static void InvokeHealthError(ApiResponse<ServerData> response) => OnHealthError?.Invoke(response);
-
-    private static void InvokeStatusSuccess(ApiResponse<ServerData> response) => OnStatusSuccess?.Invoke(response);
-    private static void InvokeStatusError(ApiResponse<ServerData> response) => OnStatusError?.Invoke(response);
-
-    private static void InvokeStartServerSuccess(ApiResponse<ServerData> response) => OnStartServerSuccess?.Invoke(response);
-    private static void InvokeStartServerError(ApiResponse<ServerData> response) => OnStartServerError?.Invoke(response);
-
-    private static void InvokeStopServerSuccess(ApiResponse<ServerData> response) => OnStopServerSuccess?.Invoke(response);
-    private static void InvokeStopServerError(ApiResponse<ServerData> response) => OnStopServerError?.Invoke(response);
+public enum APIEndpoint
+{
+    Ping, Health, Status, Info, Routes, GuestLogin, AuthStatus, Logout,
+    GetPlayerData, PatchPlayerData, PatchPlayerProfile, AiChat, FuelPrices,
+    AdminRoutes, AdminChangelog, AdminStatus, AdminStart, AdminStop, AdminRestart
 }
