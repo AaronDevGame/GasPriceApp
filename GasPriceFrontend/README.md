@@ -1,6 +1,14 @@
 # GasPriceFrontend
 
-Unity 6 frontend API samples live under `Assets/_ProjectSpecific`.
+Unity 6 frontend files live under `Assets/_ProjectSpecific`.
+
+## Mock fuel-price world
+
+`GameScene` currently opens a frontend-only visual prototype. It creates a stylized Philippines globe with fourteen mock city markers, drag/pinch orbit controls, zoom, and Diesel, Regular 91, and Premium 95 selectors. All displayed prices come from `MockFuelPriceData`; no backend endpoint or API DTO is used by the prototype.
+
+The older API sample canvas remains in the scene but is disabled at runtime by `FuelPriceWorldBootstrap` while the visual prototype is active.
+
+## API samples
 
 - `APIConstants` owns the base URL, endpoint paths, header names, and request timeout.
 - `APIManager` sends requests and keeps bearer/admin credentials in memory only.

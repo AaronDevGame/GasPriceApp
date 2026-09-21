@@ -18,7 +18,7 @@ public static class APIConstants
 
     public static class Endpoints
     {
-        // public const string Ping = "/ping";
+        public const string Ping = "/ping";
         public const string Health = "/health";
         public const string Status = "/status";
         public const string Info = "/info";
