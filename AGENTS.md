@@ -2,7 +2,7 @@
 
 ## Project overview
 
-GasPriceApp is a monorepo containing the BackendServer ASP.NET Core Minimal API and, in the future, a Unity frontend. The backend targets .NET 10, uses Entity Framework Core with PostgreSQL/Npgsql, and is deployed behind a reverse proxy such as Render.
+GasPriceApp is a monorepo containing the BackendServer ASP.NET Core Minimal API, an upcoming Expo client, and a paused Unity frontend. The backend targets .NET 10, uses Entity Framework Core with PostgreSQL/Npgsql, and is deployed behind a reverse proxy such as Render.
 
 ## Repository map
 
@@ -16,7 +16,8 @@ GasPriceApp is a monorepo containing the BackendServer ASP.NET Core Minimal API 
 - `GasPriceBackend/ApiResults.cs`: shared response envelope helpers and API metadata.
 - `GasPriceBackend/Middleware/`: rate limiting and admin authentication.
 - `GasPriceBackend/Migrations/`: committed EF Core migrations and model snapshot.
-- `GasPriceFrontend/`: reserved for the future Unity project.
+- `GasPriceClient/`: reserved for the Expo client targeting web, iOS, and Android.
+- `GasPriceUnity/`: reserved for the paused Unity frontend project.
 - `docker-compose.yml`: local API and PostgreSQL stack.
 - `out/`, `output/`, and their nested equivalents: generated artifacts; do not edit or treat them as source.
 

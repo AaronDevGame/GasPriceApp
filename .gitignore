@@ -5,6 +5,9 @@
 
 # dotenv files
 .env
+.env.*
+!.env.example
+!.env.*.example
 
 # User-specific files
 *.rsuser
@@ -80,6 +83,8 @@ StyleCopReport.xml
 *_h.h
 *.ilk
 *.meta
+!GasPriceUnity/Assets/_ProjectSpecific/Scripts/APIDtos.cs.meta
+!GasPriceUnity/Assets/_ProjectSpecific/Scripts/APIEndpointCanvasBuilder.cs.meta
 *.obj
 *.iobj
 *.pch
@@ -206,6 +211,7 @@ PublishScripts/
 *.snupkg
 # The packages folder can be ignored because of Package Restore
 **/[Pp]ackages/*
+!GasPriceUnity/Packages/manifest.json
 # except build/, which is used as an MSBuild target.
 !**/[Pp]ackages/build/
 # Uncomment if necessary however generally it will be regenerated when needed
@@ -486,18 +492,18 @@ $RECYCLE.BIN/
 **/[Oo]utput/
 
 # Unity project generated directories
-GasPriceFrontend/[Ll]ibrary/
-GasPriceFrontend/[Tt]emp/
-GasPriceFrontend/[Oo]bj/
-GasPriceFrontend/[Bb]uild/
-GasPriceFrontend/[Bb]uilds/
-GasPriceFrontend/[Ll]ogs/
-GasPriceFrontend/[Uu]ser[Ss]ettings/
-GasPriceFrontend/[Mm]emoryCaptures/
-GasPriceFrontend/[Rr]ecordings/
+GasPriceUnity/[Ll]ibrary/
+GasPriceUnity/[Tt]emp/
+GasPriceUnity/[Oo]bj/
+GasPriceUnity/[Bb]uild/
+GasPriceUnity/[Bb]uilds/
+GasPriceUnity/[Ll]ogs/
+GasPriceUnity/[Uu]ser[Ss]ettings/
+GasPriceUnity/[Mm]emoryCaptures/
+GasPriceUnity/[Rr]ecordings/
 
 # Unity-generated files and distributable packages
-GasPriceFrontend/[Aa]ssets/AssetStoreTools*
+GasPriceUnity/[Aa]ssets/AssetStoreTools*
 *.booproj
 *.svd
 *.mdb
@@ -508,3 +514,28 @@ sysinfo.txt
 *.aab
 *.unitypackage
 *.app
+
+# Expo / React Native client dependencies and generated output
+GasPriceClient/node_modules/
+GasPriceClient/.expo/
+GasPriceClient/dist/
+GasPriceClient/web-build/
+GasPriceClient/coverage/
+GasPriceClient/.metro-health-check*
+
+# Native build caches and local signing material
+GasPriceClient/ios/Pods/
+GasPriceClient/ios/build/
+GasPriceClient/ios/DerivedData/
+GasPriceClient/ios/*.xcworkspace/xcuserdata/
+GasPriceClient/ios/*.xcodeproj/xcuserdata/
+GasPriceClient/ios/.xcode.env.local
+GasPriceClient/android/.gradle/
+GasPriceClient/android/.cxx/
+GasPriceClient/android/build/
+GasPriceClient/android/app/build/
+GasPriceClient/android/local.properties
+GasPriceClient/**/*.keystore
+GasPriceClient/**/*.jks
+GasPriceClient/**/*.p12
+GasPriceClient/**/*.mobileprovision
