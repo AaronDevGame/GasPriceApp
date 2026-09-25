@@ -108,6 +108,8 @@ public static class ApiRoutes
     public const string PlayerProfile = "/player/profile";
     public const string AiChat = "/ai/chat";
     public const string AiFuelPrices = "/ai/fuel-prices";
+    public const string FuelPrices = "/fuel-prices";
+    public const string FuelPriceHistory = "/fuel-prices/history";
 
     public const string AdminServerStatus = "/admin/server/status";
     public const string AdminServerStart = "/admin/server/start";
@@ -138,6 +140,8 @@ public static class RouteRegistry
         new(ApiRoutes.PlayerProfile, "PATCH"),
         new(ApiRoutes.AiChat, "POST"),
         new(ApiRoutes.AiFuelPrices, "POST"),
+        new(ApiRoutes.FuelPrices, "GET"),
+        new(ApiRoutes.FuelPriceHistory, "GET"),
     };
 
     public static readonly RouteInfo[] Admin =
@@ -158,5 +162,5 @@ public record RouteInfo(string Route, string Method, bool IsLegacy = false);
 
 public static class APIVersion
 {
-    public const string Version = "1.9.9";
+    public const string Version = "1.9.10";
 }

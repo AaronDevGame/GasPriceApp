@@ -129,6 +129,7 @@ app.MapPlayerDataEndpoints(auth, InstanceId);
 app.MapPlayerProfileEndpoints(auth, InstanceId);
 app.MapAiChatEndpoints(auth, InstanceId);
 app.MapFuelPriceEndpoints(auth, InstanceId);
+app.MapFuelPriceReadEndpoints(auth, InstanceId);
 
 app.MapGet(ApiRoutes.AdminRoutes, () => ApiResults.Ok(RouteRegistry.Admin, "admin_routes", InstanceId));
 app.MapAdminChangelogEndpoint();

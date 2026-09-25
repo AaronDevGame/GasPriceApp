@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## [1.9.10] - 2026-09-26
+
+### Added
+- Add authenticated `GET /fuel-prices` for up to ten latest area estimates from the database, with current city/province/region matching and a general-feed fallback.
+- Add authenticated `GET /fuel-prices/history` for dated snapshots of one area already stored in the fuel-price cache.
+
+### Changed
+- Bump project and API version to `1.9.10`.
+
 ## [1.9.9] - 2026-09-17
 
 ### Changed
