@@ -98,8 +98,9 @@ dotnet ef migrations add DescriptiveMigrationName --project GasPriceBackend/Back
 ## Git workflow and handoff
 
 - Whenever a task adds a feature or changes repository files, always include both a suggested branch name and a suggested commit message in the final handoff.
-- Branch names must use a meaningful change-type prefix and a short lowercase kebab-case description: `<type>/<short-description>`.
-- Use prefixes such as `feature/`, `fix/`, `add/`, `refactor/`, `docs/`, `test/`, or `chore/` as appropriate.
+- Branch names must use a scope, a meaningful change type, and a short lowercase kebab-case description: `<scope>/<type>/<short-description>`.
+- Use `backend` for `GasPriceBackend/` changes, `frontend` for `GasPriceClient/` or `GasPriceUnity/` changes, and `repo` for shared, root-level, or cross-cutting changes.
+- Use change types such as `feature`, `fix`, `add`, `refactor`, `docs`, `test`, or `chore` as appropriate. For example: `backend/chore/update-dependencies` or `frontend/feature/add-login-screen`.
 - Never prefix a branch name with `codex/`.
 - Use Conventional Commit-style messages such as `feat: add player profile endpoint`, `fix: reject invalid player tokens`, or `docs: document local setup`.
 - Keep commit-message summaries imperative, specific, and concise.
