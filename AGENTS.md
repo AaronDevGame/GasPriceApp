@@ -93,7 +93,8 @@ dotnet ef migrations add DescriptiveMigrationName --project GasPriceBackend/Back
 
 - Do not bump the version for ordinary development work unless the task asks for a release/version change.
 - When releasing, keep `<Version>` in `GasPriceBackend/BackendServer.csproj` and `APIVersion.Version` in `GasPriceBackend/ServerData.cs` synchronized.
-- Record user-visible changes under `Unreleased` in `CHANGELOG.md`, following the existing Added/Changed/Fixed/Removed structure.
+- Record user-visible backend changes under `Unreleased` in `GasPriceBackend/CHANGELOG.md`, following the existing Added/Changed/Fixed/Removed structure.
+- Keep backend and frontend release notes and versions independent. Add `GasPriceClient/CHANGELOG.md` when the client starts releasing; a repository-wide changelog is unnecessary unless shared repository tooling is versioned separately.
 
 ## Git workflow and handoff
 
