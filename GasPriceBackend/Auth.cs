@@ -81,9 +81,15 @@ public record AuthResult
     public bool IsLoggedIn { get; init; }
 }
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record LoginRequest
 {
     public string? PlayerName { get; init; }
+}
+
+public record BrowserLoginRequest : LoginRequest
+{
+    public bool StartNewGuest { get; init; }
 }
 
 public record AuthStatusResult(
@@ -109,11 +115,16 @@ public static class AuthEndpoints
     public static void MapAuthEndpoints(this WebApplication app, AuthService auth, string instanceId)
     {
         app.MapGet(ApiRoutes.AuthStatus, GetAuthStatusAsync);
-        app.MapPost(ApiRoutes.AuthGuestLogin, LoginAsync);
+        app.MapPost(ApiRoutes.AuthGuestLogin, (HttpRequest request, HttpResponse response, AppDbContext db) =>
+            LoginAsync(request, response, db, false));
+        app.MapPost(ApiRoutes.BrowserGuestLogin, (HttpRequest request, HttpResponse response, AppDbContext db) =>
+            LoginAsync(request, response, db, true));
+        app.MapBrowserAuthEndpoints(auth, instanceId);
         app.MapPost(ApiRoutes.AuthLogout, LogoutAsync);
 
         async Task<IResult> GetAuthStatusAsync(HttpRequest request, AppDbContext db)
         {
+            request.HttpContext.Response.Headers.CacheControl = "no-store";
             if (!request.Headers.TryGetValue("Authorization", out var authHeader))
                 return ApiResults.Unauthorized(AuthErrors.MissingAuthorizationHeader, instanceId);
 
@@ -152,9 +163,28 @@ public static class AuthEndpoints
                 instanceId);
         }
 
-        async Task<IResult> LoginAsync(HttpRequest request, HttpResponse response, AppDbContext db)
+        async Task<IResult> LoginAsync(HttpRequest request, HttpResponse response, AppDbContext db, bool browser)
         {
-            if (!TryResolveAppInstanceId(request, response, out var appInstanceId))
+            response.Headers.CacheControl = "no-store";
+            if (browser && !await BrowserAuthentication.ValidateCsrfAsync(request))
+                return ApiResults.BadRequest(AuthErrors.InvalidCsrfToken, instanceId);
+
+            LoginRequest? loginRequest;
+            try
+            {
+                loginRequest = await ReadLoginRequestAsync(request, browser);
+            }
+            catch (BadHttpRequestException ex)
+            {
+                return ApiResults.BadRequest(ex.Message, instanceId);
+            }
+
+            string appInstanceId;
+            var resolved = browser
+                ? BrowserAuthentication.TryResolveAppInstanceId(request,
+                    loginRequest is BrowserLoginRequest { StartNewGuest: true }, out appInstanceId)
+                : TryResolveAppInstanceId(request, response, out appInstanceId);
+            if (!resolved)
                 return ApiResults.BadRequest(AuthErrors.InvalidAppInstanceId, instanceId);
 
             // Upsert the guest record and record this login.
@@ -167,16 +197,6 @@ public static class AuthEndpoints
             string? issuedGuestCredential = null;
             if (guest is null)
             {
-                LoginRequest? loginRequest;
-                try
-                {
-                    loginRequest = await ReadLoginRequestAsync(request);
-                }
-                catch (BadHttpRequestException ex)
-                {
-                    return ApiResults.BadRequest(ex.Message, instanceId);
-                }
-
                 var resolvedName = await PlayerNameService.ResolveInitialNameAsync(
                     db,
                     appInstanceId,
@@ -200,7 +220,7 @@ public static class AuthEndpoints
             {
                 if (guest.GuestCredentialHash is null)
                 {
-                    if (!TryGetBearerToken(request, out var legacyToken) ||
+                    if (browser || !TryGetBearerToken(request, out var legacyToken) ||
                         guest.LegacyToken is null ||
                         !auth.VerifyLegacyToken(legacyToken, guest.LegacyToken))
                     {
@@ -216,11 +236,13 @@ public static class AuthEndpoints
                 }
                 else
                 {
-                    if (!request.Headers.TryGetValue(GuestCredentialHeader, out var credentialHeader) ||
-                        string.IsNullOrWhiteSpace(credentialHeader.ToString()))
+                    var credential = browser
+                        ? request.Cookies[BrowserAuthentication.GuestCookie]
+                        : request.Headers[GuestCredentialHeader].ToString();
+                    if (string.IsNullOrWhiteSpace(credential))
                         return ApiResults.Unauthorized(AuthErrors.MissingGuestCredential, instanceId);
 
-                    var guestCredential = credentialHeader.ToString().Trim();
+                    var guestCredential = credential.Trim();
                     if (!auth.VerifySecret(guestCredential, guest.GuestCredentialHash))
                         return ApiResults.Unauthorized(AuthErrors.InvalidGuestCredential, instanceId);
                 }
@@ -244,6 +266,15 @@ public static class AuthEndpoints
             await PlayerDataStore.EnsureForGuestAsync(db, guest, now);
             await db.SaveChangesAsync();
 
+            if (browser)
+            {
+                BrowserAuthentication.SetSessionCookies(response, appInstanceId, accessToken,
+                    accessTokenExpiresAt, issuedGuestCredential ?? request.Cookies[BrowserAuthentication.GuestCookie]!);
+                return ApiResults.Ok(
+                    new BrowserSessionResult("authenticated", guest.PlayerName, guest.PlayerId),
+                    "guest_login", instanceId);
+            }
+
             return ApiResults.Ok(
                 new AuthResult
                 {
@@ -261,10 +292,11 @@ public static class AuthEndpoints
                 instanceId);
         }
 
-        // Ends the persisted session. The app_instance_id is intentionally kept, so
-        // re-login preserves the guest identity.
+        // Revoke access but keep the guest credential for explicit re-login.
+        // The public app_instance_id alone can never recover the account.
         async Task<IResult> LogoutAsync(HttpRequest request, AppDbContext db)
         {
+            request.HttpContext.Response.Headers.CacheControl = "no-store";
             if (!request.Headers.TryGetValue("Authorization", out var authHeader))
                 return ApiResults.Unauthorized(AuthErrors.MissingAuthorizationHeader, instanceId);
 
@@ -384,7 +416,7 @@ public static class AuthEndpoints
         return true;
     }
 
-    private static async Task<LoginRequest?> ReadLoginRequestAsync(HttpRequest request)
+    private static async Task<LoginRequest?> ReadLoginRequestAsync(HttpRequest request, bool browser)
     {
         if (request.ContentLength == 0 ||
             (request.ContentLength is null && string.IsNullOrWhiteSpace(request.ContentType)))
@@ -395,7 +427,22 @@ public static class AuthEndpoints
 
         try
         {
-            return await request.ReadFromJsonAsync<LoginRequest>();
+            using var document = await JsonDocument.ParseAsync(request.Body);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                throw new BadHttpRequestException("Login request must be a JSON object.");
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in root.EnumerateObject())
+            {
+                if (!seen.Add(property.Name) ||
+                    (!property.Name.Equals("playerName", StringComparison.OrdinalIgnoreCase) &&
+                     !(browser && property.Name.Equals("startNewGuest", StringComparison.OrdinalIgnoreCase))))
+                    throw new BadHttpRequestException("Unknown or duplicate login property.");
+            }
+            var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            return browser
+                ? root.Deserialize<BrowserLoginRequest>(options)
+                : root.Deserialize<LoginRequest>(options);
         }
         catch (JsonException)
         {

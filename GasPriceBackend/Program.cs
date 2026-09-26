@@ -9,6 +9,7 @@ Console.Error.WriteLine("startup: builder created");
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(DbConfig.ResolveConnectionString(builder.Configuration)));
+builder.Services.AddBrowserAuthentication();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddHttpClient<OpenAiResponsesClient>(client =>
 {

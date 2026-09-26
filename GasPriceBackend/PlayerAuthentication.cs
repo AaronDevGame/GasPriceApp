@@ -5,24 +5,34 @@ public static class PlayerAuthentication
         AppDbContext db,
         AuthService authService)
     {
-        if (!request.Headers.TryGetValue("Authorization", out var authHeader))
-            return PlayerAuthResult.Unauthorized(AuthErrors.MissingAuthorizationHeader);
-
-        if (!request.Headers.TryGetValue(AuthEndpoints.AppInstanceIdHeader, out var appInstanceIdHeader))
-            return PlayerAuthResult.Unauthorized(AuthErrors.MissingAppInstanceIdHeader);
-
-        if (!AuthEndpoints.TryNormalizeAppInstanceId(
-                appInstanceIdHeader.ToString(),
-                out var appInstanceId))
-            return PlayerAuthResult.BadRequest(AuthErrors.InvalidAppInstanceId);
-
-        var parts = authHeader.ToString().Split(' ', 2);
-        if (parts.Length != 2 ||
-            !parts[0].Equals("Bearer", StringComparison.OrdinalIgnoreCase) ||
-            string.IsNullOrWhiteSpace(parts[1]))
-            return PlayerAuthResult.Unauthorized(AuthErrors.InvalidPlayerToken);
-
-        var token = parts[1].Trim();
+        request.HttpContext.Response.Headers.CacheControl = "no-store";
+        string token;
+        string appInstanceId;
+        // Explicit bearer requests never fall back to ambient cookies.
+        if (request.Headers.TryGetValue("Authorization", out var authHeader))
+        {
+            if (!request.Headers.TryGetValue(AuthEndpoints.AppInstanceIdHeader, out var idHeader))
+                return PlayerAuthResult.Unauthorized(AuthErrors.MissingAppInstanceIdHeader);
+            if (!AuthEndpoints.TryNormalizeAppInstanceId(idHeader.ToString(), out appInstanceId))
+                return PlayerAuthResult.BadRequest(AuthErrors.InvalidAppInstanceId);
+            var parts = authHeader.ToString().Split(' ', 2);
+            if (parts.Length != 2 || !parts[0].Equals("Bearer", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(parts[1]))
+                return PlayerAuthResult.Unauthorized(AuthErrors.InvalidPlayerToken);
+            token = parts[1].Trim();
+        }
+        else
+        {
+            if (!request.Cookies.TryGetValue(BrowserAuthentication.AccessCookie, out var accessToken))
+                return PlayerAuthResult.Unauthorized(AuthErrors.MissingAuthorizationHeader);
+            if (!AuthEndpoints.TryNormalizeAppInstanceId(
+                    request.Cookies[AuthEndpoints.AppInstanceIdCookie], out appInstanceId))
+                return PlayerAuthResult.BadRequest(AuthErrors.InvalidAppInstanceId);
+            if (!HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method) &&
+                !await BrowserAuthentication.ValidateCsrfAsync(request))
+                return PlayerAuthResult.BadRequest(AuthErrors.InvalidCsrfToken);
+            token = accessToken;
+        }
         var guest = await db.Guests.FindAsync(appInstanceId);
 
         if (guest is null)

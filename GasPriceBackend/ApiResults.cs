@@ -128,5 +128,6 @@ public static class AuthErrors
     public const string MissingGuestCredential = "missing_guest_credential";
     public const string InvalidGuestCredential = "invalid_guest_credential";
     public const string LegacyTokenRequired = "legacy_token_required";
+    public const string InvalidCsrfToken = "invalid_csrf_token";
     public const string AccessTokenExpired = "access_token_expired";
 }

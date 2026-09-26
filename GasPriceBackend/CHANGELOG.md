@@ -6,6 +6,19 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+- Add explicit browser CSRF, status, guest-login/resume, and logout endpoints under `/auth/browser`.
+- Support browser access cookies on all protected player, fuel-price, and AI endpoints, while retaining native bearer-header authentication.
+- Issue host-only Secure, HttpOnly, SameSite=Strict cookies; scope the long-lived guest credential to `/auth/browser` and exclude auth secrets from browser JSON responses.
+- Add repeatable integration checks for native/browser authentication, expiry, CSRF, logout, and shared login limits.
+
+### Changed
+- Require antiforgery validation and same-origin HTTPS for browser login/resume, logout, and cookie-authenticated mutations.
+- Share guest-login cooldowns and rolling IP limits between native and browser routes.
+- Keep guest credentials on logout and expose a signed-out browser state so reloads require explicit re-login.
+- Reject unknown, duplicate, and malformed login properties; mark authentication and protected responses as non-cacheable.
+- Bump project and API version to `1.10.0`. No database schema changes are required.
+
 ## [1.9.10] - 2026-09-26
 
 ### Added

@@ -102,6 +102,11 @@ public static class ApiRoutes
 
     public const string AuthStatus = "/auth/status";
     public const string AuthGuestLogin = "/auth/guest/login";
+    public const string BrowserAuthRoot = "/auth/browser";
+    public const string BrowserCsrf = BrowserAuthRoot + "/csrf";
+    public const string BrowserStatus = BrowserAuthRoot + "/status";
+    public const string BrowserGuestLogin = BrowserAuthRoot + "/guest/login";
+    public const string BrowserLogout = BrowserAuthRoot + "/logout";
     public const string AuthLogout = "/auth/logout";
 
     public const string PlayerData = "/player/data";
@@ -135,6 +140,10 @@ public static class RouteRegistry
         new(ApiRoutes.AuthStatus, "GET"),
         new(ApiRoutes.AuthGuestLogin, "POST"),
         new(ApiRoutes.AuthLogout, "POST"),
+        new(ApiRoutes.BrowserCsrf, "GET"),
+        new(ApiRoutes.BrowserStatus, "GET"),
+        new(ApiRoutes.BrowserGuestLogin, "POST"),
+        new(ApiRoutes.BrowserLogout, "POST"),
         new(ApiRoutes.PlayerData, "GET"),
         new(ApiRoutes.PlayerData, "PATCH"),
         new(ApiRoutes.PlayerProfile, "PATCH"),
@@ -162,5 +171,5 @@ public record RouteInfo(string Route, string Method, bool IsLegacy = false);
 
 public static class APIVersion
 {
-    public const string Version = "1.9.10";
+    public const string Version = "1.10.0";
 }

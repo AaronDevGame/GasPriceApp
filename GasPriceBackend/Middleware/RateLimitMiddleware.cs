@@ -11,6 +11,10 @@ public class RateLimitMiddleware
         [ApiRoutes.Routes] = TimeSpan.FromSeconds(1),
         [ApiRoutes.AuthStatus] = TimeSpan.FromSeconds(1),
         [ApiRoutes.AuthGuestLogin] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.BrowserCsrf] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.BrowserStatus] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.BrowserGuestLogin] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.BrowserLogout] = TimeSpan.FromSeconds(1),
         [ApiRoutes.AuthLogout] = TimeSpan.FromSeconds(1),
         [ApiRoutes.PlayerData] = TimeSpan.FromSeconds(1),
         [ApiRoutes.PlayerProfile] = TimeSpan.FromSeconds(1),
@@ -44,7 +48,7 @@ public class RateLimitMiddleware
         var ip = (address?.IsIPv4MappedToIPv6 == true ? address.MapToIPv4() : address)?.ToString() ?? "unknown";
         // Routing accepts case changes and trailing slashes; they must share a bucket.
         var path = new PathString((context.Request.Path.Value ?? "").TrimEnd('/').ToLowerInvariant());
-        var isGuestLogin = path == ApiRoutes.AuthGuestLogin;
+        var isGuestLogin = path == ApiRoutes.AuthGuestLogin || path == ApiRoutes.BrowserGuestLogin;
 
         // 1) Decide cooldown
         TimeSpan cooldown;
@@ -65,6 +69,7 @@ public class RateLimitMiddleware
 
         // 1.5) Decide bucket key (prevents bypass by changing path)
         var keyPath =
+            isGuestLogin ? ApiRoutes.AuthGuestLogin :
             path.StartsWithSegments("/admin") ? "/admin" :
             _cooldowns.ContainsKey(path.Value ?? "") ? (path.Value ?? "") :
             "/unknown";
