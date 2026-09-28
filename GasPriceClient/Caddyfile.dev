@@ -9,9 +9,11 @@ https://localhost:8443 {
 		}
 
 		reverse_proxy https://gaspricebackend.onrender.com {
-			# Render routes by its own hostname. Caddy still forwards the original
-			# localhost authority in X-Forwarded-Host for application context.
+			# Render routes and validates Origin against its own upstream hostname.
+			# The browser still sees only the same-origin localhost URL, while
+			# Sec-Fetch-Site and the antiforgery cookie/token remain enforced.
 			header_up Host gaspricebackend.onrender.com
+			header_up Origin https://gaspricebackend.onrender.com
 		}
 	}
 

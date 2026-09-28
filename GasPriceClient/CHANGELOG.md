@@ -1,9 +1,13 @@
 # Changelog
 
-## Unreleased
+## [1.0.1] - 2026-09-28
 
 ### Added
 - Add a Caddy-based local HTTPS proxy for testing Expo Web against the deployed Render backend with same-origin browser authentication.
+
+### Fixed
+- Translate the localhost browser origin at the development proxy so Render accepts CSRF-protected browser mutations.
+- Bump the Expo client version to `1.0.1`.
 
 ## [1.0.0] - 2026-09-26
 

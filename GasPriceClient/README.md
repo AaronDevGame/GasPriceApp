@@ -86,7 +86,10 @@ browser cookies are scoped to the HTTPS hostname.
 
 `Caddyfile.dev` deliberately does not proxy `/admin/*`, health/status metadata,
 or arbitrary backend routes. It also marks proxied API responses as non-cacheable
-and connects to Render over verified HTTPS.
+and connects to Render over verified HTTPS. For browser mutations, it translates
+the localhost `Origin` header to the Render upstream origin because Render must
+receive its own hostname for routing. The browser-facing origin remains localhost,
+and the backend still enforces `Sec-Fetch-Site` plus the antiforgery cookie/token.
 
 Run `npx expo export --platform web` before serving `dist`. For Metro development,
 replace the static-file handler with a reverse proxy to Expo's web server, retaining
