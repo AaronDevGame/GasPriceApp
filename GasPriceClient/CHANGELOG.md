@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- Distinguish browser location denial, unavailable positioning, and timeouts; show when coordinates were received but the local fuel-price lookup failed.
 - Explain when Expo Web is opened on the app-only port instead of the HTTPS API proxy.
 - Distinguish timeouts, invalid API responses, and server/proxy failures instead of reporting all of them as connection failures.
 - Allow up to one minute for the first session-status request while the hosted backend starts.

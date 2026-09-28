@@ -3,6 +3,7 @@ import { useAuth } from '@/auth/auth-provider';
 import { errorMessage } from '@/auth/http';
 import { getHistory, getPrices, refreshLocation, type Area, type Coordinates, type Feed, type PricePoint } from './api';
 import { requestLocation } from './location';
+import { locationErrorMessage } from './location-error';
 
 export function useFuelPrices() {
   const { session, loading: authLoading, error: authError, restore, logout } = useAuth();
@@ -34,22 +35,29 @@ export function useFuelPrices() {
   const locate = useCallback(async (ticket: number) => {
     setLocationNote('Waiting for location permission…');
     let position: Coordinates | null;
-    try { position = await requestLocation(); } catch {
-      if (ticket === version.current) setLocationNote('Your location is unavailable. You can choose a city or province below.');
+    try { position = await requestLocation(); } catch (failure) {
+      if (ticket === version.current) setLocationNote(locationErrorMessage(failure));
       return;
     }
     if (ticket !== version.current) return;
     if (!position) {
-      setLocationNote('Location access is off. You can choose a city or province below.');
+      setLocationNote('Location access is blocked. Check your browser and device location permissions, or choose a city or province below.');
       return;
     }
     coordinates.current = position;
-    setLocationNote('Updating prices near you…');
-    const next = await refreshLocation(position);
-    if (ticket !== version.current) return;
-    area.current = next.area;
-    publish(next.feed, ticket);
-    setLocationNote(`Prices near ${next.area.resolved_area}.`);
+    setLocationNote('Location received. Updating prices near you…');
+    try {
+      const next = await refreshLocation(position);
+      if (ticket !== version.current) return;
+      area.current = next.area;
+      publish(next.feed, ticket);
+      setLocationNote(`Prices near ${next.area.resolved_area}.`);
+    } catch (failure) {
+      if (ticket === version.current) {
+        setError(errorMessage(failure));
+        setLocationNote('Your location was received, but local prices could not be updated. Try refreshing prices.');
+      }
+    }
   }, [publish]);
 
   const run = useCallback(async (operation: (ticket: number) => Promise<void>) => {

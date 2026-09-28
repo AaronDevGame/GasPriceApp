@@ -40,6 +40,9 @@ function harness(options = {}) {
         if (name === 'react/jsx-runtime') return {};
         if (name === '@/auth/auth-provider') return { useAuth: () => auth };
         if (name === '@/auth/session' || name === './session') return { authClient: client };
+        if (name === './location' && relative === 'fuel/use-fuel-prices' && options.locationReason) return {
+          requestLocation: async () => { throw new (load('fuel/location-error').LocationError)(options.locationReason); },
+        };
         if (name === './http' || name === '@/auth/http') return { ApiError: class extends Error {}, errorMessage: () => 'Connection unavailable' };
         if (name === 'expo-location') return {
           Accuracy: { Balanced: 3 }, requestForegroundPermissionsAsync: async () => { calls.push('permission'); return { granted: !options.denied }; },
@@ -81,10 +84,20 @@ async function settle(h) {
   for (const options of [{ denied: true }, { gpsFailure: true }, { aiFailure: true }]) {
     const h = harness(options); h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
     assert.equal(h.states[0].value.items.length, 1);
+    if (options.aiFailure) assert.ok(h.states[5].value.includes('location was received'));
+    if (options.denied) assert.ok(h.states[5].value.includes('access is blocked'));
     if (!options.aiFailure) assert.ok(!h.calls.some(call => call.url === '/ai/fuel-prices'));
     assert.ok(!h.calls.some(call => call.url?.startsWith('/fuel-prices?')));
   }
   console.log('PASS denial, GPS and AI failures retain saved feed and skip location GET');
+  for (const reason of ['timeout', 'unavailable']) {
+    const h = harness({ locationReason: reason });
+    h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
+    assert.ok(h.states[5].value.includes(reason === 'timeout' ? 'timed out' : 'could not determine'));
+    assert.equal(h.states[3].value, false);
+    assert.ok(!h.calls.some(call => call.url === '/ai/fuel-prices'));
+  }
+  console.log('PASS location timeout and positioning failure show distinct recovery messages');
   const manual = harness({ denied: true }); const screen = manual.load('fuel/use-fuel-prices').useFuelPrices(); manual.effects[0](); await settle(manual);
   await screen.selectArea({ province: 'Davao del Sur' }); const before = manual.calls.length; screen.refresh(); await settle(manual);
   assert.ok(manual.calls.slice(before).some(call => call.url === '/fuel-prices?province=Davao+del+Sur'));
@@ -100,15 +113,24 @@ async function settle(h) {
   assert.equal(api.formatPrice(range(null)), 'Not available');
   console.log('PASS unchanged history, baseline requirement, newest-first five-change limit');
   const code = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, '../src/fuel/location.web.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  for (const result of ['allowed', 'denied', 'unavailable']) {
+  for (const result of ['allowed', 'denied', 'unavailable', 'timeout']) {
     const exports = {};
-    vm.runInNewContext(code, { exports, navigator: { geolocation: { getCurrentPosition: (success, failure, options) => {
+    vm.runInNewContext(code, { exports, require: () => granted.load('fuel/location-error'), navigator: { geolocation: { getCurrentPosition: (success, failure, options) => {
       assert.equal(options.timeout, 20000);
       if (result === 'allowed') success({ coords: { latitude: 10, longitude: 123 } });
-      else failure({ code: result === 'denied' ? 1 : 2, PERMISSION_DENIED: 1 });
+      else failure({ code: result === 'denied' ? 1 : result === 'timeout' ? 3 : 2, PERMISSION_DENIED: 1, TIMEOUT: 3 });
     } } } });
-    if (result === 'unavailable') await assert.rejects(() => exports.requestLocation());
+    if (result === 'unavailable' || result === 'timeout') await assert.rejects(() => exports.requestLocation(), error => error.reason === result);
     else assert.equal((await exports.requestLocation())?.latitude ?? null, result === 'allowed' ? 10 : null);
   }
-  console.log('PASS browser location grant, denial and unavailable position');
+  for (const reason of ['unsupported', 'insecure']) {
+    const exports = {};
+    vm.runInNewContext(code, { exports, require: () => granted.load('fuel/location-error'),
+      isSecureContext: reason !== 'insecure', navigator: reason === 'unsupported' ? {} : { geolocation: {
+        getCurrentPosition: () => { throw new Error('Must not request location on insecure origins'); },
+      } },
+    });
+    await assert.rejects(() => exports.requestLocation(), error => error.reason === reason);
+  }
+  console.log('PASS browser location grant, denial, positioning failure, timeout and unsupported/insecure environments');
 })().catch(error => { console.error(error); process.exitCode = 1; });
