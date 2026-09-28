@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-09-29
+
 ### Fixed
 - Distinguish browser location denial, unavailable positioning, and timeouts; show when coordinates were received but the local fuel-price lookup failed.
 - Explain when Expo Web is opened on the app-only port instead of the HTTPS API proxy.
@@ -9,6 +11,7 @@
 - Allow up to one minute for the first session-status request while the hosted backend starts.
 
 ### Changed
+- Bump the Expo client version to `1.0.2`.
 - Redesign only the Your area card as a station-inspired price board, with large prices, black Diesel, green Gasoline 91, red Gasoline 95, and clear estimate dates; keep other areas and recent updates in their existing layout.
 - Hide the Logout button while retaining its code behind a toggle for future testing.
 - Replace the Refresh prices button with native pull-to-refresh on iOS and Android; use browser reload on web and show platform-specific recovery guidance.
