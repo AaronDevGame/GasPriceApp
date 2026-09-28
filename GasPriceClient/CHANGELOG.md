@@ -9,6 +9,7 @@
 - Allow up to one minute for the first session-status request while the hosted backend starts.
 
 ### Changed
+- Redesign only the Your area card as a station-inspired price board, with large prices, black Diesel, green Gasoline 91, red Gasoline 95, and clear estimate dates; keep other areas and recent updates in their existing layout.
 - Hide the Logout button while retaining its code behind a toggle for future testing.
 - Replace the Refresh prices button with native pull-to-refresh on iOS and Android; use browser reload on web and show platform-specific recovery guidance.
 - Keep all three fuel prices in one horizontal row on mobile and narrow web cards, with compact price typography sized to the available card width.

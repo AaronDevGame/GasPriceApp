@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { LocalPriceBoard } from '@/components/local-price-board';
 import { useTheme } from '@/hooks/use-theme';
 import { formatPrice, type Prices, type FeedItem } from '@/fuel/api';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
@@ -34,9 +35,9 @@ function PriceGrid({ prices }: { prices: Prices }) {
   </View>;
 }
 function PriceCard({ item }: { item: FeedItem }) {
+  if (item.isLocal) return <LocalPriceBoard item={item} />;
   const areaLabel = [...new Set([item.area.name, item.area.province, item.area.region].filter(Boolean))].join(', ');
   return <ThemedView type="backgroundElement" style={styles.card}>
-    {item.isLocal && <ThemedText type="smallBold" style={styles.accent}>YOUR AREA</ThemedText>}
     <ThemedText style={styles.area}>{areaLabel}</ThemedText>
     <ThemedText type="small" themeColor="textSecondary">As of {asOf(item.dataAsOf)}{item.freshness !== 'current' ? ' · Older estimate' : ''}</ThemedText>
     <PriceGrid prices={item.prices} />
