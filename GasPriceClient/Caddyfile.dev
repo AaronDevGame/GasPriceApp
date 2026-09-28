@@ -1,0 +1,22 @@
+https://localhost:8443 {
+	tls internal
+
+	@api path /auth/* /player/* /fuel-prices /fuel-prices/* /ai/*
+	handle @api {
+		header {
+			Cache-Control "no-store"
+			Pragma "no-cache"
+		}
+
+		reverse_proxy https://gaspricebackend.onrender.com {
+			# Render routes by its own hostname. Caddy still forwards the original
+			# localhost authority in X-Forwarded-Host for application context.
+			header_up Host gaspricebackend.onrender.com
+		}
+	}
+
+	# Expo/Metro serves the web application and its development websocket.
+	handle {
+		reverse_proxy 127.0.0.1:8081
+	}
+}

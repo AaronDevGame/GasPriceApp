@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## Unreleased
+## [1.10.1] - 2026-09-28
 
 ### Added
 - Add a secret-authenticated Cloudflare Worker proxy that forwards the Cloudflare-observed client IP to Render.
@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Trust the Worker's client-IP header only when its shared secret is valid, preserving per-client rate limits without weakening direct Render forwarding.
 - Restrict the Worker to registered public API method/route pairs, block admin routes, strip caller-supplied forwarding headers, and prevent API response caching.
+- Bump project and API version to `1.10.1`. No database schema changes are required.
 
 ## [1.10.0] - 2026-09-26
 

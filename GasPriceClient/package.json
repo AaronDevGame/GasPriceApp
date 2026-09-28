@@ -40,7 +40,8 @@
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web",
+    "web": "expo start --web --port 8081",
+    "web:proxy": "caddy run --config ./Caddyfile.dev",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test:auth": "node scripts/test-auth.cjs"

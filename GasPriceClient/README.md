@@ -50,6 +50,44 @@ localhost:8443 {
 }
 ```
 
+### Test local Expo Web against the deployed backend
+
+Caddy is a local web server and reverse proxy. For browser development it owns
+the trusted `https://localhost:8443` origin, sends application and Metro
+development requests to Expo on port `8081`, and sends only the registered
+public API path families to the deployed Render backend. The browser therefore
+uses same-origin requests and secure HttpOnly cookies without enabling CORS.
+The Cloudflare Worker remains the native iOS/Android API entry point.
+
+Install Caddy once on macOS:
+
+```bash
+brew install caddy
+```
+
+Start the Expo web server from `GasPriceClient` in one terminal:
+
+```bash
+npm run web
+```
+
+Start the HTTPS proxy in a second terminal:
+
+```bash
+npm run web:proxy
+```
+
+The first Caddy run may request the macOS password so it can trust its local
+certificate authority. If automatic trust installation fails, stop Caddy and
+run `sudo caddy trust`, then start the proxy again. Open
+`https://localhost:8443` manually and use that address consistently; do not use
+the Expo `http://localhost:8081` tab or substitute `127.0.0.1`, because secure
+browser cookies are scoped to the HTTPS hostname.
+
+`Caddyfile.dev` deliberately does not proxy `/admin/*`, health/status metadata,
+or arbitrary backend routes. It also marks proxied API responses as non-cacheable
+and connects to Render over verified HTTPS.
+
 Run `npx expo export --platform web` before serving `dist`. For Metro development,
 replace the static-file handler with a reverse proxy to Expo's web server, retaining
 the same HTTPS origin and API route handlers.
