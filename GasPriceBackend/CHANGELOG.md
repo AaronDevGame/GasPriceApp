@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.10.2] - 2026-09-29
+
+### Changed
+- Bump project and API version to `1.10.2`. No database schema changes are required.
+
 ### Removed
 - Remove obsolete game-testing `GET /player/data` and `PATCH /player/data` routes from the API, route registry, rate limiting, and Worker allowlist.
 - Stop creating game player-state rows on guest login. Existing database tables and data remain intact; no schema migration is required.
