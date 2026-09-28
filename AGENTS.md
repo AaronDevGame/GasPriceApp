@@ -99,6 +99,8 @@ dotnet ef migrations add DescriptiveMigrationName --project GasPriceBackend/Back
 ## Git workflow and handoff
 
 - Whenever a task adds a feature or changes repository files, always include both a suggested branch name and a suggested commit message in the final handoff.
+- When a task changes more than one scope (`frontend`, `backend`, or `repo`), provide a separate suggested branch name and Conventional Commit-style message for each affected scope so the user can commit and push them separately.
+- Identify the files or directories included in each suggested branch. Group supporting changes with the scope they serve; reserve `repo` for shared repository changes. Suggest only scopes that actually changed, and note any dependencies between the separate changes.
 - Branch names must use a scope, a meaningful change type, and a short lowercase kebab-case description: `<scope>/<type>/<short-description>`.
 - Use `backend` for `GasPriceBackend/` changes, `frontend` for `GasPriceClient/` or `GasPriceUnity/` changes, and `repo` for shared, root-level, or cross-cutting changes.
 - Use change types such as `feature`, `fix`, `add`, `refactor`, `docs`, `test`, or `chore` as appropriate. For example: `backend/chore/update-dependencies` or `frontend/feature/add-login-screen`.
@@ -116,4 +118,4 @@ Before handing off a change:
 3. Run `dotnet build GasPriceApp.sln`.
 4. Run focused endpoint or migration checks when relevant.
 5. Summarize changed behavior, verification performed, and any remaining risk.
-6. Provide the suggested branch name and commit message for the completed change.
+6. Provide a separate suggested branch name and commit message for each affected scope, identifying the included files or directories and any dependencies.
