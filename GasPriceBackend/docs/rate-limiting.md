@@ -65,6 +65,26 @@ Mac can use different public addresses if it switches address family, VPN,
 proxy, or network. Existing rows cannot be backfilled with an unknown original
 IP; their address updates on the next successful login.
 
+## Cloudflare Worker proxy
+
+The `CloudflareWorker/` deployment forwards the address Cloudflare observed in
+`CF-Connecting-IP` through `X-GasPrice-Client-IP`. It also sends
+`X-GasPrice-Proxy-Secret`. The backend ignores the forwarded client address
+unless the secret matches `CloudflareProxy:SharedSecret` using a constant-time
+comparison. A missing, invalid, or duplicated secret therefore falls back to
+the normal Render client-address handling instead of trusting caller input.
+
+Configure the same random value, containing at least 32 characters, in both
+places:
+
+- Cloudflare Worker secret: `PROXY_SHARED_SECRET`
+- Render environment variable: `CloudflareProxy__SharedSecret`
+
+Never put this value in Expo configuration, source control, request logs, or a
+public Worker variable. Rotate both values together. Deploy the backend support
+before enabling the secret on the Worker so proxied traffic does not share the
+Worker's address during rollout.
+
 Counters are held in memory per application instance and reset on restart.
 Multiple instances do not share an allowance. Distributed abuse using many
 IPs, including rotating IPv6 addresses, can still create accounts. For that

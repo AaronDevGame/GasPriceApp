@@ -10,12 +10,12 @@ Native build caches and local signing files are ignored. Before generating nativ
 
 Native uses Expo SDK 57 SecureStore for a single session record containing both
 secrets and the public UUID v4 appInstanceId. Configure `EXPO_PUBLIC_API_URL` with
-the API's HTTPS origin before starting Expo. HTTP is accepted only in native
-development builds for local testing. Public Expo environment variables must never
-contain secrets. Rebuild the iOS/Android development client after installing the
-new native modules (`npx expo run:ios`, `npx expo run:android`, or an EAS development
-build). SecureStore is device-local; do not promise guest recovery after uninstall,
-backup restore, or clearing app data.
+the Cloudflare Worker origin shown in `.env.example` before starting Expo. HTTP
+is accepted only in native development builds for local testing. Public Expo
+environment variables must never contain secrets. Rebuild the iOS/Android
+development client after installing the new native modules (`npx expo run:ios`,
+`npx expo run:android`, or an EAS development build). SecureStore is device-local;
+do not promise guest recovery after uninstall, backup restore, or clearing app data.
 
 Web always calls relative API paths with `credentials: 'same-origin'`. Serve the
 static export and API through one HTTPS origin. Route `/auth/*`, `/player/*`,

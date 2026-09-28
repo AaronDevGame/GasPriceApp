@@ -1,8 +1,13 @@
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.HttpOverrides;
 
 public static class ClientIpForwarding
 {
+    public const string ProxyClientIpHeader = "X-GasPrice-Client-IP";
+    public const string ProxySecretHeader = "X-GasPrice-Proxy-Secret";
+
     public static IApplicationBuilder UseClientIpForwarding(
         this IApplicationBuilder app, IConfiguration configuration)
     {
@@ -44,9 +49,32 @@ public static class ClientIpForwarding
         if (options.KnownIPNetworks.Count > 0 || options.KnownProxies.Count > 0)
             app.UseForwardedHeaders(options);
 
+        var cloudflareProxySecret = configuration["CloudflareProxy:SharedSecret"];
+        if (!string.IsNullOrEmpty(cloudflareProxySecret) && cloudflareProxySecret.Length < 32)
+            throw new InvalidOperationException(
+                "CloudflareProxy:SharedSecret must contain at least 32 characters when configured.");
+
         // Persist and rate-limit the same canonical representation.
         app.Use(async (context, next) =>
         {
+            IPAddress? proxyClientAddress = null;
+            var hasTrustedProxyAddress =
+                !string.IsNullOrEmpty(cloudflareProxySecret) &&
+                TryGetSingleHeader(context.Request, ProxySecretHeader, out var suppliedSecret) &&
+                SecretsMatch(cloudflareProxySecret, suppliedSecret) &&
+                TryGetSingleHeader(context.Request, ProxyClientIpHeader, out var suppliedAddress) &&
+                IPAddress.TryParse(suppliedAddress, out proxyClientAddress);
+
+            // The secret and internal forwarding value are gateway metadata, not
+            // application request headers. Do not leave them available downstream.
+            context.Request.Headers.Remove(ProxySecretHeader);
+            context.Request.Headers.Remove(ProxyClientIpHeader);
+
+            if (hasTrustedProxyAddress && proxyClientAddress is not null)
+            {
+                context.Connection.RemoteIpAddress = proxyClientAddress;
+            }
+
             if (context.Connection.RemoteIpAddress?.IsIPv4MappedToIPv6 == true)
                 context.Connection.RemoteIpAddress = context.Connection.RemoteIpAddress.MapToIPv4();
 
@@ -54,5 +82,26 @@ public static class ClientIpForwarding
         });
 
         return app;
+    }
+
+    private static bool TryGetSingleHeader(
+        HttpRequest request,
+        string headerName,
+        out string value)
+    {
+        value = string.Empty;
+        if (!request.Headers.TryGetValue(headerName, out var values) || values.Count != 1)
+            return false;
+
+        value = values[0] ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool SecretsMatch(string expected, string supplied)
+    {
+        var expectedBytes = Encoding.UTF8.GetBytes(expected);
+        var suppliedBytes = Encoding.UTF8.GetBytes(supplied);
+        return expectedBytes.Length == suppliedBytes.Length &&
+            CryptographicOperations.FixedTimeEquals(expectedBytes, suppliedBytes);
     }
 }
