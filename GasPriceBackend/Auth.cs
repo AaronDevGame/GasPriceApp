@@ -263,7 +263,6 @@ public static class AuthEndpoints
             guest.LoginCount += 1;
             guest.IsLoggedIn = true;
 
-            await PlayerDataStore.EnsureForGuestAsync(db, guest, now);
             await db.SaveChangesAsync();
 
             if (browser)

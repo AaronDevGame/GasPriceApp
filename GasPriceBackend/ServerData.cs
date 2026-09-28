@@ -109,7 +109,6 @@ public static class ApiRoutes
     public const string BrowserLogout = BrowserAuthRoot + "/logout";
     public const string AuthLogout = "/auth/logout";
 
-    public const string PlayerData = "/player/data";
     public const string PlayerProfile = "/player/profile";
     public const string AiChat = "/ai/chat";
     public const string AiFuelPrices = "/ai/fuel-prices";
@@ -144,8 +143,6 @@ public static class RouteRegistry
         new(ApiRoutes.BrowserStatus, "GET"),
         new(ApiRoutes.BrowserGuestLogin, "POST"),
         new(ApiRoutes.BrowserLogout, "POST"),
-        new(ApiRoutes.PlayerData, "GET"),
-        new(ApiRoutes.PlayerData, "PATCH"),
         new(ApiRoutes.PlayerProfile, "PATCH"),
         new(ApiRoutes.AiChat, "POST"),
         new(ApiRoutes.AiFuelPrices, "POST"),

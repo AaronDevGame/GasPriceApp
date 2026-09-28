@@ -9,7 +9,6 @@ const ALLOWED_ROUTES = new Map([
   ["/auth/status", new Set(["GET"])],
   ["/auth/guest/login", new Set(["POST"])],
   ["/auth/logout", new Set(["POST"])],
-  ["/player/data", new Set(["GET", "PATCH"])],
   ["/player/profile", new Set(["PATCH"])],
   ["/ai/chat", new Set(["POST"])],
   ["/ai/fuel-prices", new Set(["POST"])],

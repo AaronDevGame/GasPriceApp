@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [Unreleased]
+
+### Removed
+- Remove obsolete game-testing `GET /player/data` and `PATCH /player/data` routes from the API, route registry, rate limiting, and Worker allowlist.
+- Stop creating game player-state rows on guest login. Existing database tables and data remain intact; no schema migration is required.
+
 ## [1.10.1] - 2026-09-28
 
 ### Added

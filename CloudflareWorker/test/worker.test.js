@@ -46,7 +46,7 @@ test("replaces spoofed forwarding headers with authenticated values", async () =
   };
   try {
     const response = await worker.fetch(
-      new Request("https://proxy.example/player/data?view=current", {
+      new Request("https://proxy.example/fuel-prices?province=Cebu", {
         headers: {
           "CF-Connecting-IP": "203.0.113.10",
           "X-Forwarded-For": "198.51.100.20",
@@ -59,7 +59,7 @@ test("replaces spoofed forwarding headers with authenticated values", async () =
     );
 
     assert.equal(forwardedRequest.input,
-      "https://gaspricebackend.onrender.com/player/data?view=current");
+      "https://gaspricebackend.onrender.com/fuel-prices?province=Cebu");
     assert.equal(forwardedRequest.init.headers.get("X-Forwarded-For"), null);
     assert.equal(forwardedRequest.init.headers.get("X-Real-IP"), null);
     assert.equal(forwardedRequest.init.headers.get("X-GasPrice-Client-IP"), "203.0.113.10");
@@ -79,4 +79,11 @@ test("fails closed when the shared secret is missing", async () => {
     { ORIGIN_URL: env.ORIGIN_URL },
   );
   assert.equal(response.status, 503);
+});
+
+test("rejects removed player-data routes", async () => {
+  for (const method of ["GET", "PATCH"]) {
+    const response = await worker.fetch(new Request("https://proxy.example/player/data", { method }), env);
+    assert.equal(response.status, 404);
+  }
 });

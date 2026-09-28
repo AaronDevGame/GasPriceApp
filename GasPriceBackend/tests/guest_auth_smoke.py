@@ -56,11 +56,22 @@ def expire(app_id):
                    env=env, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-protected = [('/player/data', 'GET'), ('/player/data', 'PATCH'), ('/player/profile', 'PATCH'),
+protected = [('/player/profile', 'PATCH'),
              ('/fuel-prices', 'GET'), ('/fuel-prices/history', 'GET'), ('/ai/chat', 'POST'), ('/ai/fuel-prices', 'POST')]
 for path, method in protected:
     request(path, method, {} if method != 'GET' else None, expected=401)
 print('PASS: every protected endpoint rejects anonymous requests')
+
+for method in ['GET', 'PATCH']:
+    time.sleep(1.1)  # Unregistered paths still have the default rate limit.
+    req = urllib.request.Request(args.base + '/player/data', method=method)
+    try:
+        plain.open(req)
+        raise AssertionError('Removed player-data route is still available')
+    except urllib.error.HTTPError as error:
+        assert error.code == 404
+        error.close()
+print('PASS: removed player-data routes return 404')
 
 native_id = str(uuid.uuid4())
 native_id_header = {'X-App-Instance-Id': native_id}
@@ -69,21 +80,21 @@ native = login['data']
 assert native['guestCredential'] and native['accessToken'] and native['appInstanceId'] == native_id
 native_auth = {**native_id_header, 'Authorization': 'Bearer ' + native['accessToken']}
 request('/auth/status', headers=native_auth)
-request('/player/data', headers=native_auth)
+request('/fuel-prices', headers=native_auth)
 payload, _ = request('/auth/guest/login', 'POST', {}, native_id_header, expected=401)
 assert payload['error']['error'] == 'missing_guest_credential'
 payload, _ = request('/auth/guest/login', 'POST', {}, {**native_id_header, 'X-Guest-Credential': 'x' * 43}, expected=401)
 assert payload['error']['error'] == 'invalid_guest_credential'
 expire(native_id)
-payload, _ = request('/player/data', headers=native_auth, expected=401)
+payload, _ = request('/fuel-prices', headers=native_auth, expected=401)
 assert payload['error']['error'] == 'access_token_expired'
 renewed, _ = request('/auth/guest/login', 'POST', {}, {**native_id_header, 'X-Guest-Credential': native['guestCredential']})
 assert renewed['data']['playerId'] == native['playerId'] and 'guestCredential' not in renewed['data']
 new_auth = {**native_id_header, 'Authorization': 'Bearer ' + renewed['data']['accessToken']}
-request('/player/data', headers=native_auth, expected=401)
-request('/player/data', 'PATCH', {'health': 99}, new_auth)
+request('/fuel-prices', headers=native_auth, expected=401)
+request('/player/profile', 'PATCH', {'playerName': 'Smoke ' + uuid.uuid4().hex[:10]}, new_auth)
 request('/auth/logout', 'POST', headers=new_auth)
-request('/player/data', headers=new_auth, expected=401)
+request('/fuel-prices', headers=new_auth, expected=401)
 print('PASS: native contract, ID-only rejection, credential verification, expiry, rotation, mutation and logout')
 
 payload, _ = request('/auth/browser/status', cookies=True)
@@ -104,15 +115,13 @@ for cookie in jar:
 assert headers['Cache-Control'] == 'no-store'
 reload, _ = request('/auth/browser/status', cookies=True)
 assert reload['data']['playerId'] == login['data']['playerId']
-request('/player/data', cookies=True)
 request('/fuel-prices', cookies=True)
 # A malformed bearer must never fall back to a valid ambient cookie.
-request('/player/data', headers={'Authorization': 'broken', 'X-App-Instance-Id': browser_id}, cookies=True, expected=401)
+request('/fuel-prices', headers={'Authorization': 'broken', 'X-App-Instance-Id': browser_id}, cookies=True, expected=401)
 for path, method in protected:
     if method in ('PATCH', 'POST'):
         result, _ = request(path, method, {}, cookies=True, expected=400)
         assert result['error']['error'] == 'invalid_csrf_token'
-request('/player/data', 'PATCH', {'money': 42}, csrf_header, cookies=True)
 request('/player/profile', 'PATCH', {'playerName': 'Smoke ' + uuid.uuid4().hex[:10]}, csrf_header, cookies=True)
 # Validate all remaining protected routes without sending paid upstream requests.
 for path in ['/ai/chat', '/ai/fuel-prices']:
@@ -120,18 +129,18 @@ for path in ['/ai/chat', '/ai/fuel-prices']:
     assert result['error']['error'] != 'invalid_csrf_token'
 request('/fuel-prices/history', cookies=True, expected=400)
 expire(browser_id)
-request('/player/data', cookies=True, expected=401)
+request('/fuel-prices', cookies=True, expected=401)
 state, _ = request('/auth/browser/status', cookies=True)
 assert state['data']['state'] == 'resumable'
 request('/auth/browser/guest/login', 'POST', {}, csrf_header, cookies=True)
-request('/player/data', cookies=True)
+request('/fuel-prices', cookies=True)
 request('/auth/browser/logout', 'POST', cookies=True, expected=400)
 request('/auth/browser/logout', 'POST', headers=csrf_header, cookies=True)
 state, _ = request('/auth/browser/status', cookies=True)
 assert state['data']['state'] == 'signedOut'
 assert any(c.name == '__Secure-gasprice_guest' for c in jar)
 assert not any(c.name == '__Host-gasprice_access' for c in jar)
-request('/player/data', cookies=True, expected=401)
+request('/fuel-prices', cookies=True, expected=401)
 login2, _ = request('/auth/browser/guest/login', 'POST', {}, csrf_header, cookies=True)
 assert login2['data']['playerId'] == login['data']['playerId']
 print('PASS: secure scoped cookies, secret-free JSON, reload, every protected route, CSRF, expiry, retained-credential logout and explicit re-login')

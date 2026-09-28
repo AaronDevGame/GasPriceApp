@@ -16,7 +16,6 @@ public class RateLimitMiddleware
         [ApiRoutes.BrowserGuestLogin] = TimeSpan.FromSeconds(1),
         [ApiRoutes.BrowserLogout] = TimeSpan.FromSeconds(1),
         [ApiRoutes.AuthLogout] = TimeSpan.FromSeconds(1),
-        [ApiRoutes.PlayerData] = TimeSpan.FromSeconds(1),
         [ApiRoutes.PlayerProfile] = TimeSpan.FromSeconds(1),
         [ApiRoutes.AiChat] = TimeSpan.FromSeconds(5),
         [ApiRoutes.AiFuelPrices] = TimeSpan.FromSeconds(5),

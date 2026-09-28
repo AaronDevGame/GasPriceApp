@@ -126,7 +126,6 @@ app.MapGet(ApiRoutes.Info, () => ApiResults.Ok(ApiMetadata.Info));
 app.MapGet(ApiRoutes.Routes, () => ApiResults.Ok(RouteRegistry.Public, "public_routes", InstanceId));
 
 app.MapAuthEndpoints(auth, InstanceId);
-app.MapPlayerDataEndpoints(auth, InstanceId);
 app.MapPlayerProfileEndpoints(auth, InstanceId);
 app.MapAiChatEndpoints(auth, InstanceId);
 app.MapFuelPriceEndpoints(auth, InstanceId);
