@@ -8,6 +8,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { formatPrice, type Prices, type FeedItem } from '@/fuel/api';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
 
+// Enable temporarily when testing logout and reconnection.
+const SHOW_LOGOUT_BUTTON = false;
+
 function asOf(value: string) {
   return new Date(value).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
 }
@@ -72,9 +75,9 @@ export default function HomeScreen() {
               <ThemedText type="title" style={styles.title}>Fuel prices</ThemedText>
               <ThemedText themeColor="textSecondary">Diesel, 91 and 95 in ₱/liter.</ThemedText>
             </View>
-            <View style={styles.actions}>
+            {SHOW_LOGOUT_BUTTON && <View style={styles.actions}>
               <Button title="Logout" disabled={fuel.busy || !fuel.authenticated} onPress={() => void fuel.signOut()} />
-            </View>
+            </View>}
           </View>
           {!fuel.authenticated && !fuel.busy && !fuel.error && <ThemedText>You are signed out. {refreshHint}</ThemedText>}
           {fuel.error && <ThemedText accessibilityRole="alert">{fuel.error} {refreshHint}</ThemedText>}
