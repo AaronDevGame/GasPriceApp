@@ -7,9 +7,11 @@ import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
 import { formatPrice, type Prices, type FeedItem } from '@/fuel/api';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
+import { useAuth } from '@/auth/auth-provider';
 
 // Enable temporarily when testing logout and reconnection.
 const SHOW_LOGOUT_BUTTON = false;
+const SHOW_TOKEN_LOG = true;
 
 function asOf(value: string) {
   return new Date(value).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -43,6 +45,7 @@ function PriceCard({ item }: { item: FeedItem }) {
 
 export default function HomeScreen() {
   const fuel = useFuelPrices();
+  const { tokenLog } = useAuth();
   const theme = useTheme();
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
@@ -79,6 +82,12 @@ export default function HomeScreen() {
               <Button title="Logout" disabled={fuel.busy || !fuel.authenticated} onPress={() => void fuel.signOut()} />
             </View>}
           </View>
+          {SHOW_TOKEN_LOG && <View style={styles.tokenLog} accessibilityLiveRegion="polite">
+            <ThemedText type="smallBold" themeColor="textSecondary">TOKEN LOG · TESTING</ThemedText>
+            {tokenLog.length ? tokenLog.map(entry => <ThemedText key={entry.id} type="small" themeColor="textSecondary">
+              {new Date(entry.time).toLocaleTimeString()} · {entry.message}
+            </ThemedText>) : <ThemedText type="small" themeColor="textSecondary">Checking token…</ThemedText>}
+          </View>}
           {!fuel.authenticated && !fuel.busy && !fuel.error && <ThemedText>You are signed out. {refreshHint}</ThemedText>}
           {fuel.error && <ThemedText accessibilityRole="alert">{fuel.error} {refreshHint}</ThemedText>}
           {fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">{fuel.feed ? 'Updating prices…' : 'Loading available prices…'}</ThemedText></View>}
@@ -131,4 +140,5 @@ const styles = StyleSheet.create({
   inputs: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   input: { flexGrow: 1, flexBasis: 180, borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16 },
   history: { gap: 12 },
+  tokenLog: { gap: 4 },
 });

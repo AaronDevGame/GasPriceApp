@@ -11,6 +11,20 @@ function harness(platform, storage = new Map(), location, timerScale = 1) {
   const timeouts = [];
   let responder;
   let failStorage = false;
+  let now = Date.now();
+  const appListeners = new Set(), visibilityListeners = new Set();
+  const appState = { currentState: 'active', addEventListener: (event, listener) => {
+    assert.equal(event, 'change'); appListeners.add(listener);
+    return { remove: () => appListeners.delete(listener) };
+  } };
+  const document = { visibilityState: 'visible',
+    addEventListener: (event, listener) => { assert.equal(event, 'visibilitychange'); visibilityListeners.add(listener); },
+    removeEventListener: (event, listener) => visibilityListeners.delete(listener),
+  };
+  class ClockDate extends Date {
+    constructor(...values) { super(...(values.length ? values : [now])); }
+    static now() { return now; }
+  }
   const modules = new Map();
   function load(file) {
     if (modules.has(file)) return modules.get(file);
@@ -21,13 +35,13 @@ function harness(platform, storage = new Map(), location, timerScale = 1) {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
     }).outputText;
     vm.runInNewContext(code, {
-      exports, URL, AbortController, clearTimeout, __DEV__: false,
+      exports, URL, AbortController, clearTimeout, __DEV__: false, Date: ClockDate, document,
       setTimeout: (callback, delay) => { timeouts.push(delay); return setTimeout(callback, delay * timerScale); },
       ...(location ? { window: { location } } : {}),
       process: { env: { EXPO_PUBLIC_API_URL: 'https://api.example.test' } },
       fetch: async (url, init) => { calls.push({ url, ...init }); return responder(url, init); },
       require: (name) => {
-        if (name === 'react-native') return { Platform: { OS: platform } };
+        if (name === 'react-native') return { Platform: { OS: platform }, AppState: appState };
         if (name === 'expo-crypto') return { randomUUID };
         if (name === 'expo-secure-store') {
           assert.notEqual(platform, 'web');
@@ -49,6 +63,10 @@ function harness(platform, storage = new Map(), location, timerScale = 1) {
   return {
     client: load(platform === 'web' ? 'session.web' : 'session').authClient, calls, storage,
     http: load('http'), timeouts,
+    tokenLog: load('token-log'), foreground: () => load(platform === 'web' ? 'foreground.web' : 'foreground'),
+    advance: milliseconds => { now += milliseconds; },
+    appState: next => { appState.currentState = next; for (const listener of appListeners) listener(next); },
+    visibility: next => { document.visibilityState = next; for (const listener of visibilityListeners) listener(); },
     respond: (fn) => { responder = fn; }, failStorage: (value) => { failStorage = value; },
   };
 }
@@ -149,6 +167,80 @@ const player = { playerName: 'Guest fixture', playerId: 123456789012345 };
   assert.equal(JSON.parse(failing.storage.get(key)).guestCredential, 'new-credential-fixture');
   console.log('PASS native: retry one-time credential persistence after temporary storage failure');
 
+  const expiresAt = new Date(Date.now() + 3600000).toISOString();
+  const returning = harness('ios', new Map([[key, JSON.stringify({ ...identity, accessTokenExpiresAt: expiresAt })]]));
+  let log = [];
+  const unsubscribeLog = returning.tokenLog.subscribeTokenLog(entries => { log = entries; });
+  assert.equal(await returning.client.resume(), null);
+  assert.equal(returning.calls.length, 0); // Valid native tokens need no status API.
+  returning.advance(3600001);
+  let finishLogin, loginStarted;
+  const started = new Promise(resolve => { loginStarted = resolve; });
+  returning.respond((url, init) => {
+    if (url.endsWith('/auth/guest/login')) {
+      assert.equal(init.headers['X-Guest-Credential'], identity.guestCredential);
+      loginStarted();
+      return new Promise(resolve => { finishLogin = () => resolve(response({
+        ...identity, ...player, accessToken: 'renewed-fixture',
+        accessTokenExpiresAt: new Date(Date.now() + 7200000).toISOString(),
+      })); });
+    }
+    assert.equal(init.headers.Authorization, 'Bearer renewed-fixture');
+    return response({ items: [] });
+  });
+  const renewal = returning.client.resume();
+  await started;
+  const waitingRefresh = returning.client.request('/fuel-prices');
+  const repeatedReturn = returning.client.resume();
+  assert.equal(returning.calls.length, 1); // Price request waits for login.
+  assert.deepEqual(Array.from(log.slice(-2), entry => entry.message), ['Token expired', 'Renewing token…']);
+  finishLogin();
+  assert.equal((await renewal).state, 'authenticated');
+  await waitingRefresh;
+  await repeatedReturn;
+  assert.equal(returning.calls.filter(call => call.url.endsWith('/auth/guest/login')).length, 1);
+  assert.equal(log.at(-1).message, 'Token valid');
+  unsubscribeLog();
+  console.log('PASS native foreground: valid token skips HTTP, expiry renews once, concurrent refresh waits and uses new token');
+
+  const nearExpiry = harness('android', new Map([[key, JSON.stringify({ ...identity,
+    accessTokenExpiresAt: new Date(Date.now() + 30000).toISOString(),
+  })]]));
+  nearExpiry.respond((url, init) => url.endsWith('/auth/guest/login') ? response({ ...identity, ...player,
+    accessToken: 'near-expiry-renewed', accessTokenExpiresAt: expiresAt,
+  }) : (assert.equal(init.headers.Authorization, 'Bearer near-expiry-renewed'), response({ items: [] })));
+  await nearExpiry.client.request('/fuel-prices');
+  assert.ok(nearExpiry.calls[0].url.endsWith('/auth/guest/login'));
+  const expiredIdentity = { ...identity, accessTokenExpiresAt: new Date(Date.now() - 1000).toISOString() };
+  const offline = harness('ios', new Map([[key, JSON.stringify(expiredIdentity)]]));
+  offline.respond(() => { throw new Error('Offline return'); });
+  await assert.rejects(() => offline.client.resume());
+  assert.equal(offline.storage.get(key), JSON.stringify(expiredIdentity));
+  offline.respond(() => response(null, 401, 'invalid_guest_credential'));
+  assert.equal((await offline.client.resume()).state, 'unavailable');
+  assert.equal(offline.storage.get(key), JSON.stringify(expiredIdentity));
+  const signedOut = harness('ios', new Map([[key, JSON.stringify({ ...expiredIdentity, signedOut: true })]]));
+  assert.equal((await signedOut.client.resume()).state, 'signedOut');
+  assert.equal(signedOut.calls.length, 0);
+  const noGuest = harness('ios');
+  assert.equal(await noGuest.client.resume(), null);
+  assert.equal(noGuest.calls.length, 0);
+  console.log('PASS native: pre-request early renewal, offline credential retention, invalid identity and logout preservation');
+
+  for (const platform of ['ios', 'web']) {
+    const lifecycle = harness(platform);
+    let returns = 0;
+    const unsubscribe = lifecycle.foreground().subscribeToForeground(() => { returns++; });
+    if (platform === 'web') { lifecycle.visibility('hidden'); lifecycle.visibility('visible'); }
+    else { lifecycle.appState('active'); lifecycle.appState('background'); lifecycle.appState('active'); lifecycle.appState('active'); }
+    assert.equal(returns, 1);
+    unsubscribe();
+    if (platform === 'web') lifecycle.visibility('visible');
+    else { lifecycle.appState('background'); lifecycle.appState('active'); }
+    assert.equal(returns, 1);
+  }
+  console.log('PASS native/web: foreground detection and listener cleanup');
+
   const web = harness('web');
   let state = 'resumable';
   let csrfFailures = 1;
@@ -174,4 +266,37 @@ const player = { playerName: 'Guest fixture', playerId: 123456789012345 };
   assert.equal((await web.client.login()).state, 'authenticated');
   assert.equal(web.storage.size, 0);
   console.log('PASS web: cookie-only requests, CSRF refresh, resume, logout and explicit re-login');
+
+  const webReturn = harness('web');
+  let browserState = 'authenticated', releaseBrowserLogin, browserLoginStarted;
+  const browserStarted = new Promise(resolve => { browserLoginStarted = resolve; });
+  webReturn.respond((url, init) => {
+    assert.equal(init.credentials, 'same-origin');
+    assert.equal(init.headers.Authorization, undefined);
+    if (url.endsWith('/status')) return response({ state: browserState, ...player });
+    if (url.endsWith('/csrf')) return response({ csrfToken: 'csrf-fixture' });
+    if (url.endsWith('/guest/login')) {
+      browserLoginStarted();
+      return new Promise(resolve => { releaseBrowserLogin = () => {
+        browserState = 'authenticated'; resolve(response({ state: browserState, ...player }));
+      }; });
+    }
+    assert.equal(browserState, 'authenticated');
+    return response({ items: [] });
+  });
+  assert.equal((await webReturn.client.resume()).state, 'authenticated');
+  assert.equal(webReturn.calls.length, 1);
+  browserState = 'resumable';
+  const browserRenewal = webReturn.client.resume();
+  await browserStarted;
+  const browserRefresh = webReturn.client.request('/fuel-prices');
+  assert.ok(!webReturn.calls.some(call => call.url.endsWith('/fuel-prices')));
+  releaseBrowserLogin();
+  await browserRenewal;
+  await browserRefresh;
+  const browserLoginCount = webReturn.calls.filter(call => call.url.endsWith('/guest/login')).length;
+  browserState = 'signedOut';
+  assert.equal((await webReturn.client.resume()).state, 'signedOut');
+  assert.equal(webReturn.calls.filter(call => call.url.endsWith('/guest/login')).length, browserLoginCount);
+  console.log('PASS web foreground: server status, quiet renewal before queued refresh, and cross-tab logout preservation');
 })().catch(() => { console.error('Authentication contract check failed'); process.exitCode = 1; });

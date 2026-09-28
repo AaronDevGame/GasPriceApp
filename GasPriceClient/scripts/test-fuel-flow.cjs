@@ -9,11 +9,13 @@ const point = (date, value) => ({ dataAsOf: date, prices: { diesel: range(value)
 const feed = { items: [{ ...point('2026-09-28', 60), area: { level: 'province', name: 'Cebu', province: 'Cebu' } }] };
 function harness(options = {}) {
   const calls = [], effects = [], states = [], modules = new Map();
+  let onForeground;
   const auth = { session: { state: options.state ?? 'authenticated' }, loading: false, error: null,
     restore: async () => calls.push('restore'), logout: async () => calls.push('logout') };
   const client = {
     restore: async () => auth.session,
     login: async () => { calls.push('login'); return { state: 'authenticated' }; },
+    resume: async () => { calls.push('resume'); return options.resume ? options.resume() : auth.session; },
     request: async (url, init) => {
       calls.push({ url, init });
       if (url.startsWith('/fuel-prices/history')) return { items: [point('2026-09-28', 60), point('2026-09-27', 60)] };
@@ -34,10 +36,13 @@ function harness(options = {}) {
     vm.runInNewContext(code, { exports, URLSearchParams, setTimeout: fn => setTimeout(fn, 0), clearTimeout,
       require: name => {
         if (name === 'react') return {
-          createContext: () => ({}), useCallback: fn => fn, useEffect: fn => effects.push(fn),
+          createContext: () => ({ Provider: 'AuthProvider' }), useCallback: fn => fn, useEffect: fn => effects.push(fn),
           useRef: current => ({ current }), useState: initial => { const cell = { value: initial }; states.push(cell); return [initial, value => { cell.value = value; }]; },
         };
-        if (name === 'react/jsx-runtime') return {};
+        if (name === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }) };
+        if (name === './foreground') return { subscribeToForeground: callback => {
+          onForeground = callback; return () => { onForeground = undefined; };
+        } };
         if (name === '@/auth/auth-provider') return { useAuth: () => auth };
         if (name === '@/auth/session' || name === './session') return { authClient: client };
         if (name === './location' && relative === 'fuel/use-fuel-prices' && options.locationReason) return {
@@ -55,7 +60,7 @@ function harness(options = {}) {
     }, { filename });
     return exports;
   }
-  return { load, calls, effects, states };
+  return { load, calls, effects, states, returnToForeground: () => onForeground?.() };
 }
 async function settle(h) {
   for (let i = 0; i < 50; i++) {
@@ -72,6 +77,35 @@ async function settle(h) {
   const invalid = harness({ state: 'unavailable' }); await assert.rejects(() => invalid.load('auth/auth-provider').ensureSession());
   assert.ok(!invalid.calls.includes('login'));
   console.log('PASS silent startup: new, saved, signed-out and invalid identities');
+  let completeResume;
+  const provider = harness({ resume: () => new Promise(resolve => { completeResume = resolve; }) });
+  provider.load('auth/auth-provider').AuthProvider({ children: null });
+  const cleanups = provider.effects.map(effect => effect());
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(provider.states[0].value.state, 'authenticated');
+  assert.equal(provider.states[1].value, false);
+  provider.returnToForeground();
+  provider.returnToForeground();
+  assert.equal(provider.calls.filter(call => call === 'resume').length, 1);
+  assert.equal(provider.states[1].value, false); // No full-screen auth loading during renewal.
+  assert.equal(provider.states[0].value.state, 'authenticated');
+  completeResume({ state: 'authenticated' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(provider.states[1].value, false);
+  cleanups.forEach(cleanup => cleanup?.());
+  provider.returnToForeground();
+  assert.equal(provider.calls.filter(call => call === 'resume').length, 1);
+  const offlineProvider = harness({ resume: () => { throw new Error('Offline'); } });
+  offlineProvider.load('auth/auth-provider').AuthProvider({ children: null });
+  offlineProvider.effects.forEach(effect => effect());
+  await new Promise(resolve => setImmediate(resolve));
+  offlineProvider.returnToForeground();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(offlineProvider.states[0].value.state, 'authenticated');
+  assert.equal(offlineProvider.states[1].value, false);
+  assert.equal(offlineProvider.states[2].value, null);
+  assert.ok(offlineProvider.states[3].value.at(-1).message.includes('Session check failed'));
+  console.log('PASS foreground provider: no blocking loading, duplicate-return coalescing, cleanup and offline screen preservation');
   const granted = harness(); granted.load('fuel/use-fuel-prices').useFuelPrices(); granted.effects[0](); await settle(granted);
   assert.equal(granted.calls[0].url, '/fuel-prices');
   assert.ok(granted.calls.indexOf('permission') > 0);

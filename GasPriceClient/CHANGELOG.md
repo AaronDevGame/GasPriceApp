@@ -17,6 +17,8 @@
 - Keep logout for testing and use Refresh prices to reconnect silently or refresh the current area.
 
 ### Added
+- Renew expired native sessions quietly on return to the foreground, and check browser sessions when the page becomes visible; keep prices and controls available while API actions wait for renewal.
+- Add a temporary timestamped token log below the header showing expiry, renewal, validity, and retry failures without exposing credentials.
 - Request foreground location access on web, iOS, and Android after the first feed loads, then refresh local estimates and prioritize the resolved area.
 - Allow manual city/province selection when location is unavailable or declined.
 - Show up to five actual price changes in Recent updates, with an empty state for unchanged prices.

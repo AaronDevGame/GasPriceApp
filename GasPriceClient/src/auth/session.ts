@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 
 import { ApiError, send, serialQueue } from './http';
 import type { AuthClient, Session } from './types';
+import { logToken } from './token-log';
 
 const storageKey = 'gasprice.guest-session.v1';
 const storageOptions = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
@@ -47,7 +48,7 @@ function headers(value: SavedSession): Record<string, string> {
   };
 }
 
-async function login(): Promise<Session> {
+async function issueToken(): Promise<Session> {
   let value = await read();
   if (!value) {
     value = { appInstanceId: Crypto.randomUUID() };
@@ -69,17 +70,31 @@ async function login(): Promise<Session> {
   return { state: 'authenticated', playerName: result.playerName, playerId: result.playerId };
 }
 
+async function login(): Promise<Session> {
+  logToken('Renewing token…');
+  try {
+    const session = await issueToken();
+    logToken('Token valid');
+    return session;
+  } catch (error) {
+    logToken('Token renewal failed · Retry on your next action');
+    throw error;
+  }
+}
+
 async function restore(): Promise<Session> {
   const value = await read();
   if (!value) return { state: 'new' };
-  if (value.signedOut) return { state: 'signedOut' };
+  if (value.signedOut) { logToken('Signed out'); return { state: 'signedOut' }; }
   if (value.accessToken) {
     try {
       const status = await send<{ playerName: string; playerId: number }>('/auth/status', { headers: headers(value) });
+      logToken('Token valid');
       return { state: 'authenticated', playerName: status.playerName, playerId: status.playerId };
     } catch (error) {
       if (!(error instanceof ApiError) || error.status !== 401) throw error;
       if (error.code === 'player_not_logged_in') return { state: 'signedOut' };
+      if (error.code === 'access_token_expired') logToken('Token expired');
     }
   }
   if (!value.guestCredential) return { state: value.accessToken ? 'unavailable' : 'new' };
@@ -91,14 +106,42 @@ async function restore(): Promise<Session> {
   }
 }
 
+async function resume(): Promise<Session | null> {
+  const value = await read();
+  if (!value) return null;
+  if (value.signedOut) { logToken('Signed out'); return { state: 'signedOut' }; }
+  const expiresAt = Date.parse(value.accessTokenExpiresAt ?? '');
+  if (!value.accessToken || !Number.isFinite(expiresAt)) return restore();
+  const remaining = expiresAt - Date.now();
+  if (remaining > 60000) { logToken('Token valid'); return null; }
+  logToken(remaining <= 0 ? 'Token expired' : 'Token expires soon');
+  if (!value.guestCredential) { logToken('Guest session unavailable'); return { state: 'unavailable' }; }
+  try { return await login(); } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      logToken('Guest session unavailable');
+      return { state: 'unavailable' };
+    }
+    throw error;
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let value = await read();
   if (!value || value.signedOut) throw new ApiError(401, 'player_not_logged_in');
+  // Also cover expiry while the user remains in the foreground. Use only known
+  // expiration metadata here; legacy sessions still use the 401 recovery below.
+  const expiresAt = Date.parse(value.accessTokenExpiresAt ?? '');
+  if (value.guestCredential && Number.isFinite(expiresAt) && expiresAt - Date.now() <= 60000) {
+    const next = await resume();
+    if (next?.state === 'unavailable') throw new ApiError(401, 'identity_unavailable');
+    value = (await read())!;
+  }
   try {
     return await send<T>(path, { ...init, headers: { ...init.headers, ...headers(value) } });
   } catch (error) {
     if (!(error instanceof ApiError) || error.status !== 401 ||
         error.code === 'player_not_logged_in' || !value.guestCredential) throw error;
+    if (error.code === 'access_token_expired') logToken('Token expired');
     await login();
     value = (await read())!;
     return send<T>(path, { ...init, headers: { ...init.headers, ...headers(value) } });
@@ -121,6 +164,7 @@ async function logout(): Promise<Session> {
     }
   }
   await persist({ appInstanceId: value.appInstanceId, guestCredential: value.guestCredential, signedOut: true });
+  logToken('Signed out');
   return { state: 'signedOut' };
 }
 
@@ -128,5 +172,6 @@ export const authClient: AuthClient = {
   logout: () => queue(logout),
   restore: () => queue(restore),
   login: () => queue(login),
+  resume: () => queue(resume),
   request: <T>(path: string, init?: RequestInit) => queue(() => request<T>(path, init)),
 };
