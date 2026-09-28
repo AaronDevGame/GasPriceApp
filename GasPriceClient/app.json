@@ -33,7 +33,13 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow GasPrice to use your location to show fuel prices near you."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

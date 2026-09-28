@@ -17,10 +17,10 @@ async function mutation<T>(path: string, init: RequestInit): Promise<T> {
   throw new ApiError(400, 'invalid_csrf_token');
 }
 
-function login(playerName?: string, startNewGuest = false) {
+function login() {
   return mutation<Session>('/auth/browser/guest/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ playerName, startNewGuest }),
+    body: JSON.stringify({}),
   });
 }
 
@@ -56,6 +56,6 @@ export const authClient: AuthClient = {
     return { state: 'signedOut' };
   }),
   restore: () => queue(restore),
-  login: (name, fresh) => queue(() => login(name, fresh)),
+  login: () => queue(login),
   request: <T>(path: string, init?: RequestInit) => queue(() => request<T>(path, init)),
 };

@@ -47,9 +47,9 @@ function headers(value: SavedSession): Record<string, string> {
   };
 }
 
-async function login(playerName?: string, startNewGuest = false): Promise<Session> {
+async function login(): Promise<Session> {
   let value = await read();
-  if (!value || startNewGuest) {
+  if (!value) {
     value = { appInstanceId: Crypto.randomUUID() };
     await persist(value);
   }
@@ -59,7 +59,7 @@ async function login(playerName?: string, startNewGuest = false): Promise<Sessio
       'Content-Type': 'application/json', 'X-App-Instance-Id': value.appInstanceId,
       ...(value.guestCredential ? { 'X-Guest-Credential': value.guestCredential } : {}),
     },
-    body: JSON.stringify({ playerName }),
+    body: JSON.stringify({}),
   });
   await persist({
     appInstanceId: result.appInstanceId, accessToken: result.accessToken,
@@ -82,7 +82,7 @@ async function restore(): Promise<Session> {
       if (error.code === 'player_not_logged_in') return { state: 'signedOut' };
     }
   }
-  if (!value.guestCredential) return { state: 'unavailable' };
+  if (!value.guestCredential) return { state: value.accessToken ? 'unavailable' : 'new' };
   try {
     return await login();
   } catch (error) {
@@ -127,6 +127,6 @@ async function logout(): Promise<Session> {
 export const authClient: AuthClient = {
   logout: () => queue(logout),
   restore: () => queue(restore),
-  login: (name, fresh) => queue(() => login(name, fresh)),
+  login: () => queue(login),
   request: <T>(path: string, init?: RequestInit) => queue(() => request<T>(path, init)),
 };

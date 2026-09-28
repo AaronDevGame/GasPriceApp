@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- Explain when Expo Web is opened on the app-only port instead of the HTTPS API proxy.
+- Distinguish timeouts, invalid API responses, and server/proxy failures instead of reporting all of them as connection failures.
+- Allow up to one minute for the first session-status request while the hosted backend starts.
+
+### Changed
+- Start silently with guest authentication and immediately show saved fuel prices, without player-name input or a login screen.
+- Replace the game overview and starter navigation with area prices for Diesel, Gasoline 91, and Gasoline 95 in pesos per liter, with locations and as-of dates.
+- Keep logout for testing and use Refresh prices to reconnect silently or refresh the current area.
+
+### Added
+- Request foreground location access on web, iOS, and Android after the first feed loads, then refresh local estimates and prioritize the resolved area.
+- Allow manual city/province selection when location is unavailable or declined.
+- Show up to five actual price changes in Recent updates, with an empty state for unchanged prices.
+
+### Removed
+- Player-data requests and all guest setup, name entry, and player overview UI.
+
 ## [1.0.1] - 2026-09-28
 
 ### Added
