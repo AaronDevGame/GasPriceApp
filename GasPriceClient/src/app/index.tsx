@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Button, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Button, Platform, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -44,6 +44,13 @@ export default function HomeScreen() {
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
   const [validation, setValidation] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshHint = Platform.OS === 'web' ? 'Reload this page to reconnect or update prices.' : 'Pull down to reconnect or update prices.';
+  const pullToRefresh = async () => {
+    if (fuel.busy || refreshing) return;
+    setRefreshing(true);
+    try { await fuel.refresh(); } finally { setRefreshing(false); }
+  };
   const chooseArea = () => {
     if (!city.trim() && !province.trim()) { setValidation('Enter a city or province.'); return; }
     setValidation(null);
@@ -51,7 +58,13 @@ export default function HomeScreen() {
   };
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
+        alwaysBounceVertical={Platform.OS === 'ios'}
+        refreshControl={Platform.OS === 'web' ? undefined : <RefreshControl
+          refreshing={refreshing} onRefresh={() => void pullToRefresh()} enabled={!fuel.busy}
+          tintColor={theme.text} colors={[theme.text]} progressBackgroundColor={theme.backgroundElement}
+        />}
+      >
         <View style={styles.content}>
           <View style={styles.header}>
             <View style={styles.brand}>
@@ -60,13 +73,12 @@ export default function HomeScreen() {
               <ThemedText themeColor="textSecondary">Diesel, 91 and 95 in ₱/liter.</ThemedText>
             </View>
             <View style={styles.actions}>
-              <Button title="Refresh prices" disabled={fuel.busy} onPress={fuel.refresh} />
               <Button title="Logout" disabled={fuel.busy || !fuel.authenticated} onPress={() => void fuel.signOut()} />
             </View>
           </View>
-          {!fuel.authenticated && !fuel.busy && !fuel.error && <ThemedText>You are signed out. Refresh prices to reconnect automatically.</ThemedText>}
-          {fuel.error && <ThemedText accessibilityRole="alert">{fuel.error}</ThemedText>}
-          {fuel.busy && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">{fuel.feed ? 'Updating prices…' : 'Loading available prices…'}</ThemedText></View>}
+          {!fuel.authenticated && !fuel.busy && !fuel.error && <ThemedText>You are signed out. {refreshHint}</ThemedText>}
+          {fuel.error && <ThemedText accessibilityRole="alert">{fuel.error} {refreshHint}</ThemedText>}
+          {fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">{fuel.feed ? 'Updating prices…' : 'Loading available prices…'}</ThemedText></View>}
           {fuel.feed?.items.map(item => <PriceCard key={JSON.stringify(item.area)} item={item} />)}
           {fuel.feed?.items.length === 0 && <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText style={styles.area}>No saved fuel prices yet</ThemedText>

@@ -101,8 +101,8 @@ export function useFuelPrices() {
   }, [authenticated, run, publish, locate, cancel]);
 
   const refresh = () => {
-    if (!authenticated || authError) { void restore(); return; }
-    void run(async ticket => {
+    if (!authenticated || authError) return restore();
+    return run(async ticket => {
       if (coordinates.current) {
         const next = await refreshLocation(coordinates.current);
         publish(next.feed, ticket);
