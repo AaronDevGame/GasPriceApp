@@ -9,6 +9,7 @@
 - Allow up to one minute for the first session-status request while the hosted backend starts.
 
 ### Changed
+- Keep all three fuel prices in one horizontal row on mobile and narrow web cards, with compact price typography sized to the available card width.
 - Start silently with guest authentication and immediately show saved fuel prices, without player-name input or a login screen.
 - Replace the game overview and starter navigation with area prices for Diesel, Gasoline 91, and Gasoline 95 in pesos per liter, with locations and as-of dates.
 - Keep logout for testing and use Refresh prices to reconnect silently or refresh the current area.

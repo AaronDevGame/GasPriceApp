@@ -12,12 +12,20 @@ function asOf(value: string) {
   return new Date(value).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 function PriceGrid({ prices }: { prices: Prices }) {
-  return <View style={styles.prices}>
-    {(['diesel', 'gasoline91', 'gasoline95'] as const).map((key, index) => <View key={key} style={styles.price}>
-      <ThemedText type="small" themeColor="textSecondary">{['Diesel', 'Gasoline 91', 'Gasoline 95'][index]}</ThemedText>
-      <ThemedText style={styles.amount}>{formatPrice(prices[key])}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">per liter</ThemedText>
-    </View>)}
+  const [width, setWidth] = useState(0);
+  const compact = width < 360;
+  const amountSize = width < 280 ? 16 : compact ? 20 : 24;
+  return <View style={[styles.prices, compact && styles.pricesCompact]} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
+    {(['diesel', 'gasoline91', 'gasoline95'] as const).map((key, index) => {
+      const formatted = formatPrice(prices[key]);
+      const stackedRange = width < 600 && formatted.includes('–');
+      const fontSize = stackedRange && compact ? (width < 280 ? 14 : 16) : amountSize;
+      return <View key={key} style={styles.price}>
+        <ThemedText type="small" themeColor="textSecondary" style={[compact && styles.priceCaptionCompact, width < 280 && styles.priceLabelNarrow]}>{['Diesel', 'Gasoline 91', 'Gasoline 95'][index]}</ThemedText>
+        <ThemedText style={[styles.amount, { fontSize, lineHeight: fontSize + 8 }]}>{stackedRange ? formatted.replace('–', '–\n') : formatted}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" style={compact && styles.priceCaptionCompact}>per liter</ThemedText>
+      </View>;
+    })}
   </View>;
 }
 function PriceCard({ item }: { item: FeedItem }) {
@@ -101,8 +109,10 @@ const styles = StyleSheet.create({
   brand: { flexGrow: 1, gap: 8 }, title: { fontSize: 38, lineHeight: 44 },
   accent: { color: '#208AEF' }, actions: { gap: 8 }, loading: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   card: { padding: 20, borderRadius: 20, gap: 12 }, area: { fontSize: 21, lineHeight: 28, fontWeight: '600' },
-  prices: { flexDirection: 'row', flexWrap: 'wrap', gap: 20, marginTop: 8 }, price: { flexGrow: 1, flexBasis: 180, gap: 4 },
-  amount: { fontSize: 24, lineHeight: 32, fontWeight: '700' },
+  prices: { flexDirection: 'row', gap: 12, marginTop: 8 }, pricesCompact: { gap: 8 },
+  price: { flex: 1, minWidth: 0, gap: 4 },
+  priceCaptionCompact: { fontSize: 12, lineHeight: 18 }, priceLabelNarrow: { minHeight: 36 },
+  amount: { fontSize: 24, lineHeight: 32, fontWeight: '700', flexGrow: 1 },
   inputs: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   input: { flexGrow: 1, flexBasis: 180, borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16 },
   history: { gap: 12 },
