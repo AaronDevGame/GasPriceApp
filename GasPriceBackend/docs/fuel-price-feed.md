@@ -5,6 +5,13 @@ Both read endpoints require `Authorization: Bearer <token>` and
 `POST /ai/fuel-prices` with coordinates to research a local price before
 reloading the feed. A failed research request does not affect the general feed.
 
+Zigwheels fuel-price evidence is excluded. Stored snapshots citing it are
+omitted from research cache hits, the feed, and history, including snapshots
+that also cite other sources. Research can reuse the next allowed fresh cache
+entry or search again. New AI results citing an excluded source receive HTTP
+502 (`ai_invalid_response`) and are not cached. No cache deletion or database
+migration is required.
+
 ## Feed
 
 `GET /fuel-prices?limit=10` returns up to ten distinct areas, with each

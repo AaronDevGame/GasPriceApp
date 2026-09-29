@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Exclude Zigwheels fuel-price evidence from AI research, reject new results citing it, and skip existing affected cache entries in research, feed, and history responses.
+
 ## [1.10.2] - 2026-09-29
 
 ### Changed

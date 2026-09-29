@@ -338,6 +338,10 @@ public static class FuelPriceReadEndpoints
         {
             using var document = JsonDocument.Parse(cache.ResultJson);
             var root = document.RootElement;
+            // Reject the whole snapshot: its ranges may combine multiple sources.
+            if (FuelPriceSourcePolicy.HasExcludedSource(root))
+                return null;
+
             if (!root.TryGetProperty("data_as_of", out var asOfValue) ||
                 asOfValue.ValueKind != JsonValueKind.String ||
                 !TryParseDataAsOf(asOfValue.GetString(), out var dataAsOfUtc) ||

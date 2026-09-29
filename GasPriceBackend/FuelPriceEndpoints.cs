@@ -113,7 +113,7 @@ public static class FuelPriceEndpoints
             var provinceKey = NormalizeLocation(fuelRequest.Province);
             var regionKey = NormalizeLocation(fuelRequest.Region);
 
-            var cached = await db.FuelPriceCaches
+            var cacheCandidates = await db.FuelPriceCaches
                 .AsNoTracking()
                 .Where(c =>
                     ((provinceKey != null && c.ProvinceKey == provinceKey &&
@@ -132,12 +132,13 @@ public static class FuelPriceEndpoints
                 .OrderBy(c => c.Scope == FuelPriceCacheScopes.City ? 0 :
                     c.Scope == FuelPriceCacheScopes.Province ? 1 : 2)
                 .ThenByDescending(c => c.CachedAt)
-                .FirstOrDefaultAsync(cancellationToken);
+                .ToListAsync(cancellationToken);
 
-            if (cached is not null)
+            foreach (var cached in cacheCandidates)
             {
                 using var cachedDocument = JsonDocument.Parse(cached.ResultJson);
-                if (TryGetFreshDataAsOf(
+                if (!FuelPriceSourcePolicy.HasExcludedSource(cachedDocument.RootElement) &&
+                    TryGetFreshDataAsOf(
                         cachedDocument.RootElement,
                         now,
                         out var cachedDataAsOfUtc))
@@ -185,6 +186,14 @@ public static class FuelPriceEndpoints
                     fuelRequest,
                     now,
                     cancellationToken);
+                if (FuelPriceSourcePolicy.HasExcludedSource(response.Result))
+                {
+                    return ApiResults.BadGateway(
+                        "ai_invalid_response",
+                        instanceId,
+                        "The fuel-price agent returned evidence from an excluded source.");
+                }
+
                 var cachedAt = timeProvider.GetUtcNow().UtcDateTime;
                 var hasUsablePrices = HasUsablePrices(response.Result);
                 var dataAsOfUtc = default(DateTime);
