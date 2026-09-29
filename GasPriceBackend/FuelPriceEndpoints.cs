@@ -113,9 +113,6 @@ public static class FuelPriceEndpoints
             var cityKey = NormalizeLocation(fuelRequest.City);
             var provinceKey = NormalizeLocation(fuelRequest.Province);
             var regionKey = NormalizeLocation(fuelRequest.Region);
-            var unavailableScope = cityKey is not null ? FuelPriceCacheScopes.City :
-                provinceKey is not null ? FuelPriceCacheScopes.Province :
-                FuelPriceCacheScopes.Region;
 
             var cacheCandidates = await db.FuelPriceCaches
                 .AsNoTracking()
@@ -138,19 +135,16 @@ public static class FuelPriceEndpoints
                 .ThenByDescending(c => c.CachedAt)
                 .ToListAsync(cancellationToken);
 
-            FuelPriceCache? unavailableCached = null;
             foreach (var cached in cacheCandidates)
             {
                 using var cachedDocument = JsonDocument.Parse(cached.ResultJson);
                 if (sourcePolicy.HasExcludedSource(cachedDocument.RootElement))
                     continue;
 
-                if (cached.Scope == unavailableScope &&
-                    IsUnavailableResult(cachedDocument.RootElement))
-                {
-                    unavailableCached ??= cached;
+                // An unavailable snapshot does not establish that a new search
+                // will also fail; do not let it suppress a retry.
+                if (IsUnavailableResult(cachedDocument.RootElement))
                     continue;
-                }
 
                 if (TryGetFreshDataAsOf(
                         cachedDocument.RootElement,
@@ -182,31 +176,6 @@ public static class FuelPriceEndpoints
                 }
             }
 
-            if (unavailableCached is not null)
-            {
-                using var cachedDocument = JsonDocument.Parse(unavailableCached.ResultJson);
-                await db.FuelPriceCaches
-                    .Where(c => c.Id == unavailableCached.Id)
-                    .ExecuteUpdateAsync(
-                        setters => setters.SetProperty(c => c.HitCount, c => c.HitCount + 1),
-                        cancellationToken);
-
-                return ApiResults.Ok(
-                    new FuelPriceApiResponse(
-                        WithRequestLocation(cachedDocument.RootElement, coordinates, location),
-                        unavailableCached.Model,
-                        null,
-                        null,
-                        false,
-                        true,
-                        true,
-                        unavailableCached.Scope,
-                        unavailableCached.CachedAt,
-                        unavailableCached.RefreshAfter),
-                    "fuel_price_response",
-                    instanceId);
-            }
-
             if (!openAi.IsConfigured)
                 return ApiResults.ServiceUnavailable(
                     "ai_service_not_configured",
@@ -235,7 +204,6 @@ public static class FuelPriceEndpoints
 
                 var cachedAt = timeProvider.GetUtcNow().UtcDateTime;
                 var hasUsablePrices = HasUsablePrices(response.Result);
-                var isUnavailable = IsUnavailableResult(response.Result);
                 var dataAsOfUtc = default(DateTime);
                 if (hasUsablePrices &&
                     !TryGetFreshDataAsOf(response.Result, cachedAt, out dataAsOfUtc))
@@ -246,9 +214,7 @@ public static class FuelPriceEndpoints
                         "The fuel-price agent did not provide evidence verified within the last seven days.");
                 }
 
-                var responseCacheScope = isUnavailable
-                    ? unavailableScope
-                    : TryGetResponseCacheScope(response.Result);
+                var responseCacheScope = TryGetResponseCacheScope(response.Result);
                 var responseEstimateNameKey = NormalizeLocation(
                     TryGetEstimateAreaName(response.Result));
                 var responseCity = TryGetResponseLocation(response.Result, "city");
@@ -258,17 +224,17 @@ public static class FuelPriceEndpoints
                 var responseProvinceKey = NormalizeLocation(responseProvince);
                 var responseRegionKey = NormalizeLocation(responseRegion);
                 var cacheStored =
-                    (hasUsablePrices || isUnavailable) &&
+                    hasUsablePrices &&
                     responseCacheScope is not null &&
                     responseRegionKey == regionKey &&
                     (responseCacheScope != FuelPriceCacheScopes.Region || regionKey != null) &&
-                    (isUnavailable || responseEstimateNameKey == (responseCacheScope switch
+                    responseEstimateNameKey == (responseCacheScope switch
                     {
                         FuelPriceCacheScopes.City => cityKey,
                         FuelPriceCacheScopes.Province => provinceKey,
                         FuelPriceCacheScopes.Region => regionKey,
                         _ => null
-                    })) &&
+                    }) &&
                     (responseCacheScope == FuelPriceCacheScopes.Region ||
                      responseProvinceKey == provinceKey) &&
                     (responseCacheScope != FuelPriceCacheScopes.City ||
@@ -277,9 +243,7 @@ public static class FuelPriceEndpoints
 
                 if (cacheStored)
                 {
-                    var cacheRefreshAfter = isUnavailable
-                        ? cachedAt.AddHours(2)
-                        : GetRefreshAfter(cachedAt, dataAsOfUtc);
+                    var cacheRefreshAfter = GetRefreshAfter(cachedAt, dataAsOfUtc);
                     refreshAfter = cacheRefreshAfter;
                     var isCityCache = responseCacheScope == FuelPriceCacheScopes.City;
                     db.FuelPriceCaches.Add(new FuelPriceCache

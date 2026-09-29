@@ -7,8 +7,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
-- Search DOE's area-specific pump-price reports before broader sources, block excluded domains at the web-search tool, and reduce returned search context.
-- Reuse a verified unavailable fuel-price result for two hours to avoid repeating costly searches when no eligible prices were found.
+- Search allowed fuel-price sources without a DOE-first requirement while keeping the two-call tool limit; ignore previously cached unavailable results so they cannot suppress research.
+- Block excluded domains at the web-search tool and reduce returned search context.
 - Count paid web-search actions separately from page opens/finds in cost estimates and diagnostics.
 - Exclude Zigwheels fuel-price evidence from AI research, reject new results citing it, and skip existing affected cache entries in research, feed, and history responses.
 - Keep excluded source names and domains in `agents/excluded-fuel-price-sources.json`, shared by research instructions and backend validation.
