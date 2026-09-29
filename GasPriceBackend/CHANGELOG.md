@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Exclude Zigwheels fuel-price evidence from AI research, reject new results citing it, and skip existing affected cache entries in research, feed, and history responses.
+- Keep excluded source names and domains in `agents/excluded-fuel-price-sources.json`, shared by research instructions and backend validation.
 
 ## [1.10.2] - 2026-09-29
 

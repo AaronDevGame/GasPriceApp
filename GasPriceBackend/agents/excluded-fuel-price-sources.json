@@ -1,0 +1,9 @@
+{
+  "sources": [
+    {
+      "names": ["Zigwheels", "Zigwheels Philippines", "Zigzagwheels"],
+      "domains": ["zigwheels.ph", "zigwheels.com", "zigzagwheels.ph", "zigzagwheels.com"],
+      "reason": "Fuel-price values are not trusted."
+    }
+  ]
+}

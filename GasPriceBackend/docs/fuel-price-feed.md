@@ -12,6 +12,12 @@ entry or search again. New AI results citing an excluded source receive HTTP
 502 (`ai_invalid_response`) and are not cached. No cache deletion or database
 migration is required.
 
+Maintain excluded names and domains in `agents/excluded-fuel-price-sources.json`.
+The backend loads and validates this file at startup, uses it for all source
+checks, and appends its contents to the fuel-price agent's Markdown instructions.
+Domain exclusions include subdomains. Restart or redeploy after editing the file;
+a missing or invalid file prevents startup rather than disabling exclusions.
+
 ## Feed
 
 `GET /fuel-prices?limit=10` returns up to ten distinct areas, with each

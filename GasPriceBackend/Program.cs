@@ -11,6 +11,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(DbConfig.ResolveConnectionString(builder.Configuration)));
 builder.Services.AddBrowserAuthentication();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton(new FuelPriceSourcePolicy(builder.Environment));
 builder.Services.AddHttpClient<OpenAiResponsesClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.openai.com/");

@@ -76,6 +76,7 @@ public static class FuelPriceReadEndpoints
         app.MapGet(ApiRoutes.FuelPrices, async (
             HttpRequest request,
             AppDbContext db,
+            FuelPriceSourcePolicy sourcePolicy,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -92,7 +93,7 @@ public static class FuelPriceReadEndpoints
             var snapshots = (await db.FuelPriceCaches
                     .AsNoTracking()
                     .ToListAsync(cancellationToken))
-                .Select(cache => TryReadSnapshot(cache, now))
+                .Select(cache => TryReadSnapshot(cache, now, sourcePolicy))
                 .OfType<Snapshot>()
                 .GroupBy(snapshot => AreaKey(snapshot.Cache))
                 .Select(group => group
@@ -149,6 +150,7 @@ public static class FuelPriceReadEndpoints
         app.MapGet(ApiRoutes.FuelPriceHistory, async (
             HttpRequest request,
             AppDbContext db,
+            FuelPriceSourcePolicy sourcePolicy,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -177,7 +179,7 @@ public static class FuelPriceReadEndpoints
             var now = timeProvider.GetUtcNow().UtcDateTime;
             var snapshots = candidates
                 .Where(cache => Matches(cache, area, scope!))
-                .Select(cache => TryReadSnapshot(cache, now))
+                .Select(cache => TryReadSnapshot(cache, now, sourcePolicy))
                 .OfType<Snapshot>()
                 .OrderByDescending(snapshot => snapshot.DataAsOfUtc)
                 .ThenByDescending(snapshot => snapshot.Cache.CachedAt)
@@ -332,14 +334,15 @@ public static class FuelPriceReadEndpoints
             _ => area.Region!
         }, area.City, area.Province, area.Region);
 
-    private static Snapshot? TryReadSnapshot(FuelPriceCache cache, DateTime now)
+    private static Snapshot? TryReadSnapshot(
+        FuelPriceCache cache, DateTime now, FuelPriceSourcePolicy sourcePolicy)
     {
         try
         {
             using var document = JsonDocument.Parse(cache.ResultJson);
             var root = document.RootElement;
             // Reject the whole snapshot: its ranges may combine multiple sources.
-            if (FuelPriceSourcePolicy.HasExcludedSource(root))
+            if (sourcePolicy.HasExcludedSource(root))
                 return null;
 
             if (!root.TryGetProperty("data_as_of", out var asOfValue) ||

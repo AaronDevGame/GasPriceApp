@@ -34,6 +34,7 @@ public static class FuelPriceEndpoints
             AppDbContext db,
             OpenAiResponsesClient openAi,
             GeoapifyReverseGeocodingClient geoapify,
+            FuelPriceSourcePolicy sourcePolicy,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
@@ -137,7 +138,7 @@ public static class FuelPriceEndpoints
             foreach (var cached in cacheCandidates)
             {
                 using var cachedDocument = JsonDocument.Parse(cached.ResultJson);
-                if (!FuelPriceSourcePolicy.HasExcludedSource(cachedDocument.RootElement) &&
+                if (!sourcePolicy.HasExcludedSource(cachedDocument.RootElement) &&
                     TryGetFreshDataAsOf(
                         cachedDocument.RootElement,
                         now,
@@ -186,7 +187,7 @@ public static class FuelPriceEndpoints
                     fuelRequest,
                     now,
                     cancellationToken);
-                if (FuelPriceSourcePolicy.HasExcludedSource(response.Result))
+                if (sourcePolicy.HasExcludedSource(response.Result))
                 {
                     return ApiResults.BadGateway(
                         "ai_invalid_response",

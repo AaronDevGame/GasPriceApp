@@ -25,7 +25,8 @@ public sealed class OpenAiResponsesClient
         HttpClient httpClient,
         IConfiguration configuration,
         ILogger<OpenAiResponsesClient> logger,
-        IHostEnvironment environment)
+        IHostEnvironment environment,
+        FuelPriceSourcePolicy sourcePolicy)
     {
         _httpClient = httpClient;
         _logger = logger;
@@ -35,7 +36,7 @@ public sealed class OpenAiResponsesClient
             environment.ContentRootPath,
             FuelPriceAgentRelativePath);
         if (File.Exists(fuelPriceAgentPath))
-            _fuelPriceInstructions = File.ReadAllText(fuelPriceAgentPath);
+            _fuelPriceInstructions = File.ReadAllText(fuelPriceAgentPath) + "\n\n" + sourcePolicy.Instructions;
         else
             _logger.LogWarning(
                 "Fuel-price agent instructions were not found at {AgentPath}.",
