@@ -20,6 +20,7 @@ public sealed class OpenAiResponsesClient
     private readonly ILogger<OpenAiResponsesClient> _logger;
     private readonly string? _apiKey;
     private readonly string? _fuelPriceInstructions;
+    private readonly FuelPriceSourcePolicy _fuelPriceSourcePolicy;
 
     public OpenAiResponsesClient(
         HttpClient httpClient,
@@ -31,6 +32,7 @@ public sealed class OpenAiResponsesClient
         _httpClient = httpClient;
         _logger = logger;
         _apiKey = configuration["OPENAI_API_KEY"];
+        _fuelPriceSourcePolicy = sourcePolicy;
 
         var fuelPriceAgentPath = Path.Combine(
             environment.ContentRootPath,
@@ -130,7 +132,11 @@ public sealed class OpenAiResponsesClient
                 Model,
                 input,
                 _fuelPriceInstructions!,
-                [new OpenAiWebSearchTool("web_search", ExternalWebAccess: true)],
+                [new OpenAiWebSearchTool(
+                    "web_search",
+                    ExternalWebAccess: true,
+                    SearchContextSize: "low",
+                    Filters: new OpenAiWebSearchFilters(_fuelPriceSourcePolicy.BlockedDomains))],
                 "auto",
                 FuelPriceMaxToolCalls,
                 FuelPriceMaxOutputTokens,
@@ -195,7 +201,13 @@ public sealed class OpenAiResponsesClient
                 if (itemType.GetString() == "web_search_call")
                 {
                     usedWebSearch = true;
-                    webSearchCalls++;
+                    // Page opens and in-page finds are tool actions, not search actions.
+                    if (!outputItem.TryGetProperty("action", out var action) ||
+                        action.ValueKind != JsonValueKind.Object ||
+                        !action.TryGetProperty("type", out var actionType) ||
+                        actionType.ValueKind != JsonValueKind.String ||
+                        actionType.GetString() == "search")
+                        webSearchCalls++;
                     continue;
                 }
 
@@ -250,6 +262,9 @@ public sealed class OpenAiResponsesClient
         var calls = 0;
         var completed = 0;
         var failed = 0;
+        var searches = 0;
+        var pageOpens = 0;
+        var pageFinds = 0;
         var sourceDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (root.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Array)
         {
@@ -268,8 +283,21 @@ public sealed class OpenAiResponsesClient
                 }
 
                 if (!item.TryGetProperty("action", out var action) ||
-                    action.ValueKind != JsonValueKind.Object ||
-                    !action.TryGetProperty("sources", out var sources) ||
+                    action.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                if (action.TryGetProperty("type", out var actionType) &&
+                    actionType.ValueKind == JsonValueKind.String)
+                {
+                    switch (actionType.GetString())
+                    {
+                        case "search": searches++; break;
+                        case "open_page": pageOpens++; break;
+                        case "find_in_page": pageFinds++; break;
+                    }
+                }
+
+                if (!action.TryGetProperty("sources", out var sources) ||
                     sources.ValueKind != JsonValueKind.Array)
                     continue;
 
@@ -289,10 +317,13 @@ public sealed class OpenAiResponsesClient
             ? id.GetString()
             : "unavailable";
         _logger.LogInformation(
-            "Fuel-price research response {ResponseId}: requested maximum {MaxCalls}, search items {Calls}, completed {Completed}, failed {Failed}, source domains {SourceDomains}.",
+            "Fuel-price research response {ResponseId}: requested maximum {MaxCalls}, tool items {Calls}, searches {Searches}, page opens {PageOpens}, page finds {PageFinds}, completed {Completed}, failed {Failed}, source domains {SourceDomains}.",
             responseId,
             FuelPriceMaxToolCalls,
             calls,
+            searches,
+            pageOpens,
+            pageFinds,
             completed,
             failed,
             string.Join(", ", sourceDomains.OrderBy(domain => domain)));
@@ -476,7 +507,12 @@ public sealed record OpenAiCreateResponseRequest(
 
 public sealed record OpenAiWebSearchTool(
     [property: JsonPropertyName("type")] string Type,
-    [property: JsonPropertyName("external_web_access")] bool ExternalWebAccess);
+    [property: JsonPropertyName("external_web_access")] bool ExternalWebAccess,
+    [property: JsonPropertyName("search_context_size"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SearchContextSize = null,
+    [property: JsonPropertyName("filters"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OpenAiWebSearchFilters? Filters = null);
+
+public sealed record OpenAiWebSearchFilters(
+    [property: JsonPropertyName("blocked_domains")] IReadOnlyList<string> BlockedDomains);
 
 public sealed record OpenAiResponseTextConfig(
     [property: JsonPropertyName("format")] OpenAiJsonSchemaFormat Format,

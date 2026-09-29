@@ -7,6 +7,7 @@ public sealed class FuelPriceSourcePolicy
     private readonly List<string> _domains = [];
 
     public string Instructions { get; }
+    public IReadOnlyList<string> BlockedDomains => _domains;
 
     public FuelPriceSourcePolicy(IHostEnvironment environment)
     {
@@ -44,6 +45,9 @@ public sealed class FuelPriceSourcePolicy
                 _domains.Add(host.TrimEnd('.'));
             }
         }
+
+        if (_domains.Count > 100)
+            throw new InvalidDataException("The web-search tool supports at most 100 blocked domains.");
 
         Instructions = $"Contents of {RelativePath}:\n{json}";
     }

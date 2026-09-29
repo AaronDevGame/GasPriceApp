@@ -17,6 +17,11 @@ The backend loads and validates this file at startup, uses it for all source
 checks, and appends its contents to the fuel-price agent's Markdown instructions.
 Domain exclusions include subdomains. Restart or redeploy after editing the file;
 a missing or invalid file prevents startup rather than disabling exclusions.
+The AI search also blocks listed domains directly and uses a small search context.
+If no eligible price is found, `POST /ai/fuel-prices` caches that unavailable
+result for two hours for the same city (or the most specific supplied area).
+The feed and history still omit unavailable snapshots. Eligible priced
+snapshots remain preferred over an unavailable cache entry.
 
 ## Feed
 
