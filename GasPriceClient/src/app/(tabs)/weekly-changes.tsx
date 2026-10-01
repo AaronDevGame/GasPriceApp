@@ -87,6 +87,7 @@ export default function WeeklyChangesScreen() {
   const weekScroll = useRef<ScrollView>(null);
   const weekViewportWidth = useRef(0);
   const weekTabLayouts = useRef<Record<string, { x: number; width: number }>>({});
+  const suppressWeekPress = useRef(false);
   const [cardEntrance] = useState(() => new Animated.Value(1));
   const authenticated = session?.state === 'authenticated';
 
@@ -112,6 +113,59 @@ export default function WeeklyChangesScreen() {
 
   const availableWeeks = feed?.groups ?? [];
   const activeWeek = availableWeeks.find(week => week.weekStart === selectedWeek) ?? availableWeeks[0];
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || availableWeeks.length === 0) return;
+    const scrollNode = weekScroll.current?.getScrollableNode() as HTMLElement | null;
+    if (!scrollNode) return;
+
+    let pointerId: number | null = null;
+    let startX = 0;
+    let startScrollLeft = 0;
+    let dragged = false;
+    let releasePressTimeout: number | undefined;
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse' || event.button !== 0) return;
+      if (event.clientY >= scrollNode.getBoundingClientRect().bottom - 12) return;
+      window.clearTimeout(releasePressTimeout);
+      suppressWeekPress.current = false;
+      pointerId = event.pointerId;
+      startX = event.clientX;
+      startScrollLeft = scrollNode.scrollLeft;
+      dragged = false;
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
+      const distance = event.clientX - startX;
+      if (!dragged && Math.abs(distance) < 5) return;
+      if (!dragged) scrollNode.setPointerCapture(event.pointerId);
+      dragged = true;
+      suppressWeekPress.current = true;
+      scrollNode.classList.add('is-dragging');
+      scrollNode.scrollLeft = startScrollLeft - distance;
+      event.preventDefault();
+    };
+    const onPointerEnd = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
+      pointerId = null;
+      scrollNode.classList.remove('is-dragging');
+      if (dragged) releasePressTimeout = window.setTimeout(() => { suppressWeekPress.current = false; }, 0);
+    };
+
+    scrollNode.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerEnd);
+    window.addEventListener('pointercancel', onPointerEnd);
+    return () => {
+      window.clearTimeout(releasePressTimeout);
+      scrollNode.classList.remove('is-dragging');
+      scrollNode.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerEnd);
+      window.removeEventListener('pointercancel', onPointerEnd);
+    };
+  }, [availableWeeks.length]);
 
   const selectWeek = (weekStart: string) => {
     const tab = weekTabLayouts.current[weekStart];
@@ -157,7 +211,9 @@ export default function WeeklyChangesScreen() {
               {availableWeeks.map(week => {
                 const selected = week.weekStart === activeWeek.weekStart;
                 return <Pressable key={week.weekStart} accessibilityRole="tab" accessibilityState={{ selected }}
-                  accessibilityLabel={weekLabel(week.weekStart, week.weekEnd)} onPress={() => selectWeek(week.weekStart)}
+                  accessibilityLabel={weekLabel(week.weekStart, week.weekEnd)} onPress={() => {
+                    if (!suppressWeekPress.current) selectWeek(week.weekStart);
+                  }}
                   onLayout={event => { weekTabLayouts.current[week.weekStart] = event.nativeEvent.layout; }}
                   style={[styles.weekTab, { backgroundColor: selected ? theme.backgroundSelected : theme.backgroundElement },
                     selected && styles.selectedWeekTab]}>

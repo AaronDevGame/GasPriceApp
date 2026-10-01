@@ -9,8 +9,26 @@
 }
 
 #adjustment-week-tabs {
-  scrollbar-color: #208aef transparent;
+  scrollbar-color: transparent transparent;
   scrollbar-width: thin;
+  cursor: grab;
+  user-select: none;
+}
+
+#adjustment-week-tabs [role='tab'] {
+  cursor: grab;
+}
+
+#adjustment-week-tabs:hover,
+#adjustment-week-tabs:has(:focus-visible),
+#adjustment-week-tabs:active,
+#adjustment-week-tabs.is-dragging {
+  scrollbar-color: #208aef transparent;
+}
+
+#adjustment-week-tabs.is-dragging,
+#adjustment-week-tabs.is-dragging [role='tab'] {
+  cursor: grabbing;
 }
 
 #adjustment-week-tabs::-webkit-scrollbar {
@@ -18,6 +36,13 @@
 }
 
 #adjustment-week-tabs::-webkit-scrollbar-thumb {
-  background: #208aef;
+  background: transparent;
   border-radius: 8px;
+}
+
+#adjustment-week-tabs:hover::-webkit-scrollbar-thumb,
+#adjustment-week-tabs:has(:focus-visible)::-webkit-scrollbar-thumb,
+#adjustment-week-tabs:active::-webkit-scrollbar-thumb,
+#adjustment-week-tabs.is-dragging::-webkit-scrollbar-thumb {
+  background: #208aef;
 }
