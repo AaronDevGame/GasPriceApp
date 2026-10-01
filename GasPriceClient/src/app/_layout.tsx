@@ -7,7 +7,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AuthProvider><Stack screenOptions={{ headerShown: false }} /></AuthProvider>
+      <AuthProvider><Stack screenOptions={{ headerShown: false }}><Stack.Screen name="(tabs)" /></Stack></AuthProvider>
     </ThemeProvider>
   );
 }

@@ -8,6 +8,24 @@ export type FeedItem = PricePoint & { area: Area & { level: string; name: string
 export type Feed = { items: FeedItem[]; localAreaStatus: string };
 export type Coordinates = { latitude: number; longitude: number };
 export type LocationResult = { result: { location: Area & { resolved_area: string } } };
+export type FuelAdjustment = {
+  id: number;
+  weekStart: string;
+  weekEnd: string;
+  oilCompany: string;
+  effectiveDatePhilippines: string;
+  effectiveAtUtc: string | null;
+  gasolineChangePerLiter: number | null;
+  dieselChangePerLiter: number | null;
+  keroseneChangePerLiter: number | null;
+  sourceUrl: string;
+  fetchedAtUtc: string;
+};
+export type FuelAdjustmentFeed = { weeks: number; items: FuelAdjustment[] };
+
+export function getFuelAdjustments() {
+  return authClient.request<FuelAdjustmentFeed>('/fuel-prices/adjustments');
+}
 
 export function areaQuery(area?: Area) {
   const params = new URLSearchParams();
