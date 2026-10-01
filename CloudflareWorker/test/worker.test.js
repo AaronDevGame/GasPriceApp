@@ -37,6 +37,37 @@ test("rejects unsupported methods on public routes", async () => {
   assert.equal(response.status, 405);
 });
 
+test("forwards the public fuel-adjustment feed and blocks its admin import", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwardedUrl;
+  globalThis.fetch = async (input) => {
+    forwardedUrl = input.toString();
+    return Response.json({ items: [] });
+  };
+  try {
+    const response = await worker.fetch(
+      new Request("https://proxy.example/fuel-prices/adjustments?weeks=3", {
+        headers: { "CF-Connecting-IP": "203.0.113.10" },
+      }),
+      env,
+    );
+    assert.equal(response.status, 200);
+    assert.equal(forwardedUrl,
+      "https://gaspricebackend.onrender.com/fuel-prices/adjustments?weeks=3");
+
+    const adminResponse = await worker.fetch(
+      new Request("https://proxy.example/admin/fuel-prices/adjustments/import", {
+        method: "POST",
+        headers: { "CF-Connecting-IP": "203.0.113.10" },
+      }),
+      env,
+    );
+    assert.equal(adminResponse.status, 404);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("replaces spoofed forwarding headers with authenticated values", async () => {
   const originalFetch = globalThis.fetch;
   let forwardedRequest;
