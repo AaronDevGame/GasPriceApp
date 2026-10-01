@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Check configured MetroFuel Tracker and GasWatch PH city pages for fresh fuel prices before using AI web search; prefer the more recently verified source and retain its evidence in the existing cache.
+- Keep direct fuel-price sources in `agents/fuel-price-sources.json` so supported sources can be enabled or prioritized without changing endpoint contracts.
+
 ### Fixed
 - Search allowed fuel-price sources without a DOE-first requirement while keeping the two-call tool limit; ignore previously cached unavailable results so they cannot suppress research.
 - Block excluded domains at the web-search tool and reduce returned search context.

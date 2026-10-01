@@ -12,6 +12,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddBrowserAuthentication();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton(new FuelPriceSourcePolicy(builder.Environment));
+builder.Services.AddSingleton(new FuelPriceWebsiteCatalog(builder.Environment));
+builder.Services.AddHttpClient<FuelPriceWebsiteClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(8);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("GasPriceApp/1.0 (fuel-price lookup)");
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient<OpenAiResponsesClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.openai.com/");

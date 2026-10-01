@@ -3,7 +3,19 @@
 Both read endpoints require `Authorization: Bearer <token>` and
 `X-App-Instance-Id`. They only read stored estimates. Use the existing
 `POST /ai/fuel-prices` with coordinates to research a local price before
-reloading the feed. A failed research request does not affect the general feed.
+reloading the feed. The backend resolves the coordinates, checks its fresh
+cache, then reads enabled direct sources in `agents/fuel-price-sources.json`.
+It accepts only city-matched PHP-per-liter prices with an exact date within
+seven days. When both direct sources qualify, the later verified date wins;
+the configured priority breaks a date tie. If neither qualifies, the existing
+AI web search runs. Direct results use the same cache and response shape;
+`model` begins with `direct:` and AI usage and cost are null. A failed research
+request does not affect the general feed.
+
+Each configured source needs a matching backend parser. Adding an entry to the
+JSON file alone cannot make a new website readable. Origins are restricted to
+the matching source domain, and the configuration is loaded at startup. The
+backend reads public city pages without using MetroFuel's `/api/` paths.
 
 Zigwheels fuel-price evidence is excluded. Stored snapshots citing it are
 omitted from research cache hits, the feed, and history, including snapshots
@@ -58,5 +70,5 @@ limit is 30; accepted values are 1 through 100. Duplicate observations with
 the same `dataAsOf` are collapsed to the latest cached snapshot. When no
 snapshot exists, `items` is empty.
 
-History is based on previous successful AI research and can be sparse. It
+History is based on previous successful research and can be sparse. It
 does not generate new prices or run a background collection job.

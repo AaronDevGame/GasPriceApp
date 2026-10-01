@@ -1,0 +1,18 @@
+{
+  "sources": [
+    {
+      "id": "metrofueltracker",
+      "name": "MetroFuel Tracker",
+      "origin": "https://metrofueltracker.com",
+      "enabled": true,
+      "priority": 1
+    },
+    {
+      "id": "gaswatchph",
+      "name": "GasWatch PH",
+      "origin": "https://gaswatchph.com",
+      "enabled": true,
+      "priority": 2
+    }
+  ]
+}

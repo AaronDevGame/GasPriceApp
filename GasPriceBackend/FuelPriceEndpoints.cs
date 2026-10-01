@@ -34,6 +34,7 @@ public static class FuelPriceEndpoints
             AppDbContext db,
             OpenAiResponsesClient openAi,
             GeoapifyReverseGeocodingClient geoapify,
+            FuelPriceWebsiteClient websites,
             FuelPriceSourcePolicy sourcePolicy,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
@@ -174,6 +175,43 @@ public static class FuelPriceEndpoints
                         "fuel_price_response",
                         instanceId);
                 }
+            }
+
+            var website = await websites.FindBestAsync(fuelRequest, now, cancellationToken);
+            if (website is not null && !sourcePolicy.HasExcludedSource(website.Result))
+            {
+                var cachedAt = timeProvider.GetUtcNow().UtcDateTime;
+                var refreshAfter = GetRefreshAfter(cachedAt, website.DataAsOfUtc);
+                db.FuelPriceCaches.Add(new FuelPriceCache
+                {
+                    Scope = FuelPriceCacheScopes.City,
+                    City = fuelRequest.City,
+                    Province = fuelRequest.Province ?? "",
+                    Region = fuelRequest.Region,
+                    CityKey = cityKey,
+                    ProvinceKey = provinceKey ?? "",
+                    RegionKey = regionKey,
+                    ResultJson = website.Result.GetRawText(),
+                    Model = $"direct:{website.SourceId}",
+                    CachedAt = cachedAt,
+                    RefreshAfter = refreshAfter
+                });
+                await db.SaveChangesAsync(cancellationToken);
+
+                return ApiResults.Ok(
+                    new FuelPriceApiResponse(
+                        WithRequestLocation(website.Result, coordinates, location),
+                        $"direct:{website.SourceId}",
+                        null,
+                        null,
+                        false,
+                        false,
+                        true,
+                        FuelPriceCacheScopes.City,
+                        cachedAt,
+                        refreshAfter),
+                    "fuel_price_response",
+                    instanceId);
             }
 
             if (!openAi.IsConfigured)
