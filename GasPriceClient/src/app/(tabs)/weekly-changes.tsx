@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Button, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
@@ -88,10 +88,9 @@ export default function WeeklyChangesScreen() {
             <ThemedText type="title" style={styles.title}>Weekly Changes</ThemedText>
             <ThemedText themeColor="textSecondary">Announced fuel price increases and decreases by oil company, in pesos per liter.</ThemedText>
           </View>
-          {Platform.OS === 'web' && <Button title="Refresh changes" disabled={!authenticated || loading || refreshing} onPress={() => void load(true)} />}
           {authLoading || (authenticated && loading) ? <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">Loading weekly changes…</ThemedText></View> : null}
           {!authenticated && !authLoading && <ThemedText accessibilityRole="alert">{authError ?? 'You are signed out. Reopen the Gas Price tab to reconnect.'}</ThemedText>}
-          {error && <ThemedText accessibilityRole="alert">{error}</ThemedText>}
+          {error && <ThemedText accessibilityRole="alert">{error} {Platform.OS === 'web' ? 'Reload this page to try again.' : 'Pull down to try again.'}</ThemedText>}
           {authenticated && !loading && !error && feed?.items.length === 0 && <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText style={styles.company}>No weekly changes yet</ThemedText>
             <ThemedText>Changes will appear here when a DOE notice has been imported.</ThemedText>
