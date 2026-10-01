@@ -8,7 +8,8 @@ using System.Text.RegularExpressions;
 
 public sealed record ExtractedFuelAdjustment(
     [property: JsonPropertyName("oil_company")] string OilCompany,
-    [property: JsonPropertyName("effective_at_philippines")] string EffectiveAtPhilippines,
+    [property: JsonPropertyName("effective_date_philippines")] string EffectiveDatePhilippines,
+    [property: JsonPropertyName("effective_time_philippines")] string? EffectiveTimePhilippines,
     [property: JsonPropertyName("gasoline_change_per_liter")] decimal? GasolineChangePerLiter,
     [property: JsonPropertyName("diesel_change_per_liter")] decimal? DieselChangePerLiter,
     [property: JsonPropertyName("kerosene_change_per_liter")] decimal? KeroseneChangePerLiter);
@@ -45,14 +46,15 @@ public sealed class FuelAdjustmentImporter
                     additionalProperties = false,
                     required = new[]
                     {
-                        "oil_company", "effective_at_philippines",
+                        "oil_company", "effective_date_philippines", "effective_time_philippines",
                         "gasoline_change_per_liter", "diesel_change_per_liter",
                         "kerosene_change_per_liter"
                     },
                     properties = new
                     {
                         oil_company = new { type = "string" },
-                        effective_at_philippines = new { type = "string" },
+                        effective_date_philippines = new { type = "string" },
+                        effective_time_philippines = new { type = new[] { "string", "null" } },
                         gasoline_change_per_liter = new { type = new[] { "number", "null" } },
                         diesel_change_per_liter = new { type = new[] { "number", "null" } },
                         kerosene_change_per_liter = new { type = new[] { "number", "null" } }

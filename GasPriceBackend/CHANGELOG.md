@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Block directly checked fuel-price websites from AI fallback searches without adding them to the permanent exclusion list.
 
 ### Fixed
+- Accept DOE fuel-adjustment rows with an effective date but no stated time, while preserving the date and leaving the UTC time empty.
 - Search allowed fuel-price sources without a DOE-first requirement while keeping the two-call tool limit; ignore previously cached unavailable results so they cannot suppress research.
 - Block excluded domains at the web-search tool and reduce returned search context.
 - Count paid web-search actions separately from page opens/finds in cost estimates and diagnostics.

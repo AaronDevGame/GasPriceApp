@@ -4,7 +4,8 @@ public sealed class FuelAdjustment
     public DateOnly WeekStart { get; set; }
     public DateOnly WeekEnd { get; set; }
     public string OilCompany { get; set; } = "";
-    public DateTime EffectiveAtUtc { get; set; }
+    public DateOnly EffectiveDatePhilippines { get; set; }
+    public DateTime? EffectiveAtUtc { get; set; }
     public decimal? GasolineChangePerLiter { get; set; }
     public decimal? DieselChangePerLiter { get; set; }
     public decimal? KeroseneChangePerLiter { get; set; }

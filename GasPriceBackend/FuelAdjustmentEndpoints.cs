@@ -7,7 +7,8 @@ public sealed record FuelAdjustmentItem(
     DateOnly WeekStart,
     DateOnly WeekEnd,
     string OilCompany,
-    DateTime EffectiveAtUtc,
+    DateOnly EffectiveDatePhilippines,
+    DateTime? EffectiveAtUtc,
     decimal? GasolineChangePerLiter,
     decimal? DieselChangePerLiter,
     decimal? KeroseneChangePerLiter,
@@ -63,9 +64,11 @@ public static class FuelAdjustmentEndpoints
                 .Where(a => starts.Contains(a.WeekStart))
                 .OrderByDescending(a => a.WeekStart)
                 .ThenBy(a => a.OilCompany)
+                .ThenBy(a => a.EffectiveDatePhilippines)
                 .ThenBy(a => a.EffectiveAtUtc)
                 .Select(a => new FuelAdjustmentItem(
-                    a.Id, a.WeekStart, a.WeekEnd, a.OilCompany, a.EffectiveAtUtc,
+                    a.Id, a.WeekStart, a.WeekEnd, a.OilCompany,
+                    a.EffectiveDatePhilippines, a.EffectiveAtUtc,
                     a.GasolineChangePerLiter, a.DieselChangePerLiter,
                     a.KeroseneChangePerLiter, a.SourceUrl, a.FetchedAtUtc))
                 .ToListAsync(cancellationToken);
@@ -116,6 +119,7 @@ public static class FuelAdjustmentEndpoints
                 {
                     var match = existing.FirstOrDefault(a =>
                         a.OilCompany.Equals(row.OilCompany, StringComparison.OrdinalIgnoreCase) &&
+                        a.EffectiveDatePhilippines == row.EffectiveDatePhilippines &&
                         a.EffectiveAtUtc == row.EffectiveAtUtc);
                     if (match is null)
                     {
@@ -123,6 +127,7 @@ public static class FuelAdjustmentEndpoints
                         {
                             WeekStart = weekStart,
                             OilCompany = row.OilCompany,
+                            EffectiveDatePhilippines = row.EffectiveDatePhilippines,
                             EffectiveAtUtc = row.EffectiveAtUtc
                         };
                         db.FuelAdjustments.Add(match);
@@ -168,7 +173,8 @@ public static class FuelAdjustmentEndpoints
 
     private sealed record ValidatedRow(
         string OilCompany,
-        DateTime EffectiveAtUtc,
+        DateOnly EffectiveDatePhilippines,
+        DateTime? EffectiveAtUtc,
         decimal? GasolineChangePerLiter,
         decimal? DieselChangePerLiter,
         decimal? KeroseneChangePerLiter);
@@ -189,21 +195,23 @@ public static class FuelAdjustmentEndpoints
             !DateOnly.TryParseExact(extraction.WeekEnd, "yyyy-MM-dd",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out weekEnd) ||
             weekStart.DayOfWeek != DayOfWeek.Tuesday ||
-            weekEnd != weekStart.AddDays(6) ||
-            extraction.Rows is null or { Count: < 1 or > 100 })
+            weekEnd != weekStart.AddDays(6))
             return false;
+
+        if (extraction.Rows is null or { Count: < 1 or > 100 })
+        {
+            error = "The DOE adjustment extraction returned no rows or too many rows.";
+            return false;
+        }
 
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in extraction.Rows)
         {
             var company = row.OilCompany?.Trim();
             if (string.IsNullOrWhiteSpace(company) || company.Length > 100 ||
-                !DateTimeOffset.TryParseExact(row.EffectiveAtPhilippines,
-                    "yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture,
-                    DateTimeStyles.None, out var effectiveAt) ||
-                effectiveAt.Offset != TimeSpan.FromHours(8) ||
-                DateOnly.FromDateTime(effectiveAt.DateTime) < weekStart ||
-                DateOnly.FromDateTime(effectiveAt.DateTime) > weekEnd ||
+                !DateOnly.TryParseExact(row.EffectiveDatePhilippines, "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var effectiveDate) ||
+                effectiveDate < weekStart || effectiveDate > weekEnd ||
                 (row.GasolineChangePerLiter is null && row.DieselChangePerLiter is null &&
                  row.KeroseneChangePerLiter is null) ||
                 !ValidAmount(row.GasolineChangePerLiter) ||
@@ -211,10 +219,21 @@ public static class FuelAdjustmentEndpoints
                 !ValidAmount(row.KeroseneChangePerLiter))
                 return false;
 
-            var effectiveAtUtc = effectiveAt.UtcDateTime;
-            if (!keys.Add(company + "\u001f" + effectiveAtUtc.ToString("O", CultureInfo.InvariantCulture)))
+            DateTime? effectiveAtUtc = null;
+            if (row.EffectiveTimePhilippines is not null)
+            {
+                if (!TimeOnly.TryParseExact(row.EffectiveTimePhilippines, "HH:mm:ss",
+                        CultureInfo.InvariantCulture, DateTimeStyles.None, out var effectiveTime))
+                    return false;
+                effectiveAtUtc = new DateTimeOffset(effectiveDate.ToDateTime(effectiveTime),
+                    TimeSpan.FromHours(8)).UtcDateTime;
+            }
+
+            var key = company + "\u001f" + effectiveDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                + "\u001f" + (row.EffectiveTimePhilippines ?? "date-only");
+            if (!keys.Add(key))
                 return false;
-            rows.Add(new ValidatedRow(company, effectiveAtUtc,
+            rows.Add(new ValidatedRow(company, effectiveDate, effectiveAtUtc,
                 row.GasolineChangePerLiter, row.DieselChangePerLiter,
                 row.KeroseneChangePerLiter));
         }
