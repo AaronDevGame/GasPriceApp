@@ -114,6 +114,7 @@ public static class ApiRoutes
     public const string AiFuelPrices = "/ai/fuel-prices";
     public const string FuelPrices = "/fuel-prices";
     public const string FuelPriceHistory = "/fuel-prices/history";
+    public const string FuelPriceAdjustments = "/fuel-prices/adjustments";
 
     public const string AdminServerStatus = "/admin/server/status";
     public const string AdminServerStart = "/admin/server/start";
@@ -121,6 +122,7 @@ public static class ApiRoutes
     public const string AdminServerRestart = "/admin/server/restart";
     public const string AdminRoutes = "/admin/routes";
     public const string AdminChangelog = "/admin/changelog";
+    public const string AdminFuelPriceAdjustmentsImport = "/admin/fuel-prices/adjustments/import";
 
     public const string LegacyAdminStart = "/admin/start";
     public const string LegacyAdminStop = "/admin/stop";
@@ -148,12 +150,14 @@ public static class RouteRegistry
         new(ApiRoutes.AiFuelPrices, "POST"),
         new(ApiRoutes.FuelPrices, "GET"),
         new(ApiRoutes.FuelPriceHistory, "GET"),
+        new(ApiRoutes.FuelPriceAdjustments, "GET"),
     };
 
     public static readonly RouteInfo[] Admin =
     {
         new(ApiRoutes.AdminRoutes, "GET"),
         new(ApiRoutes.AdminChangelog, "GET"),
+        new(ApiRoutes.AdminFuelPriceAdjustmentsImport, "POST"),
         new(ApiRoutes.AdminServerStatus, "GET"),
         new(ApiRoutes.AdminServerStart, "POST"),
         new(ApiRoutes.AdminServerStop, "POST"),

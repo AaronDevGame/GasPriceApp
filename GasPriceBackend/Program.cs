@@ -29,6 +29,16 @@ builder.Services.AddHttpClient<OpenAiResponsesClient>(client =>
     client.BaseAddress = new Uri("https://api.openai.com/");
     client.Timeout = TimeSpan.FromSeconds(45);
 });
+builder.Services.AddHttpClient<FuelAdjustmentImporter>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("GasPriceApp/1.0 (DOE adjustment import)");
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient("fuel-adjustment-openai", client =>
+{
+    client.BaseAddress = new Uri("https://api.openai.com/");
+    client.Timeout = TimeSpan.FromSeconds(90);
+});
 builder.Services.AddHttpClient<GeoapifyReverseGeocodingClient>(client =>
 {
     client.BaseAddress = new Uri("https://api.geoapify.com/");
@@ -143,6 +153,7 @@ app.MapPlayerProfileEndpoints(auth, InstanceId);
 app.MapAiChatEndpoints(auth, InstanceId);
 app.MapFuelPriceEndpoints(auth, InstanceId);
 app.MapFuelPriceReadEndpoints(auth, InstanceId);
+app.MapFuelAdjustmentEndpoints(auth, InstanceId);
 
 app.MapGet(ApiRoutes.AdminRoutes, () => ApiResults.Ok(RouteRegistry.Admin, "admin_routes", InstanceId));
 app.MapAdminChangelogEndpoint();

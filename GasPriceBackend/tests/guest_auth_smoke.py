@@ -57,7 +57,8 @@ def expire(app_id):
 
 
 protected = [('/player/profile', 'PATCH'),
-             ('/fuel-prices', 'GET'), ('/fuel-prices/history', 'GET'), ('/ai/chat', 'POST'), ('/ai/fuel-prices', 'POST')]
+             ('/fuel-prices', 'GET'), ('/fuel-prices/history', 'GET'),
+             ('/fuel-prices/adjustments', 'GET'), ('/ai/chat', 'POST'), ('/ai/fuel-prices', 'POST')]
 for path, method in protected:
     request(path, method, {} if method != 'GET' else None, expected=401)
 print('PASS: every protected endpoint rejects anonymous requests')
@@ -81,6 +82,7 @@ assert native['guestCredential'] and native['accessToken'] and native['appInstan
 native_auth = {**native_id_header, 'Authorization': 'Bearer ' + native['accessToken']}
 request('/auth/status', headers=native_auth)
 request('/fuel-prices', headers=native_auth)
+request('/fuel-prices/adjustments', headers=native_auth)
 payload, _ = request('/auth/guest/login', 'POST', {}, native_id_header, expected=401)
 assert payload['error']['error'] == 'missing_guest_credential'
 payload, _ = request('/auth/guest/login', 'POST', {}, {**native_id_header, 'X-Guest-Credential': 'x' * 43}, expected=401)
@@ -116,6 +118,7 @@ assert headers['Cache-Control'] == 'no-store'
 reload, _ = request('/auth/browser/status', cookies=True)
 assert reload['data']['playerId'] == login['data']['playerId']
 request('/fuel-prices', cookies=True)
+request('/fuel-prices/adjustments', cookies=True)
 # A malformed bearer must never fall back to a valid ambient cookie.
 request('/fuel-prices', headers={'Authorization': 'broken', 'X-App-Instance-Id': browser_id}, cookies=True, expected=401)
 for path, method in protected:

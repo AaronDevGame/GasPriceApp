@@ -1,0 +1,229 @@
+using System.Globalization;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+
+public sealed record FuelAdjustmentItem(
+    long Id,
+    DateOnly WeekStart,
+    DateOnly WeekEnd,
+    string OilCompany,
+    DateTime EffectiveAtUtc,
+    decimal? GasolineChangePerLiter,
+    decimal? DieselChangePerLiter,
+    decimal? KeroseneChangePerLiter,
+    string SourceUrl,
+    DateTime FetchedAtUtc);
+
+public sealed record FuelAdjustmentFeed(int Weeks, IReadOnlyList<FuelAdjustmentItem> Items);
+public sealed record FuelAdjustmentImportResult(
+    DateOnly WeekStart,
+    DateOnly WeekEnd,
+    string SourceUrl,
+    int Added,
+    int Updated,
+    DateTime FetchedAtUtc);
+
+public static class FuelAdjustmentEndpoints
+{
+    public static void MapFuelAdjustmentEndpoints(
+        this WebApplication app,
+        AuthService authService,
+        string instanceId)
+    {
+        app.MapGet(ApiRoutes.FuelPriceAdjustments, async (
+            HttpRequest request,
+            AppDbContext db,
+            CancellationToken cancellationToken) =>
+        {
+            var auth = await PlayerAuthentication.AuthenticateAsync(request, db, authService);
+            if (!auth.IsValid || auth.Guest is null)
+                return auth.IsBadRequest
+                    ? ApiResults.BadRequest(auth.Error, instanceId)
+                    : ApiResults.Unauthorized(auth.Error, instanceId);
+
+            var weeks = 3;
+            foreach (var parameter in request.Query)
+            {
+                if (parameter.Key != "weeks" || parameter.Value.Count != 1 ||
+                    !int.TryParse(parameter.Value[0], NumberStyles.None,
+                        CultureInfo.InvariantCulture, out weeks) || weeks is < 1 or > 52)
+                    return ApiResults.BadRequest("Only weeks=1..52 is accepted.", instanceId);
+            }
+
+            var starts = await db.FuelAdjustments.AsNoTracking()
+                .Select(a => a.WeekStart)
+                .Distinct()
+                .OrderByDescending(start => start)
+                .Take(weeks)
+                .ToListAsync(cancellationToken);
+            if (starts.Count == 0)
+                return ApiResults.Ok(new FuelAdjustmentFeed(weeks, []), "fuel_price_adjustments", instanceId);
+
+            var records = await db.FuelAdjustments.AsNoTracking()
+                .Where(a => starts.Contains(a.WeekStart))
+                .OrderByDescending(a => a.WeekStart)
+                .ThenBy(a => a.OilCompany)
+                .ThenBy(a => a.EffectiveAtUtc)
+                .Select(a => new FuelAdjustmentItem(
+                    a.Id, a.WeekStart, a.WeekEnd, a.OilCompany, a.EffectiveAtUtc,
+                    a.GasolineChangePerLiter, a.DieselChangePerLiter,
+                    a.KeroseneChangePerLiter, a.SourceUrl, a.FetchedAtUtc))
+                .ToListAsync(cancellationToken);
+            return ApiResults.Ok(
+                new FuelAdjustmentFeed(weeks, records), "fuel_price_adjustments", instanceId);
+        });
+
+        app.MapPost(ApiRoutes.AdminFuelPriceAdjustmentsImport, async (
+            HttpRequest request,
+            AppDbContext db,
+            FuelAdjustmentImporter importer,
+            TimeProvider timeProvider,
+            CancellationToken cancellationToken) =>
+        {
+            string? sourceUrl = null;
+            foreach (var parameter in request.Query)
+            {
+                if (parameter.Key != "sourceUrl" || parameter.Value.Count != 1)
+                    return ApiResults.BadRequest("Only one sourceUrl query parameter is accepted.", instanceId);
+                sourceUrl = parameter.Value[0];
+            }
+
+            if (sourceUrl is not null)
+            {
+                try { sourceUrl = FuelAdjustmentImporter.ValidatePdfUrl(sourceUrl); }
+                catch (ArgumentException exception)
+                { return ApiResults.BadRequest(exception.Message, instanceId); }
+            }
+            if (!importer.IsConfigured)
+                return ApiResults.ServiceUnavailable(
+                    "fuel_adjustment_extractor_not_configured", instanceId,
+                    "OPENAI_API_KEY is required to import DOE notices.");
+
+            try
+            {
+                var (url, extraction) = await importer.ImportAsync(sourceUrl, cancellationToken);
+                if (!TryValidate(extraction, out var weekStart, out var weekEnd,
+                    out var rows, out var error))
+                    return ApiResults.BadGateway("fuel_adjustment_extraction_invalid", instanceId, error);
+
+                var fetchedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+                var existing = await db.FuelAdjustments
+                    .Where(a => a.WeekStart == weekStart)
+                    .ToListAsync(cancellationToken);
+                var added = 0;
+                var updated = 0;
+                foreach (var row in rows)
+                {
+                    var match = existing.FirstOrDefault(a =>
+                        a.OilCompany.Equals(row.OilCompany, StringComparison.OrdinalIgnoreCase) &&
+                        a.EffectiveAtUtc == row.EffectiveAtUtc);
+                    if (match is null)
+                    {
+                        match = new FuelAdjustment
+                        {
+                            WeekStart = weekStart,
+                            OilCompany = row.OilCompany,
+                            EffectiveAtUtc = row.EffectiveAtUtc
+                        };
+                        db.FuelAdjustments.Add(match);
+                        added++;
+                    }
+                    else
+                    {
+                        updated++;
+                    }
+
+                    match.WeekEnd = weekEnd;
+                    match.GasolineChangePerLiter = row.GasolineChangePerLiter;
+                    match.DieselChangePerLiter = row.DieselChangePerLiter;
+                    match.KeroseneChangePerLiter = row.KeroseneChangePerLiter;
+                    match.SourceUrl = url;
+                    match.FetchedAtUtc = fetchedAtUtc;
+                }
+
+                await db.SaveChangesAsync(cancellationToken);
+                return ApiResults.Ok(new FuelAdjustmentImportResult(
+                    weekStart, weekEnd, url, added, updated, fetchedAtUtc),
+                    "fuel_adjustments_imported", instanceId);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return ApiResults.GatewayTimeout("fuel_adjustment_import_timeout", instanceId);
+            }
+            catch (HttpRequestException)
+            {
+                return ApiResults.BadGateway("fuel_adjustment_upstream_unavailable", instanceId);
+            }
+            catch (InvalidDataException exception)
+            {
+                return ApiResults.BadGateway("fuel_adjustment_import_invalid", instanceId, exception.Message);
+            }
+            catch (JsonException)
+            {
+                return ApiResults.BadGateway("fuel_adjustment_import_invalid", instanceId,
+                    "The extractor returned malformed JSON.");
+            }
+        });
+    }
+
+    private sealed record ValidatedRow(
+        string OilCompany,
+        DateTime EffectiveAtUtc,
+        decimal? GasolineChangePerLiter,
+        decimal? DieselChangePerLiter,
+        decimal? KeroseneChangePerLiter);
+
+    private static bool TryValidate(
+        FuelAdjustmentExtraction extraction,
+        out DateOnly weekStart,
+        out DateOnly weekEnd,
+        out List<ValidatedRow> rows,
+        out string error)
+    {
+        rows = [];
+        weekStart = default;
+        weekEnd = default;
+        error = "The DOE adjustment extraction has invalid dates or rows.";
+        if (!DateOnly.TryParseExact(extraction.WeekStart, "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out weekStart) ||
+            !DateOnly.TryParseExact(extraction.WeekEnd, "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out weekEnd) ||
+            weekStart.DayOfWeek != DayOfWeek.Tuesday ||
+            weekEnd != weekStart.AddDays(6) ||
+            extraction.Rows is null or { Count: < 1 or > 100 })
+            return false;
+
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in extraction.Rows)
+        {
+            var company = row.OilCompany?.Trim();
+            if (string.IsNullOrWhiteSpace(company) || company.Length > 100 ||
+                !DateTimeOffset.TryParseExact(row.EffectiveAtPhilippines,
+                    "yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var effectiveAt) ||
+                effectiveAt.Offset != TimeSpan.FromHours(8) ||
+                DateOnly.FromDateTime(effectiveAt.DateTime) < weekStart ||
+                DateOnly.FromDateTime(effectiveAt.DateTime) > weekEnd ||
+                (row.GasolineChangePerLiter is null && row.DieselChangePerLiter is null &&
+                 row.KeroseneChangePerLiter is null) ||
+                !ValidAmount(row.GasolineChangePerLiter) ||
+                !ValidAmount(row.DieselChangePerLiter) ||
+                !ValidAmount(row.KeroseneChangePerLiter))
+                return false;
+
+            var effectiveAtUtc = effectiveAt.UtcDateTime;
+            if (!keys.Add(company + "\u001f" + effectiveAtUtc.ToString("O", CultureInfo.InvariantCulture)))
+                return false;
+            rows.Add(new ValidatedRow(company, effectiveAtUtc,
+                row.GasolineChangePerLiter, row.DieselChangePerLiter,
+                row.KeroseneChangePerLiter));
+        }
+
+        error = "";
+        return true;
+    }
+
+    private static bool ValidAmount(decimal? amount) =>
+        amount is null || (amount >= -100 && amount <= 100 &&
+            decimal.Round(amount.Value, 2) == amount.Value);
+}

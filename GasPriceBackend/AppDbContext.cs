@@ -9,6 +9,7 @@ public class AppDbContext : DbContext
     public DbSet<Guest> Guests => Set<Guest>();
     public DbSet<PlayerData> PlayerData => Set<PlayerData>();
     public DbSet<FuelPriceCache> FuelPriceCaches => Set<FuelPriceCache>();
+    public DbSet<FuelAdjustment> FuelAdjustments => Set<FuelAdjustment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -116,6 +117,23 @@ public class AppDbContext : DbContext
 
             e.HasIndex(c => new { c.Scope, c.ProvinceKey, c.CityKey, c.CachedAt });
             e.HasIndex(c => new { c.Scope, c.RegionKey, c.CachedAt });
+        });
+
+        modelBuilder.Entity<FuelAdjustment>(e =>
+        {
+            e.ToTable("fuel_adjustment");
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).HasColumnName("id");
+            e.Property(a => a.WeekStart).HasColumnName("week_start");
+            e.Property(a => a.WeekEnd).HasColumnName("week_end");
+            e.Property(a => a.OilCompany).HasColumnName("oil_company").HasMaxLength(100);
+            e.Property(a => a.EffectiveAtUtc).HasColumnName("effective_at_utc");
+            e.Property(a => a.GasolineChangePerLiter).HasColumnName("gasoline_change_per_liter").HasPrecision(8, 2);
+            e.Property(a => a.DieselChangePerLiter).HasColumnName("diesel_change_per_liter").HasPrecision(8, 2);
+            e.Property(a => a.KeroseneChangePerLiter).HasColumnName("kerosene_change_per_liter").HasPrecision(8, 2);
+            e.Property(a => a.SourceUrl).HasColumnName("source_url").HasMaxLength(2048);
+            e.Property(a => a.FetchedAtUtc).HasColumnName("fetched_at_utc");
+            e.HasIndex(a => new { a.WeekStart, a.OilCompany, a.EffectiveAtUtc }).IsUnique();
         });
     }
 }
