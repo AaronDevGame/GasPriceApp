@@ -24,6 +24,8 @@ public sealed record FuelAdjustmentImportResult(
     int Updated,
     DateTime FetchedAtUtc);
 
+public sealed class FuelAdjustmentExtractionException(string message) : Exception(message);
+
 public static class FuelAdjustmentEndpoints
 {
     public static void MapFuelAdjustmentEndpoints(
@@ -80,9 +82,13 @@ public static class FuelAdjustmentEndpoints
             HttpRequest request,
             AppDbContext db,
             FuelAdjustmentImporter importer,
+            FuelAdjustmentBackfill backfill,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
+            if (request.Query.ContainsKey("from") || request.Query.ContainsKey("to"))
+                return await FuelAdjustmentBackfill.StartRequestAsync(request,
+                    backfill, importer, timeProvider, instanceId, cancellationToken);
             string? sourceUrl = null;
             foreach (var parameter in request.Query)
             {
@@ -104,51 +110,9 @@ public static class FuelAdjustmentEndpoints
 
             try
             {
-                var (url, extraction) = await importer.ImportAsync(sourceUrl, cancellationToken);
-                if (!TryValidate(extraction, out var weekStart, out var weekEnd,
-                    out var rows, out var error))
-                    return ApiResults.BadGateway("fuel_adjustment_extraction_invalid", instanceId, error);
-
-                var fetchedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
-                var existing = await db.FuelAdjustments
-                    .Where(a => a.WeekStart == weekStart)
-                    .ToListAsync(cancellationToken);
-                var added = 0;
-                var updated = 0;
-                foreach (var row in rows)
-                {
-                    var match = existing.FirstOrDefault(a =>
-                        a.OilCompany.Equals(row.OilCompany, StringComparison.OrdinalIgnoreCase) &&
-                        a.EffectiveDatePhilippines == row.EffectiveDatePhilippines &&
-                        a.EffectiveAtUtc == row.EffectiveAtUtc);
-                    if (match is null)
-                    {
-                        match = new FuelAdjustment
-                        {
-                            WeekStart = weekStart,
-                            OilCompany = row.OilCompany,
-                            EffectiveDatePhilippines = row.EffectiveDatePhilippines,
-                            EffectiveAtUtc = row.EffectiveAtUtc
-                        };
-                        db.FuelAdjustments.Add(match);
-                        added++;
-                    }
-                    else
-                    {
-                        updated++;
-                    }
-
-                    match.WeekEnd = weekEnd;
-                    match.GasolineChangePerLiter = row.GasolineChangePerLiter;
-                    match.DieselChangePerLiter = row.DieselChangePerLiter;
-                    match.KeroseneChangePerLiter = row.KeroseneChangePerLiter;
-                    match.SourceUrl = url;
-                    match.FetchedAtUtc = fetchedAtUtc;
-                }
-
-                await db.SaveChangesAsync(cancellationToken);
-                return ApiResults.Ok(new FuelAdjustmentImportResult(
-                    weekStart, weekEnd, url, added, updated, fetchedAtUtc),
+                var result = await ImportOneAsync(db, importer, timeProvider, sourceUrl,
+                    null, null, cancellationToken);
+                return ApiResults.Ok(result!,
                     "fuel_adjustments_imported", instanceId);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -158,6 +122,10 @@ public static class FuelAdjustmentEndpoints
             catch (HttpRequestException)
             {
                 return ApiResults.BadGateway("fuel_adjustment_upstream_unavailable", instanceId);
+            }
+            catch (FuelAdjustmentExtractionException exception)
+            {
+                return ApiResults.BadGateway("fuel_adjustment_extraction_invalid", instanceId, exception.Message);
             }
             catch (InvalidDataException exception)
             {
@@ -169,6 +137,73 @@ public static class FuelAdjustmentEndpoints
                     "The extractor returned malformed JSON.");
             }
         });
+
+        app.MapGet(ApiRoutes.AdminFuelPriceAdjustmentsImportJob, (
+            string jobId, FuelAdjustmentBackfill backfill) =>
+        {
+            if (!Guid.TryParse(jobId, out var id))
+                return ApiResults.BadRequest("jobId must be a GUID.", instanceId);
+            var status = backfill.Get(id);
+            return status is null
+                ? ApiResults.NotFound("Fuel-adjustment import job was not found.",
+                    instanceId, ApiRoutes.AdminFuelPriceAdjustmentsImportJob)
+                : ApiResults.Ok(status, "fuel_adjustment_backfill_status", instanceId);
+        });
+    }
+
+    internal static async Task<FuelAdjustmentImportResult?> ImportOneAsync(
+        AppDbContext db, FuelAdjustmentImporter importer, TimeProvider timeProvider,
+        string? sourceUrl, DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
+    {
+        var (url, extraction) = await importer.ImportAsync(sourceUrl, cancellationToken);
+        if (!TryValidate(extraction, out var weekStart, out var weekEnd,
+            out var rows, out var error))
+            throw new FuelAdjustmentExtractionException(error);
+        if (from.HasValue && to.HasValue &&
+            (weekStart > to.Value || weekEnd < from.Value))
+            return null;
+
+        var fetchedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+        var existing = await db.FuelAdjustments
+            .Where(a => a.WeekStart == weekStart)
+            .ToListAsync(cancellationToken);
+        var added = 0;
+        var updated = 0;
+        foreach (var row in rows)
+        {
+            var match = existing.FirstOrDefault(a =>
+                a.OilCompany.Equals(row.OilCompany, StringComparison.OrdinalIgnoreCase) &&
+                a.EffectiveDatePhilippines == row.EffectiveDatePhilippines &&
+                a.EffectiveAtUtc == row.EffectiveAtUtc);
+            if (match is null)
+            {
+                match = new FuelAdjustment
+                {
+                    WeekStart = weekStart,
+                    OilCompany = row.OilCompany,
+                    EffectiveDatePhilippines = row.EffectiveDatePhilippines,
+                    EffectiveAtUtc = row.EffectiveAtUtc
+                };
+                db.FuelAdjustments.Add(match);
+                existing.Add(match);
+                added++;
+            }
+            else
+            {
+                updated++;
+            }
+
+            match.WeekEnd = weekEnd;
+            match.GasolineChangePerLiter = row.GasolineChangePerLiter;
+            match.DieselChangePerLiter = row.DieselChangePerLiter;
+            match.KeroseneChangePerLiter = row.KeroseneChangePerLiter;
+            match.SourceUrl = url;
+            match.FetchedAtUtc = fetchedAtUtc;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return new FuelAdjustmentImportResult(
+            weekStart, weekEnd, url, added, updated, fetchedAtUtc);
     }
 
     private sealed record ValidatedRow(

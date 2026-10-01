@@ -11,6 +11,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(DbConfig.ResolveConnectionString(builder.Configuration)));
 builder.Services.AddBrowserAuthentication();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton<FuelAdjustmentBackfill>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<FuelAdjustmentBackfill>());
 var sourcePolicy = new FuelPriceSourcePolicy(builder.Environment);
 var websiteCatalog = new FuelPriceWebsiteCatalog(builder.Environment);
 if (sourcePolicy.BlockedDomains.Concat(

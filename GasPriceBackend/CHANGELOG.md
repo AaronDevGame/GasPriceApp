@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Backfill DOE fuel-adjustment notices for an inclusive date range, including any notice week that overlaps the range, with optional historical PDF URLs and a pollable per-notice job status.
+
 ## [1.10.3] - 2026-10-02
 
 ### Added

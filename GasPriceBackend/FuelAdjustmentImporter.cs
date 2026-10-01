@@ -96,7 +96,7 @@ public sealed class FuelAdjustmentImporter
         return (sourceUrl, extraction);
     }
 
-    private async Task<string> FindLatestUrlAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> FindNoticeUrlsAsync(CancellationToken cancellationToken)
     {
         using var response = await _sourceClient.GetAsync(DoePage, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -105,14 +105,22 @@ public sealed class FuelAdjustmentImporter
             "Summary of Prior Notice on Price Adjustments", StringComparison.OrdinalIgnoreCase);
         if (attachmentSection < 0)
             throw new InvalidDataException("DOE price-adjustments page did not contain its notice section.");
+
+        var urls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (Match match in PdfLinks.Matches(html[attachmentSection..]))
         {
-            var value = match.Groups["url"].Value;
-            if (Uri.TryCreate(new Uri(DoePage), value, out var uri) && IsAllowedPdfUrl(uri))
-                return uri.AbsoluteUri;
+            if (Uri.TryCreate(new Uri(DoePage), match.Groups["url"].Value, out var uri) &&
+                IsAllowedPdfUrl(uri))
+                urls.Add(uri.AbsoluteUri);
         }
+        if (urls.Count == 0)
+            throw new InvalidDataException("No DOE fuel-adjustment PDF was found on the price-adjustments page.");
+        return urls.ToArray();
+    }
 
-        throw new InvalidDataException("No DOE fuel-adjustment PDF was found on the price-adjustments page.");
+    private async Task<string> FindLatestUrlAsync(CancellationToken cancellationToken)
+    {
+        return (await FindNoticeUrlsAsync(cancellationToken))[0];
     }
 
     public static string ValidatePdfUrl(string value)
