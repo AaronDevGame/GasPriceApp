@@ -7,3 +7,17 @@
   --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
 }
+
+#adjustment-week-tabs {
+  scrollbar-color: #208aef transparent;
+  scrollbar-width: thin;
+}
+
+#adjustment-week-tabs::-webkit-scrollbar {
+  height: 8px;
+}
+
+#adjustment-week-tabs::-webkit-scrollbar-thumb {
+  background: #208aef;
+  border-radius: 8px;
+}

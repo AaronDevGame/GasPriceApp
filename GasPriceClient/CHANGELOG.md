@@ -4,6 +4,7 @@
 
 ### Changed
 - Show available fuel adjustment weeks as selectable date tabs, opening the latest week by default and loading the latest five grouped weeks.
+- Animate week selection into view and the corresponding adjustment cards, with a visible horizontal scrollbar for week tabs on web.
 
 ## [1.0.3] - 2026-10-02
 

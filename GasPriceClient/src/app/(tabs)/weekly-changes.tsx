@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Easing, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
@@ -84,6 +84,10 @@ export default function WeeklyChangesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const weekScroll = useRef<ScrollView>(null);
+  const weekViewportWidth = useRef(0);
+  const weekTabLayouts = useRef<Record<string, { x: number; width: number }>>({});
+  const [cardEntrance] = useState(() => new Animated.Value(1));
   const authenticated = session?.state === 'authenticated';
 
   const load = useCallback(async (refresh = false) => {
@@ -109,6 +113,23 @@ export default function WeeklyChangesScreen() {
   const availableWeeks = feed?.groups ?? [];
   const activeWeek = availableWeeks.find(week => week.weekStart === selectedWeek) ?? availableWeeks[0];
 
+  const selectWeek = (weekStart: string) => {
+    const tab = weekTabLayouts.current[weekStart];
+    if (tab) {
+      weekScroll.current?.scrollTo({ x: Math.max(0, tab.x + tab.width / 2 - weekViewportWidth.current / 2), animated: true });
+    }
+    if (weekStart === activeWeek.weekStart) return;
+    cardEntrance.stopAnimation();
+    cardEntrance.setValue(0);
+    setSelectedWeek(weekStart);
+    Animated.timing(cardEntrance, {
+      toValue: 1,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: Platform.OS !== 'web',
+    }).start();
+  };
+
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}
@@ -130,12 +151,14 @@ export default function WeeklyChangesScreen() {
             <ThemedText>Changes will appear here when a DOE notice has been imported.</ThemedText>
           </ThemedView>}
           {availableWeeks.length > 0 && <View style={styles.week}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+            <ScrollView ref={weekScroll} id="adjustment-week-tabs" horizontal showsHorizontalScrollIndicator
+              onLayout={event => { weekViewportWidth.current = event.nativeEvent.layout.width; }}
               contentContainerStyle={styles.weekTabs} accessibilityLabel="Adjustment weeks">
               {availableWeeks.map(week => {
                 const selected = week.weekStart === activeWeek.weekStart;
                 return <Pressable key={week.weekStart} accessibilityRole="tab" accessibilityState={{ selected }}
-                  accessibilityLabel={weekLabel(week.weekStart, week.weekEnd)} onPress={() => setSelectedWeek(week.weekStart)}
+                  accessibilityLabel={weekLabel(week.weekStart, week.weekEnd)} onPress={() => selectWeek(week.weekStart)}
+                  onLayout={event => { weekTabLayouts.current[week.weekStart] = event.nativeEvent.layout; }}
                   style={[styles.weekTab, { backgroundColor: selected ? theme.backgroundSelected : theme.backgroundElement },
                     selected && styles.selectedWeekTab]}>
                   <ThemedText type="smallBold" style={selected ? styles.selectedWeekTabText : undefined}>
@@ -144,9 +167,10 @@ export default function WeeklyChangesScreen() {
                 </Pressable>;
               })}
             </ScrollView>
-            <View style={styles.week}>
+            <Animated.View style={[styles.week, { opacity: cardEntrance,
+              transform: [{ translateY: cardEntrance.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
               {activeWeek.adjustments.map(item => <AdjustmentCard key={item.id} item={item} />)}
-            </View>
+            </Animated.View>
           </View>}
           <ThemedText type="small" themeColor="textSecondary">Based on DOE notices. These are changes per liter, not current pump prices.</ThemedText>
         </View>
@@ -161,7 +185,7 @@ const styles = StyleSheet.create({
   header: { gap: 8, marginBottom: 12 }, accent: { color: '#208AEF' },
   title: { fontSize: 38, lineHeight: 44 }, loading: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   week: { gap: 12 },
-  weekTabs: { gap: 8, paddingBottom: 4 },
+  weekTabs: { gap: 8, paddingBottom: 8 },
   weekTab: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 2, borderColor: 'transparent' },
   selectedWeekTab: { borderColor: '#208AEF' },
   selectedWeekTabText: { color: '#208AEF' },
