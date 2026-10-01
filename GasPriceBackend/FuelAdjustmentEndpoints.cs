@@ -15,7 +15,16 @@ public sealed record FuelAdjustmentItem(
     string SourceUrl,
     DateTime FetchedAtUtc);
 
-public sealed record FuelAdjustmentFeed(int Weeks, IReadOnlyList<FuelAdjustmentItem> Items);
+public sealed record FuelAdjustmentWeek(
+    DateOnly WeekStart,
+    DateOnly WeekEnd,
+    IReadOnlyList<FuelAdjustmentItem> Adjustments);
+
+public sealed record FuelAdjustmentFeed(
+    int Weeks,
+    int RequestedWeeks,
+    IReadOnlyList<FuelAdjustmentWeek> Groups,
+    IReadOnlyList<FuelAdjustmentItem> Items);
 public sealed record FuelAdjustmentImportResult(
     DateOnly WeekStart,
     DateOnly WeekEnd,
@@ -60,7 +69,7 @@ public static class FuelAdjustmentEndpoints
                 .Take(weeks)
                 .ToListAsync(cancellationToken);
             if (starts.Count == 0)
-                return ApiResults.Ok(new FuelAdjustmentFeed(weeks, []), "fuel_price_adjustments", instanceId);
+                return ApiResults.Ok(new FuelAdjustmentFeed(0, weeks, [], []), "fuel_price_adjustments", instanceId);
 
             var records = await db.FuelAdjustments.AsNoTracking()
                 .Where(a => starts.Contains(a.WeekStart))
@@ -74,8 +83,14 @@ public static class FuelAdjustmentEndpoints
                     a.GasolineChangePerLiter, a.DieselChangePerLiter,
                     a.KeroseneChangePerLiter, a.SourceUrl, a.FetchedAtUtc))
                 .ToListAsync(cancellationToken);
+            var groups = records
+                .GroupBy(item => new { item.WeekStart, item.WeekEnd })
+                .Select(group => new FuelAdjustmentWeek(
+                    group.Key.WeekStart, group.Key.WeekEnd, group.ToList()))
+                .ToList();
             return ApiResults.Ok(
-                new FuelAdjustmentFeed(weeks, records), "fuel_price_adjustments", instanceId);
+                new FuelAdjustmentFeed(groups.Count, weeks, groups, records),
+                "fuel_price_adjustments", instanceId);
         });
 
         app.MapPost(ApiRoutes.AdminFuelPriceAdjustmentsImport, async (
