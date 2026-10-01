@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Show the Your area fuel prices in one compact horizontal row while retaining each fuel's color, estimate date, and per-liter label.
+
 ## [1.0.2] - 2026-09-29
 
 ### Fixed
