@@ -63,6 +63,30 @@ public sealed class FuelPriceWebsiteCatalog
 
         Sources = entries.Where(source => source.Enabled).OrderBy(source => source.Priority).ToArray();
     }
+
+    public bool HasSourceDomain(JsonElement result, IReadOnlyList<string> scannedDomains)
+    {
+        if (scannedDomains.Count == 0 ||
+            result.ValueKind != JsonValueKind.Object ||
+            !result.TryGetProperty("sources", out var sources) ||
+            sources.ValueKind != JsonValueKind.Array)
+            return false;
+
+        foreach (var source in sources.EnumerateArray())
+        {
+            if (source.ValueKind != JsonValueKind.Object ||
+                !source.TryGetProperty("url", out var url) ||
+                url.ValueKind != JsonValueKind.String ||
+                !Uri.TryCreate(url.GetString(), UriKind.Absolute, out var uri))
+                continue;
+
+            if (scannedDomains.Any(domain => uri.Host.Equals(domain, StringComparison.OrdinalIgnoreCase) ||
+                uri.Host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+
+        return false;
+    }
 }
 
 public sealed partial class FuelPriceWebsiteClient(

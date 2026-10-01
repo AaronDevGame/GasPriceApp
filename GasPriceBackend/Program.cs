@@ -11,8 +11,14 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(DbConfig.ResolveConnectionString(builder.Configuration)));
 builder.Services.AddBrowserAuthentication();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
-builder.Services.AddSingleton(new FuelPriceSourcePolicy(builder.Environment));
-builder.Services.AddSingleton(new FuelPriceWebsiteCatalog(builder.Environment));
+var sourcePolicy = new FuelPriceSourcePolicy(builder.Environment);
+var websiteCatalog = new FuelPriceWebsiteCatalog(builder.Environment);
+if (sourcePolicy.BlockedDomains.Concat(
+        websiteCatalog.Sources.Select(source => new Uri(source.Origin).Host))
+    .Distinct(StringComparer.OrdinalIgnoreCase).Count() > 100)
+    throw new InvalidDataException("Fuel-price web search supports at most 100 blocked domains in total.");
+builder.Services.AddSingleton(sourcePolicy);
+builder.Services.AddSingleton(websiteCatalog);
 builder.Services.AddHttpClient<FuelPriceWebsiteClient>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(8);

@@ -12,6 +12,12 @@ AI web search runs. Direct results use the same cache and response shape;
 `model` begins with `direct:` and AI usage and cost are null. A failed research
 request does not affect the general feed.
 
+For AI fallback, the backend adds the enabled direct-source domains it just
+checked to the web-search blocked domains and tells the agent not to cite them.
+They remain in `fuel-price-sources.json`, separate from the permanently excluded
+sources file. The backend rejects a new AI result that cites a directly checked
+domain.
+
 Each configured source needs a matching backend parser. Adding an entry to the
 JSON file alone cannot make a new website readable. Origins are restricted to
 the matching source domain, and the configuration is loaded at startup. The

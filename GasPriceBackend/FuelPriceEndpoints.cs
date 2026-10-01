@@ -35,6 +35,7 @@ public static class FuelPriceEndpoints
             OpenAiResponsesClient openAi,
             GeoapifyReverseGeocodingClient geoapify,
             FuelPriceWebsiteClient websites,
+            FuelPriceWebsiteCatalog websiteCatalog,
             FuelPriceSourcePolicy sourcePolicy,
             TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
@@ -226,11 +227,16 @@ public static class FuelPriceEndpoints
                     instanceId,
                     "The fuel-price agent instructions are unavailable.");
 
+            var scannedDomains = cityKey is null
+                ? []
+                : websiteCatalog.Sources.Select(source => new Uri(source.Origin).Host).ToArray();
+
             try
             {
                 var response = await openAi.CreateFuelPriceResponseAsync(
                     fuelRequest,
                     now,
+                    scannedDomains,
                     cancellationToken);
                 if (sourcePolicy.HasExcludedSource(response.Result))
                 {
@@ -238,6 +244,14 @@ public static class FuelPriceEndpoints
                         "ai_invalid_response",
                         instanceId,
                         "The fuel-price agent returned evidence from an excluded source.");
+                }
+
+                if (websiteCatalog.HasSourceDomain(response.Result, scannedDomains))
+                {
+                    return ApiResults.BadGateway(
+                        "ai_invalid_response",
+                        instanceId,
+                        "The fuel-price agent returned evidence from a website already checked directly.");
                 }
 
                 var cachedAt = timeProvider.GetUtcNow().UtcDateTime;

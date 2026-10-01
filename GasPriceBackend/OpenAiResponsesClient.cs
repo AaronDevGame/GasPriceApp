@@ -101,6 +101,7 @@ public sealed class OpenAiResponsesClient
     public async Task<OpenAiFuelPriceResponseResult> CreateFuelPriceResponseAsync(
         FuelPriceSearchRequest fuelPriceRequest,
         DateTime requestedAtUtc,
+        IReadOnlyList<string> previouslyScannedDomains,
         CancellationToken cancellationToken)
     {
         if (!IsConfigured)
@@ -126,17 +127,27 @@ public sealed class OpenAiResponsesClient
             ["search_area_priority"] = searchAreaPriority
         });
 
+        var blockedDomains = _fuelPriceSourcePolicy.BlockedDomains
+            .Concat(previouslyScannedDomains)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var instructions = _fuelPriceInstructions!;
+        if (previouslyScannedDomains.Count > 0)
+            instructions += "\n\nThe backend already checked these fuel-price websites for this request: " +
+                string.Join(", ", previouslyScannedDomains) +
+                ". Do not search, cite, or use price evidence from these websites or their subdomains. Search other sources instead.";
+
         using var request = new HttpRequestMessage(HttpMethod.Post, "v1/responses")
         {
             Content = JsonContent.Create(new OpenAiCreateResponseRequest(
                 Model,
                 input,
-                _fuelPriceInstructions!,
+                instructions,
                 [new OpenAiWebSearchTool(
                     "web_search",
                     ExternalWebAccess: true,
                     SearchContextSize: "low",
-                    Filters: new OpenAiWebSearchFilters(_fuelPriceSourcePolicy.BlockedDomains))],
+                    Filters: new OpenAiWebSearchFilters(blockedDomains))],
                 "auto",
                 FuelPriceMaxToolCalls,
                 FuelPriceMaxOutputTokens,
