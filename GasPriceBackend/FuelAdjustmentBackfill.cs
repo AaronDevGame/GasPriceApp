@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http.Features;
@@ -100,7 +101,10 @@ public sealed class FuelAdjustmentBackfill : BackgroundService
         try
         {
             foreach (var url in await importer.FindNoticeUrlsAsync(cancellationToken))
-                urls.Add(url);
+            {
+                if (FuelAdjustmentNoticeName.MayOverlap(url, job.From, job.To))
+                    urls.Add(url);
+            }
         }
         catch (Exception exception) when (exception is HttpRequestException or InvalidDataException)
         {
@@ -252,5 +256,67 @@ public sealed class FuelAdjustmentBackfill : BackgroundService
             InstanceId = instanceId,
             Data = status
         }, statusCode: StatusCodes.Status202Accepted);
+    }
+}
+
+internal static class FuelAdjustmentNoticeName
+{
+    private const string Month = "Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?";
+    private static readonly Regex MonthFirst = new(
+        $@"\b(?<month1>{Month})\s*(?<day1>\d{{1,2}})\s*[-–]\s*(?:(?<month2>{Month})\s*)?(?<day2>\d{{1,2}})\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex DayFirst = new(
+        $@"\b(?<day1>\d{{1,2}})\s*[-–]\s*(?<day2>\d{{1,2}})\s*(?<month1>{Month})\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex Year = new(@"\b20\d{2}\b", RegexOptions.Compiled);
+
+    // A name is only a hint. If it is ambiguous, let PDF extraction decide.
+    public static bool MayOverlap(string url, DateOnly from, DateOnly to)
+    {
+        var name = Uri.UnescapeDataString(new Uri(url).AbsolutePath.Split('/').Last());
+        var match = MonthFirst.Match(name);
+        if (!match.Success) match = DayFirst.Match(name);
+        if (!match.Success) return true;
+
+        var startMonth = ParseMonth(match.Groups["month1"].Value);
+        var endMonth = match.Groups["month2"].Success
+            ? ParseMonth(match.Groups["month2"].Value) : startMonth;
+        var startDay = int.Parse(match.Groups["day1"].Value, CultureInfo.InvariantCulture);
+        var endDay = int.Parse(match.Groups["day2"].Value, CultureInfo.InvariantCulture);
+        if (startMonth == 0 || endMonth == 0) return true;
+
+        var yearMatch = Year.Match(name);
+        var years = yearMatch.Success
+            ? new[] { int.Parse(yearMatch.Value, CultureInfo.InvariantCulture) - 1,
+                int.Parse(yearMatch.Value, CultureInfo.InvariantCulture) }
+            : Enumerable.Range(Math.Max(1, from.Year - 1), to.Year - from.Year + 3);
+        var foundWeek = false;
+        foreach (var year in years)
+        {
+            if (!DateOnly.TryParseExact($"{year:D4}-{startMonth:D2}-{startDay:D2}", "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var start))
+                continue;
+            var endYear = endMonth < startMonth ? year + 1 : year;
+            if (!DateOnly.TryParseExact($"{endYear:D4}-{endMonth:D2}-{endDay:D2}", "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var end) ||
+                end.DayNumber - start.DayNumber != 6 || start.DayOfWeek != DayOfWeek.Tuesday)
+                continue;
+            foundWeek = true;
+            if (start <= to && end >= from)
+                return true;
+        }
+        return !foundWeek;
+    }
+
+    private static int ParseMonth(string value)
+    {
+        var abbreviation = value[..Math.Min(3, value.Length)];
+        for (var month = 1; month <= 12; month++)
+        {
+            if (abbreviation.Equals(CultureInfo.InvariantCulture.DateTimeFormat.GetAbbreviatedMonthName(month),
+                    StringComparison.OrdinalIgnoreCase))
+                return month;
+        }
+        return 0;
     }
 }

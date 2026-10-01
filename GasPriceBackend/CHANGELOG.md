@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Exclude clearly out-of-range DOE notice PDFs from backfill job counts and results while retaining the PDF's extracted week as the final import check.
+
 ### Added
 - Backfill DOE fuel-adjustment notices for an inclusive date range, including any notice week that overlaps the range, with optional historical PDF URLs and a pollable per-notice job status.
 
