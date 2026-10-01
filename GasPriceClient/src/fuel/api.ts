@@ -21,10 +21,20 @@ export type FuelAdjustment = {
   sourceUrl: string;
   fetchedAtUtc: string;
 };
-export type FuelAdjustmentFeed = { weeks: number; items: FuelAdjustment[] };
+export type FuelAdjustmentWeek = {
+  weekStart: string;
+  weekEnd: string;
+  adjustments: FuelAdjustment[];
+};
+export type FuelAdjustmentFeed = {
+  weeks: number;
+  requestedWeeks: number;
+  groups: FuelAdjustmentWeek[];
+  items: FuelAdjustment[];
+};
 
 export function getFuelAdjustments() {
-  return authClient.request<FuelAdjustmentFeed>('/fuel-prices/adjustments');
+  return authClient.request<FuelAdjustmentFeed>('/fuel-prices/adjustments?weeks=5');
 }
 
 export function areaQuery(area?: Area) {

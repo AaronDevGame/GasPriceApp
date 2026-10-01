@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Show available fuel adjustment weeks as selectable date tabs, opening the latest week by default and loading the latest five grouped weeks.
+
 ## [1.0.3] - 2026-10-02
 
 ### Added

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
@@ -11,6 +11,14 @@ import { useTheme } from '@/hooks/use-theme';
 
 function dateLabel(value: string) {
   return new Date(`${value}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function weekLabel(start: string, end: string) {
+  const startDate = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+  const startOptions: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  if (startDate.getFullYear() !== endDate.getFullYear()) startOptions.year = 'numeric';
+  return `${startDate.toLocaleDateString('en-PH', startOptions)} – ${dateLabel(end)}`;
 }
 
 function stationBrand(value: string) {
@@ -72,6 +80,7 @@ export default function WeeklyChangesScreen() {
   const { session, loading: authLoading, error: authError } = useAuth();
   const theme = useTheme();
   const [feed, setFeed] = useState<FuelAdjustmentFeed | null>(null);
+  const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,11 +106,8 @@ export default function WeeklyChangesScreen() {
     return () => { active = false; };
   }, [authenticated]);
 
-  const weeks = new Map<string, FuelAdjustment[]>();
-  for (const item of feed?.items ?? []) {
-    const key = `${item.weekStart}|${item.weekEnd}`;
-    weeks.set(key, [...(weeks.get(key) ?? []), item]);
-  }
+  const availableWeeks = feed?.groups ?? [];
+  const activeWeek = availableWeeks.find(week => week.weekStart === selectedWeek) ?? availableWeeks[0];
 
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.safe}>
@@ -119,17 +125,29 @@ export default function WeeklyChangesScreen() {
           {authLoading || (authenticated && loading) ? <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">Loading weekly changes…</ThemedText></View> : null}
           {!authenticated && !authLoading && <ThemedText accessibilityRole="alert">{authError ?? 'You are signed out. Reopen the Gas Price tab to reconnect.'}</ThemedText>}
           {error && <ThemedText accessibilityRole="alert">{error} {Platform.OS === 'web' ? 'Reload this page to try again.' : 'Pull down to try again.'}</ThemedText>}
-          {authenticated && !loading && !error && feed?.items.length === 0 && <ThemedView type="backgroundElement" style={styles.card}>
+          {authenticated && !loading && !error && feed?.groups.length === 0 && <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText style={styles.company}>No weekly changes yet</ThemedText>
             <ThemedText>Changes will appear here when a DOE notice has been imported.</ThemedText>
           </ThemedView>}
-          {[...weeks].map(([key, items]) => {
-            const [start, end] = key.split('|');
-            return <View key={key} style={styles.week}>
-              <ThemedText style={styles.weekTitle}>{dateLabel(start)} – {dateLabel(end)}</ThemedText>
-              {items.map(item => <AdjustmentCard key={item.id} item={item} />)}
-            </View>;
-          })}
+          {availableWeeks.length > 0 && <View style={styles.week}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.weekTabs} accessibilityLabel="Adjustment weeks">
+              {availableWeeks.map(week => {
+                const selected = week.weekStart === activeWeek.weekStart;
+                return <Pressable key={week.weekStart} accessibilityRole="tab" accessibilityState={{ selected }}
+                  accessibilityLabel={weekLabel(week.weekStart, week.weekEnd)} onPress={() => setSelectedWeek(week.weekStart)}
+                  style={[styles.weekTab, { backgroundColor: selected ? theme.backgroundSelected : theme.backgroundElement },
+                    selected && styles.selectedWeekTab]}>
+                  <ThemedText type="smallBold" style={selected ? styles.selectedWeekTabText : undefined}>
+                    {weekLabel(week.weekStart, week.weekEnd)}
+                  </ThemedText>
+                </Pressable>;
+              })}
+            </ScrollView>
+            <View style={styles.week}>
+              {activeWeek.adjustments.map(item => <AdjustmentCard key={item.id} item={item} />)}
+            </View>
+          </View>}
           <ThemedText type="small" themeColor="textSecondary">Based on DOE notices. These are changes per liter, not current pump prices.</ThemedText>
         </View>
       </ScrollView>
@@ -142,7 +160,11 @@ const styles = StyleSheet.create({
   content: { width: '100%', maxWidth: 900, gap: 20, paddingVertical: 16 },
   header: { gap: 8, marginBottom: 12 }, accent: { color: '#208AEF' },
   title: { fontSize: 38, lineHeight: 44 }, loading: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  week: { gap: 12 }, weekTitle: { fontSize: 20, lineHeight: 28, fontWeight: '700' },
+  week: { gap: 12 },
+  weekTabs: { gap: 8, paddingBottom: 4 },
+  weekTab: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 2, borderColor: 'transparent' },
+  selectedWeekTab: { borderColor: '#208AEF' },
+  selectedWeekTabText: { color: '#208AEF' },
   card: { padding: 20, borderRadius: 20, gap: 16 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   brand: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
