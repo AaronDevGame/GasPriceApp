@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
-- Group fuel-adjustment read results by notice week and report the actual number of returned weeks alongside the requested limit, while retaining flat items for existing clients.
+- Group fuel-adjustment read results by notice week and report the actual number of returned weeks alongside the requested limit.
 
 ### Fixed
 - Exclude clearly out-of-range DOE notice PDFs from backfill job counts and results while retaining the PDF's extracted week as the final import check.

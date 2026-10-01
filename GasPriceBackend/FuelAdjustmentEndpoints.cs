@@ -23,8 +23,7 @@ public sealed record FuelAdjustmentWeek(
 public sealed record FuelAdjustmentFeed(
     int Weeks,
     int RequestedWeeks,
-    IReadOnlyList<FuelAdjustmentWeek> Groups,
-    IReadOnlyList<FuelAdjustmentItem> Items);
+    IReadOnlyList<FuelAdjustmentWeek> Groups);
 public sealed record FuelAdjustmentImportResult(
     DateOnly WeekStart,
     DateOnly WeekEnd,
@@ -69,7 +68,7 @@ public static class FuelAdjustmentEndpoints
                 .Take(weeks)
                 .ToListAsync(cancellationToken);
             if (starts.Count == 0)
-                return ApiResults.Ok(new FuelAdjustmentFeed(0, weeks, [], []), "fuel_price_adjustments", instanceId);
+                return ApiResults.Ok(new FuelAdjustmentFeed(0, weeks, []), "fuel_price_adjustments", instanceId);
 
             var records = await db.FuelAdjustments.AsNoTracking()
                 .Where(a => starts.Contains(a.WeekStart))
@@ -89,7 +88,7 @@ public static class FuelAdjustmentEndpoints
                     group.Key.WeekStart, group.Key.WeekEnd, group.ToList()))
                 .ToList();
             return ApiResults.Ok(
-                new FuelAdjustmentFeed(groups.Count, weeks, groups, records),
+                new FuelAdjustmentFeed(groups.Count, weeks, groups),
                 "fuel_price_adjustments", instanceId);
         });
 
