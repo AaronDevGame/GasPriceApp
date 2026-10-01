@@ -30,7 +30,6 @@ export type FuelAdjustmentFeed = {
   weeks: number;
   requestedWeeks: number;
   groups: FuelAdjustmentWeek[];
-  items: FuelAdjustment[];
 };
 
 export function getFuelAdjustments() {
