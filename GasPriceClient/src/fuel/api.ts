@@ -33,7 +33,7 @@ export type FuelAdjustmentFeed = {
 };
 
 export function getFuelAdjustments() {
-  return authClient.request<FuelAdjustmentFeed>('/fuel-prices/adjustments?weeks=5');
+  return authClient.request<FuelAdjustmentFeed>('/fuel-prices/adjustments?weeks=52');
 }
 
 export function areaQuery(area?: Area) {
