@@ -6,12 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.10.3] - 2026-10-02
+
 ### Added
 - Import DOE weekly, company-specific fuel adjustments through an admin endpoint using a PDF extraction agent, store them in PostgreSQL, and expose an authenticated adjustment feed.
 - Check configured MetroFuel Tracker and GasWatch PH city pages for fresh fuel prices before using AI web search; prefer the more recently verified source and retain its evidence in the existing cache.
 - Keep direct fuel-price sources in `agents/fuel-price-sources.json` so supported sources can be enabled or prioritized without changing endpoint contracts.
 
 ### Changed
+- Bump project and API version to `1.10.3`.
 - Block directly checked fuel-price websites from AI fallback searches without adding them to the permanent exclusion list.
 
 ### Fixed
