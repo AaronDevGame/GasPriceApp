@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
@@ -11,6 +11,30 @@ import { useTheme } from '@/hooks/use-theme';
 
 function dateLabel(value: string) {
   return new Date(`${value}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function stationBrand(value: string) {
+  const key = value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  switch (key) {
+    case 'caltex': return { name: 'Caltex', logo: 'caltex' } as const;
+    case 'cleanfuel': return { name: 'Cleanfuel', logo: 'cleanfuel' } as const;
+    case 'ecooil': return { name: 'EcoOil', logo: 'ecooil' } as const;
+    case 'cityoil': return { name: 'City Oil', logo: null } as const;
+    default: return { name: value.trim(), logo: null } as const;
+  }
+}
+
+function StationLogo({ name, logo }: { name: string; logo: 'caltex' | 'cleanfuel' | 'ecooil' | null }) {
+  if (logo === 'caltex') return <Image source={require('@/assets/images/stations/caltex.png')} style={styles.logo} resizeMode="contain" accessibilityLabel="Caltex logo" />;
+  if (logo === 'cleanfuel') return <View style={styles.logoCrop}>
+    <Image source={require('@/assets/images/stations/cleanfuel.png')} style={styles.cleanfuelLogo} resizeMode="stretch" accessibilityLabel="Cleanfuel logo" />
+  </View>;
+  if (logo === 'ecooil') return <View style={styles.logoCrop}>
+    <Image source={require('@/assets/images/stations/ecooil.png')} style={styles.ecooilLogo} resizeMode="stretch" accessibilityLabel="EcoOil logo" />
+  </View>;
+  return <View style={styles.logoFallback} accessible={false}>
+    <ThemedText type="smallBold" style={styles.logoInitials}>{name.split(/\s+/).map(word => word[0]).slice(0, 2).join('').toUpperCase()}</ThemedText>
+  </View>;
 }
 
 function Change({ label, amount }: { label: string; amount: number | null }) {
@@ -27,10 +51,14 @@ function Change({ label, amount }: { label: string; amount: number | null }) {
 }
 
 function AdjustmentCard({ item }: { item: FuelAdjustment }) {
+  const brand = stationBrand(item.oilCompany);
   return <ThemedView type="backgroundElement" style={styles.card}>
     <View style={styles.cardHeader}>
-      <ThemedText style={styles.company}>{item.oilCompany}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">Effective {dateLabel(item.effectiveDatePhilippines)}</ThemedText>
+      <View style={styles.brand}>
+        <StationLogo name={brand.name} logo={brand.logo} />
+        <ThemedText style={styles.company}>{brand.name}</ThemedText>
+      </View>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.effectiveDate}>Effective {dateLabel(item.effectiveDatePhilippines)}</ThemedText>
     </View>
     <View style={styles.changes}>
       <Change label="Gasoline" amount={item.gasolineChangePerLiter} />
@@ -115,8 +143,16 @@ const styles = StyleSheet.create({
   header: { gap: 8, marginBottom: 12 }, accent: { color: '#208AEF' },
   title: { fontSize: 38, lineHeight: 44 }, loading: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   week: { gap: 12 }, weekTitle: { fontSize: 20, lineHeight: 28, fontWeight: '700' },
-  card: { padding: 20, borderRadius: 20, gap: 16 }, cardHeader: { gap: 4 },
-  company: { fontSize: 21, lineHeight: 28, fontWeight: '600' },
+  card: { padding: 20, borderRadius: 20, gap: 16 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  brand: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  logo: { width: 44, height: 44 }, logoCrop: { width: 44, height: 44, overflow: 'hidden' },
+  cleanfuelLogo: { width: 301, height: 44, left: -2 },
+  ecooilLogo: { width: 110, height: 44, left: -4 },
+  logoFallback: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#34526A', alignItems: 'center', justifyContent: 'center' },
+  logoInitials: { color: '#FFFFFF' },
+  company: { fontSize: 21, lineHeight: 28, fontWeight: '600', flexShrink: 1 },
+  effectiveDate: { textAlign: 'right', flexShrink: 1 },
   changes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   change: { flexGrow: 1, flexBasis: 100, gap: 4 },
 });

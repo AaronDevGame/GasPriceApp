@@ -6,6 +6,7 @@
 - Add Gas Price and Weekly Changes tabs, with Gas Price opening by default and weekly company fuel adjustments showing increases and decreases.
 
 ### Changed
+- Show station marks beside correctly styled names on Weekly Changes cards, with effective dates aligned on the right.
 - Remove the Weekly Changes refresh button on web; use browser reload there and pull to refresh on mobile.
 - Show the Your area fuel prices in one compact horizontal row while retaining each fuel's color, estimate date, and per-liter label.
 
