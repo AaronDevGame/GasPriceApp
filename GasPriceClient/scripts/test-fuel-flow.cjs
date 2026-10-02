@@ -21,7 +21,9 @@ function harness(options = {}) {
       if (url.startsWith('/fuel-prices/history')) return { items: [point('2026-09-28', 60), point('2026-09-27', 60)] };
       if (url === '/ai/fuel-prices') {
         if (options.aiFailure) throw new Error('AI unavailable');
-        return { result: { location: { city: 'Cebu City', province: 'Cebu', region: 'Central Visayas', resolved_area: 'Cebu City, Cebu' } } };
+        return { result: { location: { city: 'Cebu City', province: 'Cebu', region: 'Central Visayas', resolved_area: 'Cebu City, Cebu' } },
+          doePrices: { city: 'Cebu City', province: 'Cebu', weekStart: '2026-09-22', weekEnd: '2026-09-28',
+            prices: [{ oilCompany: 'Petron', fuelGrade: 'DIESEL', minPricePerLiter: 99, maxPricePerLiter: 101 }] } };
       }
       return feed;
     },
@@ -64,7 +66,7 @@ function harness(options = {}) {
 }
 async function settle(h) {
   for (let i = 0; i < 50; i++) {
-    if (!h.states[3]?.value) return;
+    if (!h.states[4]?.value) return;
     await new Promise(resolve => setTimeout(resolve, 5));
   }
   throw new Error('Flow did not settle');
@@ -114,12 +116,13 @@ async function settle(h) {
   const local = granted.calls.find(call => call.url?.startsWith('/fuel-prices?'));
   assert.ok(granted.calls.indexOf(ai) < granted.calls.indexOf(local));
   assert.equal(new URLSearchParams(local.url.split('?')[1]).get('city'), 'Cebu City');
+  assert.equal(granted.states[1].value.prices[0].oilCompany, 'Petron');
   console.log('PASS initial parameter-free GET, permission, coordinates POST, then resolved-area GET');
   for (const options of [{ denied: true }, { gpsFailure: true }, { aiFailure: true }]) {
     const h = harness(options); h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
     assert.equal(h.states[0].value.items.length, 1);
-    if (options.aiFailure) assert.ok(h.states[5].value.includes('location was received'));
-    if (options.denied) assert.ok(h.states[5].value.includes('access is blocked'));
+    if (options.aiFailure) assert.ok(h.states[6].value.includes('location was received'));
+    if (options.denied) assert.ok(h.states[6].value.includes('access is blocked'));
     if (!options.aiFailure) assert.ok(!h.calls.some(call => call.url === '/ai/fuel-prices'));
     assert.ok(!h.calls.some(call => call.url?.startsWith('/fuel-prices?')));
   }
@@ -127,8 +130,8 @@ async function settle(h) {
   for (const reason of ['timeout', 'unavailable']) {
     const h = harness({ locationReason: reason });
     h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
-    assert.ok(h.states[5].value.includes(reason === 'timeout' ? 'timed out' : 'could not determine'));
-    assert.equal(h.states[3].value, false);
+    assert.ok(h.states[6].value.includes(reason === 'timeout' ? 'timed out' : 'could not determine'));
+    assert.equal(h.states[4].value, false);
     assert.ok(!h.calls.some(call => call.url === '/ai/fuel-prices'));
   }
   console.log('PASS location timeout and positioning failure show distinct recovery messages');
