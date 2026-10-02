@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/auth/auth-provider';
 import { errorMessage } from '@/auth/http';
-import { getHistory, getPrices, refreshLocation, type Area, type Coordinates, type Feed, type PricePoint } from './api';
+import { getHistory, getPrices, refreshLocation, type Area, type Coordinates, type DoeFuelPriceFeed, type Feed, type PricePoint } from './api';
 import { requestLocation } from './location';
 import { locationErrorMessage } from './location-error';
 
 export function useFuelPrices() {
   const { session, loading: authLoading, error: authError, restore, logout } = useAuth();
   const [feed, setFeed] = useState<Feed | null>(null);
+  const [doePrices, setDoePrices] = useState<DoeFuelPriceFeed | null>(null);
   const [updates, setUpdates] = useState<PricePoint[]>([]);
   const [historyError, setHistoryError] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -51,6 +52,7 @@ export function useFuelPrices() {
       if (ticket !== version.current) return;
       area.current = next.area;
       publish(next.feed, ticket);
+      setDoePrices(next.doePrices);
       setLocationNote(`Prices near ${next.area.resolved_area}.`);
     } catch (failure) {
       if (ticket === version.current) {
@@ -86,8 +88,11 @@ export function useFuelPrices() {
     if (!authenticated) return;
     void run(async ticket => {
       if (prompted.current) {
-        if (coordinates.current) publish((await refreshLocation(coordinates.current)).feed, ticket);
-        else publish(await getPrices(area.current), ticket);
+        if (coordinates.current) {
+          const next = await refreshLocation(coordinates.current);
+          publish(next.feed, ticket);
+          if (ticket === version.current) setDoePrices(next.doePrices);
+        } else publish(await getPrices(area.current), ticket);
         return;
       }
       publish(await getPrices(), ticket); // First display always has no query parameters.
@@ -106,6 +111,7 @@ export function useFuelPrices() {
       if (coordinates.current) {
         const next = await refreshLocation(coordinates.current);
         publish(next.feed, ticket);
+        if (ticket === version.current) setDoePrices(next.doePrices);
       } else publish(await getPrices(area.current), ticket);
     });
   };
@@ -114,6 +120,7 @@ export function useFuelPrices() {
     if (ticket !== version.current) return;
     area.current = selected;
     coordinates.current = undefined;
+    setDoePrices(null);
     publish(next, ticket);
     setLocationNote(next.localAreaStatus === 'not_cached'
       ? 'No saved prices for that area yet. Showing other available areas.'
@@ -124,6 +131,6 @@ export function useFuelPrices() {
     cancel();
     await logout();
   };
-  return { feed, updates, historyError, busy: busy || authLoading, error: authError ?? error,
+  return { feed, doePrices, updates, historyError, busy: busy || authLoading, error: authError ?? error,
     locationNote, authenticated, refresh, selectArea, useLocation, signOut };
 }

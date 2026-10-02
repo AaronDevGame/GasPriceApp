@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Show DOE company and fuel-grade price ranges after a location-based lookup when DOE data is available.
 - Show available fuel adjustment weeks as selectable date tabs, opening the latest week by default and loading up to 52 grouped weeks.
 - Animate week selection into view and the corresponding adjustment cards, with a visible horizontal scrollbar for week tabs on web.
 - Let desktop users drag the week tabs horizontally and reveal their scrollbar only while hovered, focused, or dragged.

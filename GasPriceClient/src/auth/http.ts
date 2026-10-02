@@ -35,7 +35,7 @@ export async function send<T>(path: string, init: RequestInit = {}): Promise<T> 
   for (let attempt = 0; attempt < 2; attempt++) {
     const controller = new AbortController();
     // The first status request can be slow while the hosted API starts up.
-    const timeoutMs = pathname === '/ai/fuel-prices' ? 120000
+    const timeoutMs = ['/ai/fuel-prices', '/fuel-prices/doe'].includes(pathname) ? 120000
       : ['/auth/status', '/auth/browser/status'].includes(pathname) ? 60000 : 15000;
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {

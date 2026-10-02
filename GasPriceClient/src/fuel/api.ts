@@ -7,7 +7,19 @@ export type PricePoint = { dataAsOf: string; freshness: string; prices: Prices }
 export type FeedItem = PricePoint & { area: Area & { level: string; name: string }; isLocal: boolean };
 export type Feed = { items: FeedItem[]; localAreaStatus: string };
 export type Coordinates = { latitude: number; longitude: number };
-export type LocationResult = { result: { location: Area & { resolved_area: string } } };
+export type DoeFuelPrice = {
+  city: string; province: string; region: string | null; oilCompany: string;
+  fuelGrade: string; minPricePerLiter: number; maxPricePerLiter: number;
+  weekStart: string; weekEnd: string; sourceUrl: string; fetchedAtUtc: string;
+};
+export type DoeFuelPriceFeed = {
+  city: string | null; province: string | null; region: string | null;
+  weekStart: string | null; weekEnd: string | null; prices: DoeFuelPrice[];
+};
+export type LocationResult = {
+  result: { location: Area & { resolved_area: string } };
+  doePrices?: DoeFuelPriceFeed | null;
+};
 export type FuelAdjustment = {
   id: number;
   weekStart: string;
@@ -55,7 +67,7 @@ export async function refreshLocation(coordinates: Coordinates) {
   });
   const area = result.result.location;
   if (!areaQuery(area).size) throw new Error('No area resolved');
-  return { area, feed: await getPrices(area) };
+  return { area, feed: await getPrices(area), doePrices: result.doePrices ?? null };
 }
 
 export async function getHistory(item: FeedItem) {
