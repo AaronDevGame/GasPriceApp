@@ -20,7 +20,8 @@ public sealed record FuelPriceApiResponse(
     bool CacheStored,
     string? CacheScope,
     DateTime? CachedAt,
-    DateTime? RefreshAfter);
+    DateTime? RefreshAfter,
+    DoeFuelPriceFeed? DoePrices = null);
 
 public static class FuelPriceEndpoints
 {
@@ -35,6 +36,7 @@ public static class FuelPriceEndpoints
             OpenAiResponsesClient openAi,
             GeoapifyReverseGeocodingClient geoapify,
             FuelPriceWebsiteClient websites,
+            DoeFuelPriceImporter doe,
             FuelPriceWebsiteCatalog websiteCatalog,
             FuelPriceSourcePolicy sourcePolicy,
             TimeProvider timeProvider,
@@ -161,6 +163,9 @@ public static class FuelPriceEndpoints
                                 c => c.HitCount + 1),
                             cancellationToken);
 
+                    var cachedDoeRows = cached.Model == "direct:doe"
+                        ? await doe.ReadAsync(db, location, now, cancellationToken)
+                        : [];
                     return ApiResults.Ok(
                         new FuelPriceApiResponse(
                             WithRequestLocation(cachedDocument.RootElement, coordinates, location),
@@ -172,9 +177,43 @@ public static class FuelPriceEndpoints
                             true,
                             cached.Scope,
                             cached.CachedAt,
-                            cached.RefreshAfter),
+                            cached.RefreshAfter,
+                            cached.Model == "direct:doe" ? DoeFuelPriceEndpoints.ToFeed(location, cachedDoeRows) : null),
                         "fuel_price_response",
                         instanceId);
+                }
+            }
+
+            var doeRows = await doe.GetAsync(db, location, now, cancellationToken);
+            if (doeRows.Count > 0)
+            {
+                var result = BuildDoeResult(fuelRequest, doeRows, now);
+                var cachedAt = timeProvider.GetUtcNow().UtcDateTime;
+                if (HasUsablePrices(result) &&
+                    TryGetFreshDataAsOf(result, cachedAt, out var dataAsOfUtc))
+                {
+                    var refreshAfter = GetRefreshAfter(cachedAt, dataAsOfUtc);
+                    db.FuelPriceCaches.Add(new FuelPriceCache
+                    {
+                        Scope = FuelPriceCacheScopes.City,
+                        City = fuelRequest.City,
+                        Province = fuelRequest.Province ?? "",
+                        Region = fuelRequest.Region,
+                        CityKey = cityKey,
+                        ProvinceKey = provinceKey ?? "",
+                        RegionKey = regionKey,
+                        ResultJson = result.GetRawText(),
+                        Model = "direct:doe",
+                        CachedAt = cachedAt,
+                        RefreshAfter = refreshAfter
+                    });
+                    await db.SaveChangesAsync(cancellationToken);
+                    return ApiResults.Ok(new FuelPriceApiResponse(
+                        WithRequestLocation(result, coordinates, location),
+                        "direct:doe", null, null, false, false, true,
+                        FuelPriceCacheScopes.City, cachedAt, refreshAfter,
+                        DoeFuelPriceEndpoints.ToFeed(location, doeRows)),
+                        "fuel_price_response", instanceId);
                 }
             }
 
@@ -463,6 +502,44 @@ public static class FuelPriceEndpoints
         return value.ValueKind == JsonValueKind.Number &&
                value.TryGetDouble(out number) &&
                double.IsFinite(number);
+    }
+
+    private static JsonElement BuildDoeResult(FuelPriceSearchRequest location,
+        IReadOnlyList<DoeFuelPrice> rows, DateTime nowUtc)
+    {
+        var first = rows[0];
+        return JsonSerializer.SerializeToElement(new
+        {
+            location = new { city = location.City, province = location.Province,
+                region = location.Region, country = "Philippines" },
+            status = "city_estimate",
+            source_tier = "government",
+            estimate_area = new { level = "city", name = location.City },
+            prices = new
+            {
+                diesel = DoeRange(rows, "DIESEL"),
+                gasoline_91 = DoeRange(rows, "RON 91"),
+                gasoline_95 = DoeRange(rows, "RON 95")
+            },
+            basis = "DOE city-level company price ranges for the stated report week; no individual station is identified.",
+            confidence = "high",
+            sources = new[] { new { name = "Philippine Department of Energy",
+                url = first.SourceUrl,
+                published_at = (string?)null,
+                geographic_coverage = location.City! } },
+            data_as_of = (first.WeekEnd <= DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+                    DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc),
+                    TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila")))
+                ? first.WeekEnd : first.WeekStart).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        });
+    }
+
+    private static object DoeRange(IReadOnlyList<DoeFuelPrice> rows, string grade)
+    {
+        var gradeRows = rows.Where(p => p.FuelGrade == grade).ToArray();
+        return new { min_price = gradeRows.Length == 0 ? (decimal?)null : gradeRows.Min(p => p.MinPricePerLiter),
+            max_price = gradeRows.Length == 0 ? (decimal?)null : gradeRows.Max(p => p.MaxPricePerLiter),
+            currency = "PHP", unit = "liter" };
     }
 
     private static string? NormalizeLocation(string? location)

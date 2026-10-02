@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     public DbSet<PlayerData> PlayerData => Set<PlayerData>();
     public DbSet<FuelPriceCache> FuelPriceCaches => Set<FuelPriceCache>();
     public DbSet<FuelAdjustment> FuelAdjustments => Set<FuelAdjustment>();
+    public DbSet<DoeFuelPrice> DoeFuelPrices => Set<DoeFuelPrice>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -138,6 +139,28 @@ public class AppDbContext : DbContext
                 .IsUnique().HasFilter("effective_at_utc IS NOT NULL");
             e.HasIndex(a => new { a.WeekStart, a.OilCompany, a.EffectiveDatePhilippines })
                 .IsUnique().HasFilter("effective_at_utc IS NULL");
+        });
+
+        modelBuilder.Entity<DoeFuelPrice>(e =>
+        {
+            e.ToTable("doe_fuel_price");
+            e.HasKey(p => p.Id);
+            e.Property(p => p.Id).HasColumnName("id");
+            e.Property(p => p.WeekStart).HasColumnName("week_start");
+            e.Property(p => p.WeekEnd).HasColumnName("week_end");
+            e.Property(p => p.City).HasColumnName("city").HasMaxLength(100);
+            e.Property(p => p.CityKey).HasColumnName("city_key").HasMaxLength(100);
+            e.Property(p => p.Province).HasColumnName("province").HasMaxLength(100);
+            e.Property(p => p.ProvinceKey).HasColumnName("province_key").HasMaxLength(100);
+            e.Property(p => p.Region).HasColumnName("region").HasMaxLength(100);
+            e.Property(p => p.OilCompany).HasColumnName("oil_company").HasMaxLength(100);
+            e.Property(p => p.FuelGrade).HasColumnName("fuel_grade").HasMaxLength(20);
+            e.Property(p => p.MinPricePerLiter).HasColumnName("min_price_per_liter").HasPrecision(8, 2);
+            e.Property(p => p.MaxPricePerLiter).HasColumnName("max_price_per_liter").HasPrecision(8, 2);
+            e.Property(p => p.SourceUrl).HasColumnName("source_url").HasMaxLength(2048);
+            e.Property(p => p.FetchedAtUtc).HasColumnName("fetched_at_utc");
+            e.HasIndex(p => new { p.WeekStart, p.CityKey, p.ProvinceKey, p.OilCompany, p.FuelGrade }).IsUnique();
+            e.HasIndex(p => new { p.CityKey, p.ProvinceKey, p.WeekEnd });
         });
     }
 }

@@ -4,7 +4,12 @@ Both read endpoints require `Authorization: Bearer <token>` and
 `X-App-Instance-Id`. They only read stored estimates. Use the existing
 `POST /ai/fuel-prices` with coordinates to research a local price before
 reloading the feed. The backend resolves the coordinates, checks its fresh
-cache, then reads enabled direct sources in `agents/fuel-price-sources.json`.
+cache, then reads DOE's latest matching regional pump-price PDF. DOE company
+prices and ranges are saved separately by city, fuel grade, and report week,
+and are included in a successful DOE research response as `doePrices`.
+The PDF does not identify individual station locations. If DOE has no fresh
+matching rows or cannot be read, the backend checks enabled direct sources in
+`agents/fuel-price-sources.json`.
 It accepts only city-matched PHP-per-liter prices with an exact date within
 seven days. When both direct sources qualify, the later verified date wins;
 the configured priority breaks a date tie. If neither qualifies, the existing
