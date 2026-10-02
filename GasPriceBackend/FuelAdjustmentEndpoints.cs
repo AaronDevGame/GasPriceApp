@@ -182,7 +182,7 @@ public static class FuelAdjustmentEndpoints
         var existing = await db.FuelAdjustments
             .Where(a => a.WeekStart == weekStart)
             .ToListAsync(cancellationToken);
-        var fromSource = existing.Where(a => a.SourceUrl == url).ToList();
+        var fromSource = existing.Where(a => FuelAdjustmentImporter.SamePdfUrl(a.SourceUrl, url)).ToList();
         var alreadyImported = rows.All(row =>
             fromSource.Any(a =>
                 a.OilCompany.Equals(row.OilCompany, StringComparison.OrdinalIgnoreCase) &&
@@ -222,7 +222,7 @@ public static class FuelAdjustmentEndpoints
                 match.GasolineChangePerLiter != row.GasolineChangePerLiter ||
                 match.DieselChangePerLiter != row.DieselChangePerLiter ||
                 match.KeroseneChangePerLiter != row.KeroseneChangePerLiter ||
-                match.SourceUrl != url)
+                !FuelAdjustmentImporter.SamePdfUrl(match.SourceUrl, url))
             {
                 updated++;
             }

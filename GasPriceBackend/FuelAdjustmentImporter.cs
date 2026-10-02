@@ -131,6 +131,15 @@ public sealed class FuelAdjustmentImporter
         return uri.AbsoluteUri;
     }
 
+    public static bool SamePdfUrl(string left, string right)
+    {
+        var leftUri = new Uri(left);
+        var rightUri = new Uri(right);
+        return leftUri.GetLeftPart(UriPartial.Path) == rightUri.GetLeftPart(UriPartial.Path) &&
+            leftUri.Query.Replace("%2F", "/", StringComparison.OrdinalIgnoreCase) ==
+            rightUri.Query.Replace("%2F", "/", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsAllowedPdfUrl(Uri uri)
     {
         if (uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length != 0 || uri.Port != 443)
