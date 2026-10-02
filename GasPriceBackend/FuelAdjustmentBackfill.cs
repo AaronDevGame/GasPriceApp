@@ -139,7 +139,7 @@ public sealed class FuelAdjustmentBackfill : BackgroundService
                         _timeProvider, url, job.From, job.To, cancellationToken);
                     notice = result is null
                         ? new(url, "outside_range", null, null)
-                        : new(url, "imported", result, null);
+                        : new(url, result.Status, result, null);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }

@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Group fuel-adjustment read results by notice week and report the actual number of returned weeks alongside the requested limit.
+- Report DOE notice imports as `imported`, `updated`, or `already_imported`, count only changed rows as updated, and leave saved timestamps untouched for unchanged rows.
 
 ### Fixed
 - Exclude clearly out-of-range DOE notice PDFs from backfill job counts and results while retaining the PDF's extracted week as the final import check.

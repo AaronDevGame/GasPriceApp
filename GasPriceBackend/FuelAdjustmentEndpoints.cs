@@ -30,7 +30,8 @@ public sealed record FuelAdjustmentImportResult(
     string SourceUrl,
     int Added,
     int Updated,
-    DateTime FetchedAtUtc);
+    DateTime FetchedAtUtc,
+    string Status);
 
 public sealed class FuelAdjustmentExtractionException(string message) : Exception(message);
 
@@ -127,7 +128,8 @@ public static class FuelAdjustmentEndpoints
                 var result = await ImportOneAsync(db, importer, timeProvider, sourceUrl,
                     null, null, cancellationToken);
                 return ApiResults.Ok(result!,
-                    "fuel_adjustments_imported", instanceId);
+                    $"fuel_adjustments_{result!.Status}",
+                    instanceId);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
@@ -177,10 +179,24 @@ public static class FuelAdjustmentEndpoints
             (weekStart > to.Value || weekEnd < from.Value))
             return null;
 
-        var fetchedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
         var existing = await db.FuelAdjustments
             .Where(a => a.WeekStart == weekStart)
             .ToListAsync(cancellationToken);
+        var fromSource = existing.Where(a => a.SourceUrl == url).ToList();
+        var alreadyImported = rows.All(row =>
+            fromSource.Any(a =>
+                a.OilCompany.Equals(row.OilCompany, StringComparison.OrdinalIgnoreCase) &&
+                a.EffectiveDatePhilippines == row.EffectiveDatePhilippines &&
+                a.EffectiveAtUtc == row.EffectiveAtUtc &&
+                a.WeekEnd == weekEnd &&
+                a.GasolineChangePerLiter == row.GasolineChangePerLiter &&
+                a.DieselChangePerLiter == row.DieselChangePerLiter &&
+                a.KeroseneChangePerLiter == row.KeroseneChangePerLiter));
+        if (alreadyImported)
+            return new FuelAdjustmentImportResult(
+                weekStart, weekEnd, url, 0, 0, fromSource.Max(a => a.FetchedAtUtc), "already_imported");
+
+        var fetchedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
         var added = 0;
         var updated = 0;
         foreach (var row in rows)
@@ -202,9 +218,17 @@ public static class FuelAdjustmentEndpoints
                 existing.Add(match);
                 added++;
             }
-            else
+            else if (match.WeekEnd != weekEnd ||
+                match.GasolineChangePerLiter != row.GasolineChangePerLiter ||
+                match.DieselChangePerLiter != row.DieselChangePerLiter ||
+                match.KeroseneChangePerLiter != row.KeroseneChangePerLiter ||
+                match.SourceUrl != url)
             {
                 updated++;
+            }
+            else
+            {
+                continue;
             }
 
             match.WeekEnd = weekEnd;
@@ -217,7 +241,8 @@ public static class FuelAdjustmentEndpoints
 
         await db.SaveChangesAsync(cancellationToken);
         return new FuelAdjustmentImportResult(
-            weekStart, weekEnd, url, added, updated, fetchedAtUtc);
+            weekStart, weekEnd, url, added, updated, fetchedAtUtc,
+            updated > 0 || fromSource.Count > 0 ? "updated" : "imported");
     }
 
     private sealed record ValidatedRow(
