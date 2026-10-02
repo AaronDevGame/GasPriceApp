@@ -68,6 +68,29 @@ test("forwards the public fuel-adjustment feed and blocks its admin import", asy
   }
 });
 
+test("forwards DOE prices and keeps DOE import admin-only", async () => {
+  const originalFetch = globalThis.fetch;
+  let forwardedUrl;
+  globalThis.fetch = async (input) => {
+    forwardedUrl = input.toString();
+    return Response.json({ prices: [] });
+  };
+  try {
+    const response = await worker.fetch(new Request(
+      "https://proxy.example/fuel-prices/doe?latitude=14.6&longitude=121.0",
+      { headers: { "CF-Connecting-IP": "203.0.113.10" } }), env);
+    assert.equal(response.status, 200);
+    assert.equal(forwardedUrl,
+      "https://gaspricebackend.onrender.com/fuel-prices/doe?latitude=14.6&longitude=121.0");
+    const admin = await worker.fetch(new Request(
+      "https://proxy.example/admin/fuel-prices/doe/import",
+      { method: "POST", headers: { "CF-Connecting-IP": "203.0.113.10" } }), env);
+    assert.equal(admin.status, 404);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("replaces spoofed forwarding headers with authenticated values", async () => {
   const originalFetch = globalThis.fetch;
   let forwardedRequest;
