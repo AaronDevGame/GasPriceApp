@@ -85,10 +85,6 @@ namespace BackendServer.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("region");
 
-                    b.Property<long?>("ReportId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("report_id");
-
                     b.Property<string>("SourceUrl")
                         .IsRequired()
                         .HasMaxLength(2048)
@@ -104,8 +100,6 @@ namespace BackendServer.Migrations
                         .HasColumnName("week_start");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ReportId");
 
                     b.HasIndex("CityKey", "ProvinceKey", "WeekEnd");
 
@@ -113,161 +107,6 @@ namespace BackendServer.Migrations
                         .IsUnique();
 
                     b.ToTable("doe_fuel_price", (string)null);
-                });
-
-            modelBuilder.Entity("DoeImportJob", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<int?>("ActiveSlot")
-                        .HasColumnType("integer")
-                        .HasColumnName("active_slot");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<string>("DetailsJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("details_json");
-
-                    b.Property<string>("Error")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("error");
-
-                    b.Property<DateTime?>("FinishedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("finished_at_utc");
-
-                    b.Property<DateOnly?>("From")
-                        .HasColumnType("date")
-                        .HasColumnName("from_date");
-
-                    b.Property<DateTime?>("HeartbeatAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("heartbeat_at_utc");
-
-                    b.Property<string>("Mode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("mode");
-
-                    b.Property<int>("PriceRowsAdded")
-                        .HasColumnType("integer")
-                        .HasColumnName("price_rows_added");
-
-                    b.Property<int>("PriceRowsUpdated")
-                        .HasColumnType("integer")
-                        .HasColumnName("price_rows_updated");
-
-                    b.Property<int>("ReportsFailed")
-                        .HasColumnType("integer")
-                        .HasColumnName("reports_failed");
-
-                    b.Property<int>("ReportsFound")
-                        .HasColumnType("integer")
-                        .HasColumnName("reports_found");
-
-                    b.Property<int>("ReportsImported")
-                        .HasColumnType("integer")
-                        .HasColumnName("reports_imported");
-
-                    b.Property<int>("ReportsSkipped")
-                        .HasColumnType("integer")
-                        .HasColumnName("reports_skipped");
-
-                    b.Property<DateTime?>("StartedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at_utc");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("status");
-
-                    b.Property<DateOnly?>("To")
-                        .HasColumnType("date")
-                        .HasColumnName("to_date");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ActiveSlot")
-                        .IsUnique()
-                        .HasFilter("active_slot IS NOT NULL");
-
-                    b.HasIndex("Status", "CreatedAtUtc");
-
-                    b.ToTable("doe_import_job", (string)null);
-                });
-
-            modelBuilder.Entity("DoePumpPriceReport", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("ContentHash")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("content_hash");
-
-                    b.Property<DateTime>("ImportedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("imported_at_utc");
-
-                    b.Property<int>("PriceRows")
-                        .HasColumnType("integer")
-                        .HasColumnName("price_rows");
-
-                    b.Property<string>("Section")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("section");
-
-                    b.Property<string>("SourceUrl")
-                        .IsRequired()
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)")
-                        .HasColumnName("source_url");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("status");
-
-                    b.Property<string>("Subdivision")
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)")
-                        .HasColumnName("subdivision");
-
-                    b.Property<DateOnly>("WeekEnd")
-                        .HasColumnType("date")
-                        .HasColumnName("week_end");
-
-                    b.Property<DateOnly>("WeekStart")
-                        .HasColumnType("date")
-                        .HasColumnName("week_start");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SourceUrl", "WeekStart")
-                        .IsUnique();
-
-                    b.HasIndex("Section", "Subdivision", "WeekStart");
-
-                    b.ToTable("doe_pump_price_report", (string)null);
                 });
 
             modelBuilder.Entity("FuelAdjustment", b =>
@@ -558,14 +397,6 @@ namespace BackendServer.Migrations
                         .IsUnique();
 
                     b.ToTable("player_data", (string)null);
-                });
-
-            modelBuilder.Entity("DoeFuelPrice", b =>
-                {
-                    b.HasOne("DoePumpPriceReport", null)
-                        .WithMany()
-                        .HasForeignKey("ReportId")
-                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("PlayerData", b =>

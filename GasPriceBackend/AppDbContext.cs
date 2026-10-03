@@ -11,8 +11,6 @@ public class AppDbContext : DbContext
     public DbSet<FuelPriceCache> FuelPriceCaches => Set<FuelPriceCache>();
     public DbSet<FuelAdjustment> FuelAdjustments => Set<FuelAdjustment>();
     public DbSet<DoeFuelPrice> DoeFuelPrices => Set<DoeFuelPrice>();
-    public DbSet<DoePumpPriceReport> DoePumpPriceReports => Set<DoePumpPriceReport>();
-    public DbSet<DoeImportJob> DoeImportJobs => Set<DoeImportJob>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -148,7 +146,6 @@ public class AppDbContext : DbContext
             e.ToTable("doe_fuel_price");
             e.HasKey(p => p.Id);
             e.Property(p => p.Id).HasColumnName("id");
-            e.Property(p => p.ReportId).HasColumnName("report_id");
             e.Property(p => p.WeekStart).HasColumnName("week_start");
             e.Property(p => p.WeekEnd).HasColumnName("week_end");
             e.Property(p => p.City).HasColumnName("city").HasMaxLength(100);
@@ -164,53 +161,6 @@ public class AppDbContext : DbContext
             e.Property(p => p.FetchedAtUtc).HasColumnName("fetched_at_utc");
             e.HasIndex(p => new { p.WeekStart, p.CityKey, p.ProvinceKey, p.OilCompany, p.FuelGrade }).IsUnique();
             e.HasIndex(p => new { p.CityKey, p.ProvinceKey, p.WeekEnd });
-            e.HasIndex(p => p.ReportId);
-            e.HasOne<DoePumpPriceReport>().WithMany().HasForeignKey(p => p.ReportId)
-                .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        modelBuilder.Entity<DoePumpPriceReport>(e =>
-        {
-            e.ToTable("doe_pump_price_report");
-            e.HasKey(p => p.Id);
-            e.Property(p => p.Id).HasColumnName("id");
-            e.Property(p => p.Section).HasColumnName("section").HasMaxLength(40);
-            e.Property(p => p.Subdivision).HasColumnName("subdivision").HasMaxLength(60);
-            e.Property(p => p.WeekStart).HasColumnName("week_start");
-            e.Property(p => p.WeekEnd).HasColumnName("week_end");
-            e.Property(p => p.SourceUrl).HasColumnName("source_url").HasMaxLength(2048);
-            e.Property(p => p.ContentHash).HasColumnName("content_hash").HasMaxLength(64);
-            e.Property(p => p.ImportedAtUtc).HasColumnName("imported_at_utc");
-            e.Property(p => p.PriceRows).HasColumnName("price_rows");
-            e.Property(p => p.Status).HasColumnName("status").HasMaxLength(30);
-            e.HasIndex(p => new { p.SourceUrl, p.WeekStart }).IsUnique();
-            e.HasIndex(p => new { p.Section, p.Subdivision, p.WeekStart });
-        });
-
-        modelBuilder.Entity<DoeImportJob>(e =>
-        {
-            e.ToTable("doe_import_job");
-            e.HasKey(p => p.Id);
-            e.Property(p => p.Id).HasColumnName("id");
-            e.Property(p => p.Mode).HasColumnName("mode").HasMaxLength(20);
-            e.Property(p => p.From).HasColumnName("from_date");
-            e.Property(p => p.To).HasColumnName("to_date");
-            e.Property(p => p.Status).HasColumnName("status").HasMaxLength(30);
-            e.Property(p => p.ActiveSlot).HasColumnName("active_slot");
-            e.Property(p => p.CreatedAtUtc).HasColumnName("created_at_utc");
-            e.Property(p => p.StartedAtUtc).HasColumnName("started_at_utc");
-            e.Property(p => p.HeartbeatAtUtc).HasColumnName("heartbeat_at_utc");
-            e.Property(p => p.FinishedAtUtc).HasColumnName("finished_at_utc");
-            e.Property(p => p.ReportsFound).HasColumnName("reports_found");
-            e.Property(p => p.ReportsImported).HasColumnName("reports_imported");
-            e.Property(p => p.ReportsSkipped).HasColumnName("reports_skipped");
-            e.Property(p => p.ReportsFailed).HasColumnName("reports_failed");
-            e.Property(p => p.PriceRowsAdded).HasColumnName("price_rows_added");
-            e.Property(p => p.PriceRowsUpdated).HasColumnName("price_rows_updated");
-            e.Property(p => p.DetailsJson).HasColumnName("details_json").HasColumnType("jsonb");
-            e.Property(p => p.Error).HasColumnName("error").HasMaxLength(500);
-            e.HasIndex(p => new { p.Status, p.CreatedAtUtc });
-            e.HasIndex(p => p.ActiveSlot).IsUnique().HasFilter("active_slot IS NOT NULL");
         });
     }
 }
