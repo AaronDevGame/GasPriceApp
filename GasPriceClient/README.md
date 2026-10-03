@@ -65,20 +65,24 @@ Install Caddy once on macOS:
 brew install caddy
 ```
 
-Start Expo and the HTTPS proxy from `GasPriceClient`:
+Start the Expo web server from `GasPriceClient` in one terminal:
 
 ```bash
 npm run web
 ```
 
+Start the HTTPS proxy in a second terminal:
+
+```bash
+npm run web:proxy
+```
+
 The first Caddy run may request the macOS password so it can trust its local
 certificate authority. If automatic trust installation fails, stop Caddy and
-run `sudo caddy trust`, then start the command again. The command opens
-`https://localhost:8443` in the browser. Expo may still print
-`Web: http://localhost:8081`; that is Metro's internal address behind Caddy,
-not the browser address. Use the HTTPS hostname consistently because secure
-browser cookies are scoped to it. `npm run web:proxy` remains available if you
-want to run Caddy separately.
+run `sudo caddy trust`, then start the proxy again. Open
+`https://localhost:8443` manually and use that address consistently; do not use
+the Expo `http://localhost:8081` tab or substitute `127.0.0.1`, because secure
+browser cookies are scoped to the HTTPS hostname.
 
 `Caddyfile.dev` deliberately does not proxy `/admin/*`, health/status metadata,
 or arbitrary backend routes. It also marks proxied API responses as non-cacheable

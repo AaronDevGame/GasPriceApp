@@ -3,7 +3,6 @@
 ## [Unreleased]
 
 ### Changed
-- Start the local HTTPS proxy and open its address when running `npm run web`.
 - Show the researched `/ai/fuel-prices` gasoline and diesel ranges in the local price board immediately after a location lookup.
 - Show DOE company and fuel-grade price ranges after a location-based lookup when DOE data is available.
 - Show available fuel adjustment weeks as selectable date tabs, opening the latest week by default and loading up to 52 grouped weeks.
