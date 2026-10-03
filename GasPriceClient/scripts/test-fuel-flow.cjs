@@ -21,7 +21,15 @@ function harness(options = {}) {
       if (url.startsWith('/fuel-prices/history')) return { items: [point('2026-09-28', 60), point('2026-09-27', 60)] };
       if (url === '/ai/fuel-prices') {
         if (options.aiFailure) throw new Error('AI unavailable');
-        return { result: { location: { city: 'Cebu City', province: 'Cebu', region: 'Central Visayas', resolved_area: 'Cebu City, Cebu' } },
+        return { result: {
+          location: { city: 'Cebu City', province: 'Cebu', region: 'Central Visayas', resolved_area: 'Cebu City, Cebu' },
+          estimate_area: { level: 'city', name: 'Cebu City' }, data_as_of: '2026-09-28',
+          prices: {
+            diesel: { min_price: 55, max_price: 59, currency: 'PHP', unit: 'liter' },
+            gasoline_91: { min_price: 60, max_price: 64, currency: 'PHP', unit: 'liter' },
+            gasoline_95: { min_price: 65, max_price: 69, currency: 'PHP', unit: 'liter' },
+          },
+        },
           doePrices: { city: 'Cebu City', province: 'Cebu', weekStart: '2026-09-22', weekEnd: '2026-09-28',
             prices: [{ oilCompany: 'Petron', fuelGrade: 'DIESEL', minPricePerLiter: 99, maxPricePerLiter: 101 }] } };
       }
@@ -117,6 +125,10 @@ async function settle(h) {
   assert.ok(granted.calls.indexOf(ai) < granted.calls.indexOf(local));
   assert.equal(new URLSearchParams(local.url.split('?')[1]).get('city'), 'Cebu City');
   assert.equal(granted.states[1].value.prices[0].oilCompany, 'Petron');
+  assert.equal(granted.states[0].value.items[0].area.name, 'Cebu City');
+  assert.equal(granted.states[0].value.items[0].isLocal, true);
+  assert.equal(granted.states[0].value.items[0].prices.gasoline91.minPrice, 60);
+  assert.equal(granted.states[0].value.items[0].prices.gasoline91.maxPrice, 64);
   console.log('PASS initial parameter-free GET, permission, coordinates POST, then resolved-area GET');
   for (const options of [{ denied: true }, { gpsFailure: true }, { aiFailure: true }]) {
     const h = harness(options); h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
@@ -148,6 +160,7 @@ async function settle(h) {
   const changes = api.meaningfulUpdates(Array.from({ length: 8 }, (_, i) => point(`2026-09-${28-i}`, 60+i)));
   assert.equal(changes.length, 5); assert.equal(changes[0].dataAsOf, '2026-09-28');
   assert.equal(api.formatPrice(range(null)), 'Not available');
+  assert.equal(api.formatPrice(granted.states[0].value.items[0].prices.gasoline91), '₱60.00–₱64.00');
   console.log('PASS unchanged history, baseline requirement, newest-first five-change limit');
   const code = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, '../src/fuel/location.web.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   for (const result of ['allowed', 'denied', 'unavailable', 'timeout']) {

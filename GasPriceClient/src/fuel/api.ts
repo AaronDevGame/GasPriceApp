@@ -17,7 +17,14 @@ export type DoeFuelPriceFeed = {
   weekStart: string | null; weekEnd: string | null; prices: DoeFuelPrice[];
 };
 export type LocationResult = {
-  result: { location: Area & { resolved_area: string } };
+  result: {
+    location: Area & { resolved_area: string };
+    estimate_area?: { level: string; name: string };
+    data_as_of?: string | null;
+    prices?: Record<'diesel' | 'gasoline_91' | 'gasoline_95', {
+      min_price: number | null; max_price: number | null; currency: string; unit: string;
+    }>;
+  };
   doePrices?: DoeFuelPriceFeed | null;
 };
 export type FuelAdjustment = {
@@ -67,7 +74,40 @@ export async function refreshLocation(coordinates: Coordinates) {
   });
   const area = result.result.location;
   if (!areaQuery(area).size) throw new Error('No area resolved');
-  return { area, feed: await getPrices(area), doePrices: result.doePrices ?? null };
+  const feed = await getPrices(area);
+  const local = localPriceItem(result.result);
+  const localizedFeed = local ? {
+    ...feed,
+    items: [local, ...feed.items.filter(item =>
+      item.area.level !== local.area.level || item.area.name !== local.area.name ||
+      item.area.province !== local.area.province || item.area.region !== local.area.region
+    ).map(item => ({ ...item, isLocal: false }))].slice(0, 10),
+    localAreaStatus: 'available',
+  } : feed;
+  return { area, feed: localizedFeed, doePrices: result.doePrices ?? null };
+}
+
+function localPriceItem(result: LocationResult['result']): FeedItem | null {
+  const source = result.prices;
+  const estimate = result.estimate_area;
+  if (!source || !estimate?.name || !result.data_as_of) return null;
+  const convert = (range: typeof source.diesel): PriceRange | null => {
+    if (!range || ![range.min_price, range.max_price].every(value =>
+      value === null || (typeof value === 'number' && Number.isFinite(value) && value >= 0)) ||
+      (range.min_price !== null && range.max_price !== null && range.min_price > range.max_price)) return null;
+    return { minPrice: range.min_price, maxPrice: range.max_price,
+      currency: range.currency, unit: range.unit };
+  };
+  const diesel = convert(source.diesel);
+  const gasoline91 = convert(source.gasoline_91);
+  const gasoline95 = convert(source.gasoline_95);
+  if (!diesel || !gasoline91 || !gasoline95 ||
+      [diesel, gasoline91, gasoline95].every(price => price.minPrice === null && price.maxPrice === null)) return null;
+  return {
+    area: { ...result.location, level: estimate.level, name: estimate.name },
+    isLocal: true, dataAsOf: result.data_as_of, freshness: 'current',
+    prices: { diesel, gasoline91, gasoline95 },
+  };
 }
 
 export async function getHistory(item: FeedItem) {

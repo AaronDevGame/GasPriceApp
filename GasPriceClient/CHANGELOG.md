@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Show the researched `/ai/fuel-prices` gasoline and diesel ranges in the local price board immediately after a location lookup.
 - Show DOE company and fuel-grade price ranges after a location-based lookup when DOE data is available.
 - Show available fuel adjustment weeks as selectable date tabs, opening the latest week by default and loading up to 52 grouped weeks.
 - Animate week selection into view and the corresponding adjustment cards, with a visible horizontal scrollbar for week tabs on web.
