@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Treat DOE PDF URLs whose query slashes use different percent encoding as the same source when classifying repeat imports.
 
 ### Fixed
+- Read DOE pump-price listing years from visible page text so URL escapes do not make recent reports appear outdated.
 - Exclude clearly out-of-range DOE notice PDFs from backfill job counts and results while retaining the PDF's extracted week as the final import check.
 
 ### Added

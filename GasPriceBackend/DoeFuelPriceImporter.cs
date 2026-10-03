@@ -254,17 +254,18 @@ public sealed class DoeFuelPriceImporter(
             if (southSubdivision is not null &&
                 !label.Contains(southSubdivision, StringComparison.OrdinalIgnoreCase))
                 continue;
+            var precedingText = Regex.Replace(html[..link.Index], "<[^>]+>", " ");
             var date = DateLabel.Match(label);
             if (!date.Success)
             {
-                var precedingText = Regex.Replace(html[..link.Index], "<[^>]+>", " ");
                 var precedingDates = DateLabel.Matches(precedingText);
                 if (precedingDates.Count > 0)
                     date = precedingDates[^1];
             }
             if (!date.Success)
                 continue;
-            var years = Regex.Matches(html[..link.Index], @"(?<!\d)20\d{2}(?!\d)");
+            // Match visible page text, not URL escapes such as "%2015" in PDF links.
+            var years = Regex.Matches(precedingText, @"(?<!\d)20\d{2}(?!\d)");
             if (years.Count == 0 ||
                 !int.TryParse(years[^1].Value, CultureInfo.InvariantCulture, out var year))
                 continue;
