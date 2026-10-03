@@ -17,6 +17,11 @@ AI web search runs. Direct results use the same cache and response shape;
 `model` begins with `direct:` and AI usage and cost are null. A failed research
 request does not affect the general feed.
 
+`fromCache` means this request reused a saved research result. `cacheStored`
+means this request saved a new research result; it is `false` on a cache hit.
+`cacheScope`, `cachedAt`, and `refreshAfter` still describe the reused cache
+entry on a hit.
+
 For AI fallback, the backend adds the enabled direct-source domains it just
 checked to the web-search blocked domains and tells the agent not to cite them.
 They remain in `fuel-price-sources.json`, separate from the permanently excluded

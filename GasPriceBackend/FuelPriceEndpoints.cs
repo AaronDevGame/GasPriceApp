@@ -174,7 +174,7 @@ public static class FuelPriceEndpoints
                             null,
                             false,
                             true,
-                            true,
+                            false,
                             cached.Scope,
                             cached.CachedAt,
                             cached.RefreshAfter,
