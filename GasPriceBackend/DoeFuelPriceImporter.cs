@@ -57,7 +57,14 @@ public sealed record DoeBulkExtraction(
     [property: JsonPropertyName("rows")] IReadOnlyList<ExtractedDoeBulkPrice> Rows);
 
 public sealed record DoeReportImportResult(string SourceUrl, string Status,
-    int Added, int Updated, int PriceRows);
+    int Added, int Updated, int PriceRows)
+{
+    public int DuplicatesIgnored { get; init; }
+    public int AggregateRowsIgnored { get; init; }
+}
+
+public sealed record ValidatedDoeBulkRows(IReadOnlyList<ExtractedDoeBulkPrice> Rows,
+    int DuplicatesIgnored, int AggregateRowsIgnored);
 
 public sealed class DoeFuelPriceImporter(
     HttpClient sourceClient,
@@ -394,6 +401,7 @@ public sealed class DoeFuelPriceImporter(
         var report = await db.DoePumpPriceReports.FirstOrDefaultAsync(r =>
             r.SourceUrl == source.Url && r.WeekStart == source.WeekStart,
             cancellationToken);
+        var wasComplete = report?.Status == "imported";
         if (report is { Status: "imported", ContentHash: not null } && !checkForCorrections)
             return new DoeReportImportResult(source.Url, "already_imported", 0, 0, report.PriceRows);
         var pdf = await DownloadAsync(source.Url, cancellationToken);
@@ -408,30 +416,18 @@ public sealed class DoeFuelPriceImporter(
             start != source.WeekStart || end < start || end > start.AddDays(7) ||
             extraction.Rows is null or { Count: < 1 or > 4000 })
             throw new InvalidDataException("DOE report extraction has an invalid week or no usable prices.");
-        if (report is { Status: "imported" } && extraction.Rows.Count < report.PriceRows)
-            throw new InvalidDataException(
-                "Corrected DOE report yielded fewer rows than its previous import; review it before replacing prices.");
         if ((from.HasValue && end < from.Value) || (to.HasValue && start > to.Value))
             return new DoeReportImportResult(source.Url, "outside_range", 0, 0, 0);
-        var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var row in extraction.Rows)
-        {
-            if (string.IsNullOrWhiteSpace(row.City) || row.City.Length > 100 ||
-                string.IsNullOrWhiteSpace(row.Province) || row.Province.Length > 100 ||
-                row.Region is { Length: > 100 } ||
-                string.IsNullOrWhiteSpace(row.OilCompany) || row.OilCompany.Length > 100 ||
-                new[] { "INDEPENDENT", "COMMON", "COMMON PRICE", "OVERALL", "OVERALL RANGE" }
-                    .Contains(row.OilCompany.Trim().ToUpperInvariant()) ||
-                !Grades.Contains(row.FuelGrade?.Trim() ?? "") ||
-                row.MinPricePerLiter is < 1 or > 300 ||
-                row.MaxPricePerLiter is < 1 or > 300 ||
-                row.MinPricePerLiter > row.MaxPricePerLiter ||
-                decimal.Round(row.MinPricePerLiter, 2) != row.MinPricePerLiter ||
-                decimal.Round(row.MaxPricePerLiter, 2) != row.MaxPricePerLiter ||
-                !unique.Add(Normalize(row.City) + "|" + Normalize(row.Province) + "|" +
-                    Normalize(row.OilCompany) + "|" + (row.FuelGrade ?? "").Trim().ToUpperInvariant()))
-                throw new InvalidDataException("DOE report extraction has invalid or duplicate prices.");
-        }
+        var extractedRows = source.Section == "ncr-pump-prices"
+            ? extraction.Rows.Select(row => row with
+            {
+                Province = "Metro Manila", Region = "National Capital Region"
+            }).ToArray()
+            : extraction.Rows;
+        var validated = ValidateBulkRows(extractedRows);
+        if (report is { Status: "imported" } && validated.Rows.Count < report.PriceRows)
+            throw new InvalidDataException(
+                "Corrected DOE report yielded fewer rows than its previous import; review it before replacing prices.");
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         if (report is null)
         {
@@ -452,7 +448,7 @@ public sealed class DoeFuelPriceImporter(
         var oldReportIds = new HashSet<long>();
         var added = 0;
         var updated = 0;
-        foreach (var row in extraction.Rows)
+        foreach (var row in validated.Rows)
         {
             var cityKey = Normalize(row.City);
             var provinceKey = Normalize(row.Province);
@@ -504,8 +500,8 @@ public sealed class DoeFuelPriceImporter(
         await db.SaveChangesAsync(cancellationToken);
         if (added + updated > 0)
         {
-            var cityKeys = extraction.Rows.Select(r => Normalize(r.City)).Distinct().ToArray();
-            var provinceKeys = extraction.Rows.Select(r => Normalize(r.Province)).Distinct().ToArray();
+            var cityKeys = validated.Rows.Select(r => Normalize(r.City)).Distinct().ToArray();
+            var provinceKeys = validated.Rows.Select(r => Normalize(r.Province)).Distinct().ToArray();
             await db.FuelPriceCaches.Where(c => c.RefreshAfter > nowUtc &&
                 ((c.Scope == FuelPriceCacheScopes.City && cityKeys.Contains(c.CityKey) &&
                   provinceKeys.Contains(c.ProvinceKey)) ||
@@ -515,8 +511,68 @@ public sealed class DoeFuelPriceImporter(
         }
         await transaction.CommitAsync(cancellationToken);
         return new DoeReportImportResult(source.Url,
-            added + updated == 0 ? "already_imported" : "imported", added, updated,
-            report.PriceRows);
+            wasComplete && added + updated == 0 ? "already_imported" : "imported",
+            added, updated,
+            report.PriceRows)
+        {
+            DuplicatesIgnored = validated.DuplicatesIgnored,
+            AggregateRowsIgnored = validated.AggregateRowsIgnored
+        };
+    }
+
+    public static ValidatedDoeBulkRows ValidateBulkRows(
+        IReadOnlyList<ExtractedDoeBulkPrice> rows)
+    {
+        var unique = new Dictionary<string, ExtractedDoeBulkPrice>(StringComparer.OrdinalIgnoreCase);
+        var duplicatesIgnored = 0;
+        var aggregatesIgnored = 0;
+        for (var index = 0; index < rows.Count; index++)
+        {
+            var row = rows[index];
+            if (string.IsNullOrWhiteSpace(row.OilCompany))
+                throw new InvalidDataException($"DOE report has no oil company at extracted row {index + 1}.");
+            var company = Normalize(row.OilCompany);
+            if (new[] { "INDEPENDENT", "COMMON", "COMMON PRICE", "OVERALL", "OVERALL RANGE" }
+                .Contains(company))
+            {
+                aggregatesIgnored++;
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(row.City) || row.City.Length > 100 ||
+                string.IsNullOrWhiteSpace(row.Province) || row.Province.Length > 100 ||
+                row.Region is { Length: > 100 } || row.OilCompany.Length > 100)
+                throw new InvalidDataException(
+                    $"DOE report has an invalid locality or company at extracted row {index + 1}.");
+            var grade = (row.FuelGrade ?? "").Trim().ToUpperInvariant();
+            if (!Grades.Contains(grade))
+                throw new InvalidDataException(
+                    $"DOE report has an unsupported fuel grade at extracted row {index + 1}: {grade[..Math.Min(grade.Length, 40)]}.");
+            if (row.MinPricePerLiter is < 1 or > 300 ||
+                row.MaxPricePerLiter is < 1 or > 300 ||
+                row.MinPricePerLiter > row.MaxPricePerLiter ||
+                decimal.Round(row.MinPricePerLiter, 2) != row.MinPricePerLiter ||
+                decimal.Round(row.MaxPricePerLiter, 2) != row.MaxPricePerLiter)
+                throw new InvalidDataException(
+                    $"DOE report has an invalid price at extracted row {index + 1}.");
+            var key = Normalize(row.City) + "|" + Normalize(row.Province) + "|" +
+                company + "|" + grade;
+            if (unique.TryGetValue(key, out var previous))
+            {
+                if (previous.MinPricePerLiter != row.MinPricePerLiter ||
+                    previous.MaxPricePerLiter != row.MaxPricePerLiter)
+                    throw new InvalidDataException(
+                        $"DOE report has conflicting prices for {row.City.Trim()}, {row.Province.Trim()}, {row.OilCompany.Trim()}, {grade}.");
+                duplicatesIgnored++;
+                if (previous.Region is null && row.Region is not null)
+                    unique[key] = row;
+                continue;
+            }
+            unique.Add(key, row);
+        }
+        if (unique.Count == 0)
+            throw new InvalidDataException("DOE report extraction has no usable company prices.");
+        return new ValidatedDoeBulkRows(unique.Values.ToArray(), duplicatesIgnored,
+            aggregatesIgnored);
     }
 
     private async Task<(string Url, DateOnly? ListedWeekStart)> FindLatestPdfAsync(ResolvedFuelLocation location, DateTime nowUtc,

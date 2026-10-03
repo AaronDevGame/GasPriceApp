@@ -3,7 +3,11 @@ using Microsoft.EntityFrameworkCore;
 
 public sealed record DoeImportReportStatus(string Section, string? Subdivision,
     DateOnly? WeekStart, string SourceUrl, string Status, int Added, int Updated,
-    string? Error);
+    string? Error)
+{
+    public int DuplicatesIgnored { get; init; }
+    public int AggregateRowsIgnored { get; init; }
+}
 
 public sealed record DoeImportJobStatus(Guid JobId, string Mode, DateOnly? From,
     DateOnly? To, string Status, DateTime CreatedAtUtc, DateTime? StartedAtUtc,
@@ -149,7 +153,11 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                         timeProvider.GetUtcNow().UtcDateTime, job.From, job.To,
                         job.Mode == "latest", cancellationToken);
                     item = new(source.Section, source.Subdivision, source.WeekStart,
-                        source.Url, result.Status, result.Added, result.Updated, null);
+                        source.Url, result.Status, result.Added, result.Updated, null)
+                    {
+                        DuplicatesIgnored = result.DuplicatesIgnored,
+                        AggregateRowsIgnored = result.AggregateRowsIgnored
+                    };
                     if (result.Status is "already_imported" or "outside_range") job.ReportsSkipped++;
                     else job.ReportsImported++;
                     job.PriceRowsAdded += result.Added;

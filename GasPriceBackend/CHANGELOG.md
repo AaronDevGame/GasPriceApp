@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - Treat DOE PDF URLs whose query slashes use different percent encoding as the same source when classifying repeat imports.
 
 ### Fixed
+- Ignore identical repeated DOE PDF price rows and aggregate columns during bulk import, while reporting conflicting or invalid extracted values precisely instead of failing with a combined message.
 - Report `cacheStored: false` when fuel-price research reuses a cached result.
 - Read DOE pump-price listing years from visible page text so URL escapes do not make recent reports appear outdated.
 - Exclude clearly out-of-range DOE notice PDFs from backfill job counts and results while retaining the PDF's extracted week as the final import check.
