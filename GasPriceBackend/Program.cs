@@ -13,6 +13,8 @@ builder.Services.AddBrowserAuthentication();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<FuelAdjustmentBackfill>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<FuelAdjustmentBackfill>());
+builder.Services.AddSingleton<DoeImportWorker>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<DoeImportWorker>());
 var sourcePolicy = new FuelPriceSourcePolicy(builder.Environment);
 var websiteCatalog = new FuelPriceWebsiteCatalog(builder.Environment);
 if (sourcePolicy.BlockedDomains.Concat(
@@ -49,7 +51,7 @@ builder.Services.AddHttpClient<DoeFuelPriceImporter>(client =>
 builder.Services.AddHttpClient("doe-pump-price-openai", client =>
 {
     client.BaseAddress = new Uri("https://api.openai.com/");
-    client.Timeout = TimeSpan.FromSeconds(90);
+    client.Timeout = TimeSpan.FromMinutes(5);
 });
 builder.Services.AddHttpClient<GeoapifyReverseGeocodingClient>(client =>
 {
@@ -167,6 +169,7 @@ app.MapFuelPriceEndpoints(auth, InstanceId);
 app.MapFuelPriceReadEndpoints(auth, InstanceId);
 app.MapFuelAdjustmentEndpoints(auth, InstanceId);
 app.MapDoeFuelPriceEndpoints(auth, InstanceId);
+app.MapDoeImportEndpoints(InstanceId);
 
 app.MapGet(ApiRoutes.AdminRoutes, () => ApiResults.Ok(RouteRegistry.Admin, "admin_routes", InstanceId));
 app.MapAdminChangelogEndpoint();

@@ -1,6 +1,7 @@
 public sealed class DoeFuelPrice
 {
     public long Id { get; set; }
+    public long? ReportId { get; set; }
     public DateOnly WeekStart { get; set; }
     public DateOnly WeekEnd { get; set; }
     public string City { get; set; } = "";
