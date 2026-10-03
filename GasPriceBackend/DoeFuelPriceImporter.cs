@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -32,6 +33,31 @@ public sealed record DoeFuelPriceExtraction(
     [property: JsonPropertyName("week_start")] string WeekStart,
     [property: JsonPropertyName("week_end")] string WeekEnd,
     [property: JsonPropertyName("rows")] IReadOnlyList<ExtractedDoeFuelPrice> Rows);
+
+public sealed record DoeReportSource(string Section, string? Subdivision,
+    DateOnly WeekStart, string Url);
+
+public sealed record DoeReportListingError(string Section, string Url, string Error);
+
+public sealed record DoeReportDiscovery(IReadOnlyList<DoeReportSource> Reports,
+    IReadOnlyList<DoeReportListingError> Errors);
+
+public sealed record ExtractedDoeBulkPrice(
+    [property: JsonPropertyName("c")] string City,
+    [property: JsonPropertyName("p")] string Province,
+    [property: JsonPropertyName("r")] string? Region,
+    [property: JsonPropertyName("o")] string OilCompany,
+    [property: JsonPropertyName("g")] string FuelGrade,
+    [property: JsonPropertyName("lo")] decimal MinPricePerLiter,
+    [property: JsonPropertyName("hi")] decimal MaxPricePerLiter);
+
+public sealed record DoeBulkExtraction(
+    [property: JsonPropertyName("week_start")] string WeekStart,
+    [property: JsonPropertyName("week_end")] string WeekEnd,
+    [property: JsonPropertyName("rows")] IReadOnlyList<ExtractedDoeBulkPrice> Rows);
+
+public sealed record DoeReportImportResult(string SourceUrl, string Status,
+    int Added, int Updated, int PriceRows);
 
 public sealed class DoeFuelPriceImporter(
     HttpClient sourceClient,
@@ -72,10 +98,33 @@ public sealed class DoeFuelPriceImporter(
             } }
         }
     });
+    private static readonly JsonElement BulkSchema = JsonSerializer.SerializeToElement(new
+    {
+        type = "object", additionalProperties = false,
+        required = new[] { "week_start", "week_end", "rows" },
+        properties = new
+        {
+            week_start = new { type = "string" }, week_end = new { type = "string" },
+            rows = new { type = "array", items = new
+            {
+                type = "object", additionalProperties = false,
+                required = new[] { "c", "p", "r", "o", "g", "lo", "hi" },
+                properties = new
+                {
+                    c = new { type = "string" }, p = new { type = "string" },
+                    r = new { type = new[] { "string", "null" } },
+                    o = new { type = "string" }, g = new { type = "string" },
+                    lo = new { type = "number" }, hi = new { type = "number" }
+                }
+            } }
+        }
+    });
 
     private readonly HttpClient _openAiClient = clients.CreateClient("doe-pump-price-openai");
     private readonly string _instructions = File.ReadAllText(Path.Combine(
         environment.ContentRootPath, "agents/philippines-doe-pump-price-extractor.md"));
+    private readonly string _bulkInstructions = File.ReadAllText(Path.Combine(
+        environment.ContentRootPath, "agents/philippines-doe-pump-price-bulk-extractor.md"));
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(configuration["OPENAI_API_KEY"]);
 
@@ -194,8 +243,24 @@ public sealed class DoeFuelPriceImporter(
 
         var cityKey = Normalize(location.City);
         var provinceKey = Normalize(location.Province);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var report = await db.DoePumpPriceReports.FirstOrDefaultAsync(r =>
+            r.SourceUrl == url && r.WeekStart == start, cancellationToken);
+        if (report is null)
+        {
+            report = new DoePumpPriceReport
+            {
+                Section = RegionSection(location) ?? "legacy",
+                Subdivision = SouthSubdivision(location),
+                WeekStart = start, WeekEnd = end, SourceUrl = url,
+                ImportedAtUtc = nowUtc, Status = "partial"
+            };
+            db.DoePumpPriceReports.Add(report);
+            await db.SaveChangesAsync(cancellationToken);
+        }
         var existing = await db.DoeFuelPrices.Where(p => p.WeekStart == start &&
             p.CityKey == cityKey && p.ProvinceKey == provinceKey).ToListAsync(cancellationToken);
+        var oldReportIds = new HashSet<long>();
         var added = 0;
         var updated = 0;
         foreach (var row in extraction.Rows)
@@ -207,7 +272,8 @@ public sealed class DoeFuelPriceImporter(
             if (match is null)
             {
                 match = new DoeFuelPrice { WeekStart = start, CityKey = cityKey,
-                    ProvinceKey = provinceKey, OilCompany = company, FuelGrade = grade };
+                    ProvinceKey = provinceKey, OilCompany = company, FuelGrade = grade,
+                    ReportId = report.Id };
                 db.DoeFuelPrices.Add(match);
                 existing.Add(match);
                 added++;
@@ -218,6 +284,8 @@ public sealed class DoeFuelPriceImporter(
                 updated++;
             else
                 continue;
+            if (match.ReportId is long oldReportId && oldReportId != report.Id)
+                oldReportIds.Add(oldReportId);
             match.City = location.City;
             match.Province = location.Province;
             match.Region = location.Region;
@@ -225,12 +293,230 @@ public sealed class DoeFuelPriceImporter(
             match.MinPricePerLiter = row.MinPricePerLiter;
             match.MaxPricePerLiter = row.MaxPricePerLiter;
             match.SourceUrl = url;
+            match.ReportId = report.Id;
             match.FetchedAtUtc = nowUtc;
         }
         await db.SaveChangesAsync(cancellationToken);
+        report.PriceRows = await db.DoeFuelPrices.CountAsync(p => p.ReportId == report.Id,
+            cancellationToken);
+        foreach (var oldReportId in oldReportIds)
+        {
+            var count = await db.DoeFuelPrices.CountAsync(p => p.ReportId == oldReportId,
+                cancellationToken);
+            await db.DoePumpPriceReports.Where(r => r.Id == oldReportId)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.PriceRows, count), cancellationToken);
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        if (added + updated > 0)
+            await db.FuelPriceCaches.Where(c => c.RefreshAfter > nowUtc &&
+                ((c.Scope == FuelPriceCacheScopes.City && c.CityKey == cityKey &&
+                  c.ProvinceKey == provinceKey) ||
+                 (c.Scope == FuelPriceCacheScopes.Province && c.ProvinceKey == provinceKey) ||
+                 c.Scope == FuelPriceCacheScopes.Region))
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.RefreshAfter, nowUtc), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return new DoeFuelPriceImportResult(location.City, location.Province, start, end,
             url, added, updated, added == 0 && updated == 0 ? "already_imported" :
                 updated > 0 ? "updated" : "imported");
+    }
+
+    public async Task<DoeReportDiscovery> FindReportsAsync(
+        DateOnly? from, DateOnly? to, DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        var sections = new[] { "ncr-pump-prices", "north-luzon-pump-prices",
+            "south-luzon-pump-prices", "visayas-pump-prices", "mindanao-pump-prices" };
+        var reports = new List<DoeReportSource>();
+        var errors = new List<DoeReportListingError>();
+        foreach (var section in sections)
+        {
+            var page = "https://doe.gov.ph/data-and-prices/liquid-fuels/retail-pump-prices/" + section;
+            string html;
+            try
+            {
+                using var response = await sourceClient.GetAsync(page, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync(cancellationToken));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                errors.Add(new DoeReportListingError(section, page,
+                    "DOE regional listing was unavailable."));
+                logger.LogWarning(ex, "DOE report listing failed for {Section}.", section);
+                continue;
+            }
+            foreach (Match link in PdfLinks.Matches(html))
+            {
+                var label = Regex.Replace(link.Groups["label"].Value, "<[^>]+>", " ").Trim();
+                var precedingText = Regex.Replace(html[..link.Index], "<[^>]+>", " ");
+                var date = DateLabel.Match(label);
+                if (!date.Success)
+                {
+                    var dates = DateLabel.Matches(precedingText);
+                    if (dates.Count > 0) date = dates[^1];
+                }
+                var years = Regex.Matches(precedingText, @"(?<!\d)20\d{2}(?!\d)");
+                if (!date.Success || years.Count == 0) continue;
+                var month = date.Groups["month"].Value;
+                if (month.Equals("Sept", StringComparison.OrdinalIgnoreCase)) month = "Sep";
+                if (!DateTime.TryParseExact(month + " " + date.Groups["day"].Value + " " +
+                    years[^1].Value, new[] { "MMMM d yyyy", "MMM d yyyy" },
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)) continue;
+                var start = DateOnly.FromDateTime(day);
+                if ((from.HasValue && start.AddDays(7) < from.Value) ||
+                    (to.HasValue && start > to.Value) ||
+                    start > PhilippineDate(nowUtc).AddDays(1)) continue;
+                if (!Uri.TryCreate(new Uri(page), link.Groups["url"].Value, out var uri)) continue;
+                try { FuelAdjustmentImporter.ValidatePdfUrl(uri.AbsoluteUri); }
+                catch (ArgumentException) { continue; }
+                string? subdivision = null;
+                if (section == "south-luzon-pump-prices")
+                    subdivision = new[] { "Calabarzon", "Mimaropa", "Bicol" }
+                        .FirstOrDefault(s => label.Contains(s, StringComparison.OrdinalIgnoreCase));
+                reports.Add(new DoeReportSource(section, subdivision, start, uri.AbsoluteUri));
+            }
+        }
+        var distinct = reports.DistinctBy(r => r.Url + "|" + r.WeekStart).ToArray();
+        if (from.HasValue)
+            return new DoeReportDiscovery(distinct.OrderBy(r => r.WeekStart)
+                .ThenBy(r => r.Section).ThenBy(r => r.Subdivision).ToArray(), errors);
+        // South Luzon subdivisions can publish at different times.
+        return new DoeReportDiscovery(distinct.GroupBy(r => r.Section + "|" + r.Subdivision)
+            .SelectMany(group => group.Where(r => r.WeekStart == group.Max(x => x.WeekStart)))
+            .OrderBy(r => r.Section).ThenBy(r => r.Subdivision).ToArray(), errors);
+    }
+
+    public async Task<DoeReportImportResult> ImportReportAsync(AppDbContext db,
+        DoeReportSource source, DateTime nowUtc, DateOnly? from, DateOnly? to,
+        bool checkForCorrections,
+        CancellationToken cancellationToken)
+    {
+        var report = await db.DoePumpPriceReports.FirstOrDefaultAsync(r =>
+            r.SourceUrl == source.Url && r.WeekStart == source.WeekStart,
+            cancellationToken);
+        if (report is { Status: "imported", ContentHash: not null } && !checkForCorrections)
+            return new DoeReportImportResult(source.Url, "already_imported", 0, 0, report.PriceRows);
+        var pdf = await DownloadAsync(source.Url, cancellationToken);
+        var hash = Convert.ToHexString(SHA256.HashData(pdf));
+        if (report is { Status: "imported" } && report.ContentHash == hash)
+            return new DoeReportImportResult(source.Url, "already_imported", 0, 0, report.PriceRows);
+        var extraction = await ExtractAllAsync(pdf, source, cancellationToken);
+        if (!DateOnly.TryParseExact(extraction.WeekStart, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var start) ||
+            !DateOnly.TryParseExact(extraction.WeekEnd, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var end) ||
+            start != source.WeekStart || end < start || end > start.AddDays(7) ||
+            extraction.Rows is null or { Count: < 1 or > 4000 })
+            throw new InvalidDataException("DOE report extraction has an invalid week or no usable prices.");
+        if (report is { Status: "imported" } && extraction.Rows.Count < report.PriceRows)
+            throw new InvalidDataException(
+                "Corrected DOE report yielded fewer rows than its previous import; review it before replacing prices.");
+        if ((from.HasValue && end < from.Value) || (to.HasValue && start > to.Value))
+            return new DoeReportImportResult(source.Url, "outside_range", 0, 0, 0);
+        var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in extraction.Rows)
+        {
+            if (string.IsNullOrWhiteSpace(row.City) || row.City.Length > 100 ||
+                string.IsNullOrWhiteSpace(row.Province) || row.Province.Length > 100 ||
+                row.Region is { Length: > 100 } ||
+                string.IsNullOrWhiteSpace(row.OilCompany) || row.OilCompany.Length > 100 ||
+                new[] { "INDEPENDENT", "COMMON", "COMMON PRICE", "OVERALL", "OVERALL RANGE" }
+                    .Contains(row.OilCompany.Trim().ToUpperInvariant()) ||
+                !Grades.Contains(row.FuelGrade?.Trim() ?? "") ||
+                row.MinPricePerLiter is < 1 or > 300 ||
+                row.MaxPricePerLiter is < 1 or > 300 ||
+                row.MinPricePerLiter > row.MaxPricePerLiter ||
+                decimal.Round(row.MinPricePerLiter, 2) != row.MinPricePerLiter ||
+                decimal.Round(row.MaxPricePerLiter, 2) != row.MaxPricePerLiter ||
+                !unique.Add(Normalize(row.City) + "|" + Normalize(row.Province) + "|" +
+                    Normalize(row.OilCompany) + "|" + (row.FuelGrade ?? "").Trim().ToUpperInvariant()))
+                throw new InvalidDataException("DOE report extraction has invalid or duplicate prices.");
+        }
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        if (report is null)
+        {
+            report = new DoePumpPriceReport
+            {
+                Section = source.Section, Subdivision = source.Subdivision,
+                WeekStart = start, WeekEnd = end, SourceUrl = source.Url,
+                ImportedAtUtc = nowUtc, Status = "partial"
+            };
+            db.DoePumpPriceReports.Add(report);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        var existing = await db.DoeFuelPrices.Where(p => p.WeekStart == start)
+            .ToListAsync(cancellationToken);
+        var byKey = existing.GroupBy(p =>
+            p.CityKey + "|" + p.ProvinceKey + "|" + Normalize(p.OilCompany) + "|" + p.FuelGrade)
+            .ToDictionary(g => g.Key, g => g.First());
+        var oldReportIds = new HashSet<long>();
+        var added = 0;
+        var updated = 0;
+        foreach (var row in extraction.Rows)
+        {
+            var cityKey = Normalize(row.City);
+            var provinceKey = Normalize(row.Province);
+            var company = row.OilCompany.Trim();
+            var grade = row.FuelGrade!.Trim().ToUpperInvariant();
+            var key = cityKey + "|" + provinceKey + "|" + Normalize(company) + "|" + grade;
+            if (!byKey.TryGetValue(key, out var price))
+            {
+                price = new DoeFuelPrice { WeekStart = start, CityKey = cityKey,
+                    ProvinceKey = provinceKey, OilCompany = company, FuelGrade = grade };
+                db.DoeFuelPrices.Add(price);
+                byKey[key] = price;
+                added++;
+            }
+            else if (price.MinPricePerLiter != row.MinPricePerLiter ||
+                price.MaxPricePerLiter != row.MaxPricePerLiter ||
+                price.ReportId != report.Id || price.SourceUrl != source.Url)
+                updated++;
+            else continue;
+            if (price.ReportId is long oldReportId && oldReportId != report.Id)
+                oldReportIds.Add(oldReportId);
+            price.ReportId = report.Id;
+            price.City = row.City.Trim();
+            price.Province = row.Province.Trim();
+            price.Region = row.Region?.Trim() ??
+                (source.Section == "ncr-pump-prices" ? "National Capital Region" : source.Subdivision);
+            price.WeekEnd = end;
+            price.MinPricePerLiter = row.MinPricePerLiter;
+            price.MaxPricePerLiter = row.MaxPricePerLiter;
+            price.SourceUrl = source.Url;
+            price.FetchedAtUtc = nowUtc;
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        report.Section = source.Section;
+        report.Subdivision = source.Subdivision;
+        report.WeekEnd = end;
+        report.ContentHash = hash;
+        report.ImportedAtUtc = nowUtc;
+        report.Status = "imported";
+        report.PriceRows = await db.DoeFuelPrices.CountAsync(p => p.ReportId == report.Id,
+            cancellationToken);
+        foreach (var oldReportId in oldReportIds)
+        {
+            var count = await db.DoeFuelPrices.CountAsync(p => p.ReportId == oldReportId,
+                cancellationToken);
+            await db.DoePumpPriceReports.Where(r => r.Id == oldReportId)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.PriceRows, count), cancellationToken);
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        if (added + updated > 0)
+        {
+            var cityKeys = extraction.Rows.Select(r => Normalize(r.City)).Distinct().ToArray();
+            var provinceKeys = extraction.Rows.Select(r => Normalize(r.Province)).Distinct().ToArray();
+            await db.FuelPriceCaches.Where(c => c.RefreshAfter > nowUtc &&
+                ((c.Scope == FuelPriceCacheScopes.City && cityKeys.Contains(c.CityKey) &&
+                  provinceKeys.Contains(c.ProvinceKey)) ||
+                 (c.Scope == FuelPriceCacheScopes.Province && provinceKeys.Contains(c.ProvinceKey)) ||
+                 c.Scope == FuelPriceCacheScopes.Region))
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.RefreshAfter, nowUtc), cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return new DoeReportImportResult(source.Url,
+            added + updated == 0 ? "already_imported" : "imported", added, updated,
+            report.PriceRows);
     }
 
     private async Task<(string Url, DateOnly? ListedWeekStart)> FindLatestPdfAsync(ResolvedFuelLocation location, DateTime nowUtc,
@@ -314,8 +600,23 @@ public sealed class DoeFuelPriceImporter(
         return pdf;
     }
 
-    private async Task<DoeFuelPriceExtraction> ExtractAsync(byte[] pdf, ResolvedFuelLocation location,
+    private Task<DoeFuelPriceExtraction> ExtractAsync(byte[] pdf, ResolvedFuelLocation location,
         DateOnly? listedWeekStart,
+        CancellationToken cancellationToken) => ExtractDocumentAsync<DoeFuelPriceExtraction>(
+            pdf, _instructions,
+            $"Extract DOE pump prices for city/municipality {location.City}, province {location.Province}. The DOE listing labels this PDF's week as starting {listedWeekStart?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unknown"}.",
+            Schema, 6000, cancellationToken);
+
+    private Task<DoeBulkExtraction> ExtractAllAsync(byte[] pdf, DoeReportSource source,
+        CancellationToken cancellationToken) => ExtractDocumentAsync<DoeBulkExtraction>(
+            pdf, _bulkInstructions,
+            $"Extract all localities in this {source.Section} DOE report" +
+            (source.Subdivision is null ? "" : $" ({source.Subdivision})") +
+            $". The DOE listing labels the week as starting {source.WeekStart:yyyy-MM-dd}.",
+            BulkSchema, 24000, cancellationToken);
+
+    private async Task<T> ExtractDocumentAsync<T>(byte[] pdf, string instructions,
+        string prompt, JsonElement schema, int maxOutputTokens,
         CancellationToken cancellationToken)
     {
         var model = configuration["OPENAI_MODEL"];
@@ -324,16 +625,16 @@ public sealed class DoeFuelPriceImporter(
         {
             Content = JsonContent.Create(new
             {
-                model, instructions = _instructions,
+                model, instructions,
                 input = new[] { new { role = "user", content = new object[]
                 {
-                    new { type = "input_text", text = $"Extract DOE pump prices for city/municipality {location.City}, province {location.Province}. The DOE listing labels this PDF's week as starting {listedWeekStart?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unknown"}." },
+                    new { type = "input_text", text = prompt },
                     new { type = "input_file", filename = "doe-pump-prices.pdf",
                         file_data = "data:application/pdf;base64," + Convert.ToBase64String(pdf) }
                 } } },
                 text = new { format = new { type = "json_schema", name = "doe_pump_prices",
-                    strict = true, schema = Schema } },
-                max_output_tokens = 6000, store = false
+                    strict = true, schema } },
+                max_output_tokens = maxOutputTokens, store = false
             })
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", configuration["OPENAI_API_KEY"]);
@@ -359,7 +660,7 @@ public sealed class DoeFuelPriceImporter(
         }
         if (text.Length == 0)
             throw new InvalidDataException("DOE price extraction returned no rows.");
-        return JsonSerializer.Deserialize<DoeFuelPriceExtraction>(text.ToString()) ??
+        return JsonSerializer.Deserialize<T>(text.ToString()) ??
             throw new InvalidDataException("DOE price extraction returned invalid rows.");
     }
 

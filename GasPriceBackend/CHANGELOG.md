@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Refresh location research caches when newly imported DOE company prices become available, so prior website or AI results do not hide newer DOE rows.
 - Prefer fresh DOE city/company pump prices on fuel-price cache misses before configured websites and AI web search.
 - Group fuel-adjustment read results by notice week and report the actual number of returned weeks alongside the requested limit.
 - Report DOE notice imports as `imported`, `updated`, or `already_imported`, count only changed rows as updated, and leave saved timestamps untouched for unchanged rows.
@@ -18,6 +19,7 @@ All notable changes to this project will be documented in this file.
 - Exclude clearly out-of-range DOE notice PDFs from backfill job counts and results while retaining the PDF's extracted week as the final import check.
 
 ### Added
+- Organize DOE company prices by source PDF and retain bulk import jobs, with scheduled latest-report imports, bounded historical backfills, and paginated admin price history.
 - Import DOE regional pump-price PDFs into city/company/fuel-grade price ranges, expose authenticated `GET /fuel-prices/doe`, and include matching DOE rows in location research responses.
 - Backfill DOE fuel-adjustment notices for an inclusive date range, including any notice week that overlaps the range, with optional historical PDF URLs and a pollable per-notice job status.
 
