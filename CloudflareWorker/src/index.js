@@ -13,6 +13,7 @@ const ALLOWED_ROUTES = new Map([
   ["/ai/chat", new Set(["POST"])],
   ["/ai/fuel-prices", new Set(["POST"])],
   ["/fuel-prices", new Set(["GET"])],
+  ["/fuel-prices/featured", new Set(["GET"])],
   ["/fuel-prices/history", new Set(["GET"])],
   ["/fuel-prices/adjustments", new Set(["GET"])],
   ["/fuel-prices/doe", new Set(["GET"])],
