@@ -26,6 +26,7 @@ All notable changes to this project will be documented in this file.
 - Exclude clearly out-of-range DOE notice PDFs from backfill job counts and results while retaining the PDF's extracted week as the final import check.
 
 ### Added
+- Expose authenticated, read-only browsing of recent stored DOE company prices by city for the Fuel Prices tab.
 - Serve ordered Luzon, Visayas, and Mindanao featured city prices directly from recent stored DOE rows through authenticated `GET /fuel-prices/featured`.
 - Organize DOE company prices by source PDF and retain bulk import jobs, with scheduled latest-report imports, bounded historical backfills, and paginated admin price history.
 - Import DOE regional pump-price PDFs into city/company/fuel-grade price ranges, expose authenticated `GET /fuel-prices/doe`, and include matching DOE rows in location research responses.

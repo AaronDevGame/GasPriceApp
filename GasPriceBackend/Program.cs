@@ -170,6 +170,7 @@ app.MapFuelPriceReadEndpoints(auth, InstanceId);
 app.MapFeaturedFuelPriceEndpoints(auth, InstanceId);
 app.MapFuelAdjustmentEndpoints(auth, InstanceId);
 app.MapDoeFuelPriceEndpoints(auth, InstanceId);
+app.MapDoePriceBrowseEndpoints(auth, InstanceId);
 app.MapDoeImportEndpoints(InstanceId);
 
 app.MapGet(ApiRoutes.AdminRoutes, () => ApiResults.Ok(RouteRegistry.Admin, "admin_routes", InstanceId));

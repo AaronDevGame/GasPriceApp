@@ -24,6 +24,7 @@ public class RateLimitMiddleware
         [ApiRoutes.FuelPriceHistory] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelPriceAdjustments] = TimeSpan.FromSeconds(1),
         [ApiRoutes.DoeFuelPrices] = TimeSpan.FromSeconds(5),
+        [ApiRoutes.DoeFuelPricesBrowse] = TimeSpan.FromSeconds(1),
     };
 
     // Key = ip + "|" + route
