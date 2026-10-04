@@ -199,10 +199,12 @@ public static class DoeLocationMatcher
             RegionConsistent(row.Region, province) && CityEquals(RowCity(row), city)).ToArray();
         if (aliases.Length == 0) return [];
         var latestWeek = aliases.Max(row => row.WeekStart);
-        var latest = aliases.Where(row => row.WeekStart == latestWeek).ToArray();
-        var exact = latest.Where(row => Normalize(RowCity(row)) == Normalize(city)).ToArray();
-        if (exact.Length > 0) return exact;
-        return latest.Select(row => Normalize(RowCity(row))).Distinct().Count() == 1 ? latest : [];
+        var exactName = Normalize(city);
+        return aliases.Where(row => row.WeekStart == latestWeek)
+            .OrderByDescending(row => Normalize(RowCity(row)) == exactName)
+            .ThenByDescending(row => row.FetchedAtUtc)
+            .GroupBy(row => Normalize(row.OilCompany) + "|" + Normalize(row.FuelGrade))
+            .Select(group => group.First()).ToArray();
     }
 
     private static string RowCity(DoeFuelPrice row) =>
