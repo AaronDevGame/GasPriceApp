@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Changed
+- Show recent DOE prices for featured cities under Luzon, Visayas, and Mindanao on first load; keep those sections visible when location access is denied or a local lookup fails.
+- Show only the local price result above the featured sections after location permission is granted, and remove the temporary manual area form from the home screen.
 - Start the local HTTPS proxy and open its address when running `npm run web`.
 - Show the researched `/ai/fuel-prices` gasoline and diesel ranges in the local price board immediately after a location lookup.
 - Show DOE company and fuel-grade price ranges after a location-based lookup when DOE data is available.

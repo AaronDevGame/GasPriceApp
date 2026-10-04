@@ -7,6 +7,7 @@ const ts = require('typescript');
 const range = value => ({ minPrice: value, maxPrice: value, currency: 'PHP', unit: 'liter' });
 const point = (date, value) => ({ dataAsOf: date, prices: { diesel: range(value), gasoline91: range(value), gasoline95: range(value) } });
 const feed = { items: [{ ...point('2026-09-28', 60), area: { level: 'province', name: 'Cebu', province: 'Cebu' } }] };
+const featured = { groups: ['Luzon', 'Visayas', 'Mindanao'].map(name => ({ name, items: [{ city: name + ' City', province: name, ...point('2026-09-28', 60) }] })) };
 function harness(options = {}) {
   const calls = [], effects = [], states = [], modules = new Map();
   let onForeground;
@@ -18,6 +19,10 @@ function harness(options = {}) {
     resume: async () => { calls.push('resume'); return options.resume ? options.resume() : auth.session; },
     request: async (url, init) => {
       calls.push({ url, init });
+      if (url === '/fuel-prices/featured') {
+        if (options.featuredFailure) throw new Error('Featured feed unavailable');
+        return options.featuredFeed ?? featured;
+      }
       if (url.startsWith('/fuel-prices/history')) return { items: [point('2026-09-28', 60), point('2026-09-27', 60)] };
       if (url === '/ai/fuel-prices') {
         if (options.aiFailure) throw new Error('AI unavailable');
@@ -74,7 +79,7 @@ function harness(options = {}) {
 }
 async function settle(h) {
   for (let i = 0; i < 50; i++) {
-    if (!h.states[4]?.value) return;
+    if (!h.states[6]?.value) return;
     await new Promise(resolve => setTimeout(resolve, 5));
   }
   throw new Error('Flow did not settle');
@@ -117,50 +122,63 @@ async function settle(h) {
   assert.ok(offlineProvider.states[3].value.at(-1).message.includes('Session check failed'));
   console.log('PASS foreground provider: no blocking loading, duplicate-return coalescing, cleanup and offline screen preservation');
   const granted = harness(); granted.load('fuel/use-fuel-prices').useFuelPrices(); granted.effects[0](); await settle(granted);
-  assert.equal(granted.calls[0].url, '/fuel-prices');
+  assert.equal(granted.calls[0].url, '/fuel-prices/featured');
   assert.ok(granted.calls.indexOf('permission') > 0);
   const ai = granted.calls.find(call => call.url === '/ai/fuel-prices');
   assert.equal(ai.init.method, 'POST'); assert.equal(ai.init.body, JSON.stringify({ latitude: 10.3, longitude: 123.8 }));
   const local = granted.calls.find(call => call.url?.startsWith('/fuel-prices?'));
   assert.ok(granted.calls.indexOf(ai) < granted.calls.indexOf(local));
   assert.equal(new URLSearchParams(local.url.split('?')[1]).get('city'), 'Cebu City');
-  assert.equal(granted.states[1].value.prices[0].oilCompany, 'Petron');
-  assert.equal(granted.states[0].value.items[0].area.name, 'Cebu City');
-  assert.equal(granted.states[0].value.items[0].isLocal, true);
-  assert.equal(granted.states[0].value.items[0].prices.gasoline91.minPrice, 60);
-  assert.equal(granted.states[0].value.items[0].prices.gasoline91.maxPrice, 64);
-  console.log('PASS initial parameter-free GET, permission, coordinates POST, then resolved-area GET');
+  assert.equal(granted.states[3].value.prices[0].oilCompany, 'Petron');
+  assert.equal(granted.states[2].value.area.name, 'Cebu City');
+  assert.equal(granted.states[2].value.prices.gasoline91.minPrice, 60);
+  assert.equal(granted.states[2].value.prices.gasoline91.maxPrice, 64);
+  assert.equal(granted.states[0].value.groups.length, 3);
+  console.log('PASS featured GET, permission, coordinates POST, then local-area GET');
   for (const options of [{ denied: true }, { gpsFailure: true }, { aiFailure: true }]) {
     const h = harness(options); h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
-    assert.equal(h.states[0].value.items.length, 1);
-    if (options.aiFailure) assert.ok(h.states[6].value.includes('location was received'));
-    if (options.denied) assert.ok(h.states[6].value.includes('access is blocked'));
+    assert.equal(h.states[0].value.groups.length, 3);
+    assert.equal(h.states[2].value, null);
+    if (options.aiFailure) assert.ok(h.states[8].value.includes('location was received'));
+    if (options.denied) assert.ok(h.states[8].value.includes('access is blocked'));
     if (!options.aiFailure) assert.ok(!h.calls.some(call => call.url === '/ai/fuel-prices'));
     assert.ok(!h.calls.some(call => call.url?.startsWith('/fuel-prices?')));
   }
-  console.log('PASS denial, GPS and AI failures retain saved feed and skip location GET');
+  console.log('PASS denial, GPS and AI failures retain featured feed and skip location GET');
   for (const reason of ['timeout', 'unavailable']) {
     const h = harness({ locationReason: reason });
     h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
-    assert.ok(h.states[6].value.includes(reason === 'timeout' ? 'timed out' : 'could not determine'));
-    assert.equal(h.states[4].value, false);
+    assert.ok(h.states[8].value.includes(reason === 'timeout' ? 'timed out' : 'could not determine'));
+    assert.equal(h.states[6].value, false);
     assert.ok(!h.calls.some(call => call.url === '/ai/fuel-prices'));
   }
   console.log('PASS location timeout and positioning failure show distinct recovery messages');
-  const manual = harness({ denied: true }); const screen = manual.load('fuel/use-fuel-prices').useFuelPrices(); manual.effects[0](); await settle(manual);
-  await screen.selectArea({ province: 'Davao del Sur' }); const before = manual.calls.length; screen.refresh(); await settle(manual);
-  assert.ok(manual.calls.slice(before).some(call => call.url === '/fuel-prices?province=Davao+del+Sur'));
-  await screen.signOut(); assert.ok(manual.calls.includes('logout'));
+  const denied = harness({ denied: true }); const screen = denied.load('fuel/use-fuel-prices').useFuelPrices(); denied.effects[0](); await settle(denied);
+  const before = denied.calls.length; screen.refresh(); await settle(denied);
+  assert.ok(denied.calls.slice(before).some(call => call.url === '/fuel-prices/featured'));
+  assert.ok(!denied.calls.slice(before).includes('permission'));
+  await screen.signOut(); assert.ok(denied.calls.includes('logout'));
   const cancelled = harness(); cancelled.load('fuel/use-fuel-prices').useFuelPrices(); cancelled.effects[0]()();
   await new Promise(resolve => setTimeout(resolve, 5)); assert.ok(!cancelled.calls.includes('permission'));
-  console.log('PASS manual selection, area refresh, logout and startup cancellation');
+  console.log('PASS featured refresh, logout and startup cancellation');
+  for (const groups of [
+    ['Luzon', 'Visayas', 'Mindanao'].map(name => ({ name, items: [] })),
+    [{ name: 'Luzon', items: featured.groups[0].items }, { name: 'Visayas', items: [] }, { name: 'Mindanao', items: [] }],
+    featured.groups,
+  ]) {
+    const h = harness({ denied: true, featuredFeed: { groups } });
+    h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
+    assert.equal(h.states[0].value.groups.reduce((count, group) => count + group.items.length, 0),
+      groups.reduce((count, group) => count + group.items.length, 0));
+  }
+  console.log('PASS empty, partial and full featured responses');
   const api = granted.load('fuel/api');
   assert.equal(api.meaningfulUpdates([point('2026-09-28', 60)]).length, 0);
   assert.equal(api.meaningfulUpdates([point('2026-09-28', 60), point('2026-09-27', 60)]).length, 0);
   const changes = api.meaningfulUpdates(Array.from({ length: 8 }, (_, i) => point(`2026-09-${28-i}`, 60+i)));
   assert.equal(changes.length, 5); assert.equal(changes[0].dataAsOf, '2026-09-28');
   assert.equal(api.formatPrice(range(null)), 'Not available');
-  assert.equal(api.formatPrice(granted.states[0].value.items[0].prices.gasoline91), '₱60.00–₱64.00');
+  assert.equal(api.formatPrice(granted.states[2].value.prices.gasoline91), '₱60.00–₱64.00');
   console.log('PASS unchanged history, baseline requirement, newest-first five-change limit');
   const code = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, '../src/fuel/location.web.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   for (const result of ['allowed', 'denied', 'unavailable', 'timeout']) {

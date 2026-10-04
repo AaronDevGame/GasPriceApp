@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { ActivityIndicator, Button, Linking, Platform, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Button, Linking, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { LocalPriceBoard } from '@/components/local-price-board';
 import { useTheme } from '@/hooks/use-theme';
-import { formatPrice, type Prices, type FeedItem, type DoeFuelPriceFeed } from '@/fuel/api';
+import { formatPrice, type Prices, type FeaturedFuelPrice, type DoeFuelPriceFeed } from '@/fuel/api';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
 import { useAuth } from '@/auth/auth-provider';
 
@@ -15,7 +15,9 @@ const SHOW_LOGOUT_BUTTON = false;
 const SHOW_TOKEN_LOG = true;
 
 function asOf(value: string) {
-  return new Date(value).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+  return new Date(value).toLocaleDateString('en-PH', {
+    year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Manila',
+  });
 }
 function PriceGrid({ prices }: { prices: Prices }) {
   const [width, setWidth] = useState(0);
@@ -34,13 +36,12 @@ function PriceGrid({ prices }: { prices: Prices }) {
     })}
   </View>;
 }
-function PriceCard({ item }: { item: FeedItem }) {
-  if (item.isLocal) return <LocalPriceBoard item={item} />;
-  const areaLabel = [...new Set([item.area.name, item.area.province, item.area.region].filter(Boolean))].join(', ');
+function FeaturedPriceCard({ item }: { item: FeaturedFuelPrice }) {
   return <ThemedView type="backgroundElement" style={styles.card}>
-    <ThemedText style={styles.area}>{areaLabel}</ThemedText>
-    <ThemedText type="small" themeColor="textSecondary">As of {asOf(item.dataAsOf)}{item.freshness !== 'current' ? ' · Older estimate' : ''}</ThemedText>
+    <ThemedText style={styles.area}>{item.city}, {item.province}</ThemedText>
+    <ThemedText type="small" themeColor="textSecondary">DOE data as of {asOf(item.dataAsOf)} · Report week {item.reportWeekStart} to {item.reportWeekEnd}</ThemedText>
     <PriceGrid prices={item.prices} />
+    <Button title="View DOE source" onPress={() => void Linking.openURL(item.source.url)} />
   </ThemedView>;
 }
 
@@ -66,20 +67,12 @@ export default function HomeScreen() {
   const fuel = useFuelPrices();
   const { tokenLog } = useAuth();
   const theme = useTheme();
-  const [city, setCity] = useState('');
-  const [province, setProvince] = useState('');
-  const [validation, setValidation] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const refreshHint = Platform.OS === 'web' ? 'Reload this page to reconnect or update prices.' : 'Pull down to reconnect or update prices.';
   const pullToRefresh = async () => {
     if (fuel.busy || refreshing) return;
     setRefreshing(true);
     try { await fuel.refresh(); } finally { setRefreshing(false); }
-  };
-  const chooseArea = () => {
-    if (!city.trim() && !province.trim()) { setValidation('Enter a city or province.'); return; }
-    setValidation(null);
-    void fuel.selectArea({ city: city.trim() || undefined, province: province.trim() || undefined });
   };
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.safe}>
@@ -109,32 +102,29 @@ export default function HomeScreen() {
           </View>}
           {!fuel.authenticated && !fuel.busy && !fuel.error && <ThemedText>You are signed out. {refreshHint}</ThemedText>}
           {fuel.error && <ThemedText accessibilityRole="alert">{fuel.error} {refreshHint}</ThemedText>}
-          {fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">{fuel.feed ? 'Updating prices…' : 'Loading available prices…'}</ThemedText></View>}
+          {fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">{fuel.featured ? 'Updating prices…' : 'Loading featured prices…'}</ThemedText></View>}
+          {fuel.localItem && <LocalPriceBoard item={fuel.localItem} />}
           {fuel.doePrices && <DoePriceCard feed={fuel.doePrices} />}
-          {fuel.feed?.items.map(item => <PriceCard key={JSON.stringify(item.area)} item={item} />)}
-          {fuel.feed?.items.length === 0 && <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText style={styles.area}>No saved fuel prices yet</ThemedText>
-            <ThemedText>Allow location access to look up prices near you.</ThemedText>
-          </ThemedView>}
           <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText style={styles.area}>Find your local prices</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">{fuel.locationNote}</ThemedText>
             <Button title="Use my location" disabled={fuel.busy || !fuel.authenticated} onPress={() => void fuel.useLocation()} />
-            <ThemedText type="small">Or choose a Philippine city or province</ThemedText>
-            <View style={styles.inputs}>
-              {([{ label: 'City', value: city, set: setCity }, { label: 'Province', value: province, set: setProvince }]).map(field =>
-                <TextInput key={field.label} accessibilityLabel={field.label} placeholder={field.label}
-                  placeholderTextColor={theme.textSecondary} value={field.value} onChangeText={field.set}
-                  maxLength={100} autoCapitalize="words" style={[styles.input, { color: theme.text, borderColor: theme.textSecondary }]}
-                />)}
-            </View>
-            {validation && <ThemedText accessibilityRole="alert">{validation}</ThemedText>}
-            <Button title="Show area prices" disabled={fuel.busy || !fuel.authenticated} onPress={chooseArea} />
           </ThemedView>
-          {fuel.feed && <View style={styles.history}>
+          <View style={styles.history}>
+            <ThemedText style={styles.area}>Fuel prices across the Philippines</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">Featured DOE city prices are examples, not prices near you.</ThemedText>
+            {fuel.featuredError && <ThemedText accessibilityRole="alert">Featured prices could not be updated. Pull down or reload to retry.</ThemedText>}
+            {fuel.featured?.groups.map(group => <View key={group.name} style={styles.history}>
+              <ThemedText style={styles.area}>{group.name}</ThemedText>
+              {group.items.length ? group.items.map(item =>
+                <FeaturedPriceCard key={`${item.city}-${item.province}`} item={item} />) :
+                <ThemedText type="small" themeColor="textSecondary">No recent DOE prices for the featured cities.</ThemedText>}
+            </View>)}
+          </View>
+          {fuel.localItem && <View style={styles.history}>
             <ThemedText style={styles.area}>Recent updates</ThemedText>
             {fuel.updates.length ? <>
-              <ThemedText type="small" themeColor="textSecondary">{fuel.feed.items[0]?.area.name} · Newest first</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">{fuel.localItem.area.name} · Newest first</ThemedText>
               {fuel.updates.map(point => <ThemedView key={point.dataAsOf} type="backgroundElement" style={styles.card}>
                 <ThemedText type="smallBold">{asOf(point.dataAsOf)}</ThemedText><PriceGrid prices={point.prices} />
               </ThemedView>)}
@@ -157,8 +147,6 @@ const styles = StyleSheet.create({
   price: { flex: 1, minWidth: 0, gap: 4 },
   priceCaptionCompact: { fontSize: 12, lineHeight: 18 }, priceLabelNarrow: { minHeight: 36 },
   amount: { fontSize: 24, lineHeight: 32, fontWeight: '700', flexGrow: 1 },
-  inputs: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  input: { flexGrow: 1, flexBasis: 180, borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16 },
   history: { gap: 12 },
   tokenLog: { gap: 4 },
   company: { gap: 4, paddingTop: 8 },

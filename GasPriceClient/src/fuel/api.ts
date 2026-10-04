@@ -6,6 +6,13 @@ export type Prices = { diesel: PriceRange; gasoline91: PriceRange; gasoline95: P
 export type PricePoint = { dataAsOf: string; freshness: string; prices: Prices };
 export type FeedItem = PricePoint & { area: Area & { level: string; name: string }; isLocal: boolean };
 export type Feed = { items: FeedItem[]; localAreaStatus: string };
+export type FeaturedFuelPrice = {
+  city: string; province: string; reportWeekStart: string; reportWeekEnd: string;
+  dataAsOf: string; prices: Prices;
+  source: { name: string; url: string; publishedAt: string | null; geographicCoverage: string };
+};
+export type FeaturedFuelPriceGroup = { name: string; items: FeaturedFuelPrice[] };
+export type FeaturedFuelPriceFeed = { groups: FeaturedFuelPriceGroup[] };
 export type Coordinates = { latitude: number; longitude: number };
 export type DoeFuelPrice = {
   city: string; province: string; region: string | null; oilCompany: string;
@@ -66,6 +73,10 @@ export function areaQuery(area?: Area) {
 export function getPrices(area?: Area) {
   const query = areaQuery(area).toString();
   return authClient.request<Feed>(`/fuel-prices${query ? `?${query}` : ''}`);
+}
+
+export function getFeaturedPrices() {
+  return authClient.request<FeaturedFuelPriceFeed>('/fuel-prices/featured');
 }
 
 export async function refreshLocation(coordinates: Coordinates) {
