@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Changed
+- Rename the default Gas Price tab to Overview and place four tabs in the order Overview, Fuel Prices, News, Weekly Changes.
+- Show a city-searchable DOE company price comparison in the new Fuel Prices tab; reserve the News tab for a future feature.
 - Show the total number of available DOE company prices for the selected fuel grade beside the top-five list.
 - Show five lowest reported DOE company prices beneath the Your area board, with an expandable, vertically scrollable list of up to ten per fuel grade; check the DOE feed when location research came from another source.
 - Show recent DOE prices for featured cities under Luzon, Visayas, and Mindanao on first load; keep those sections visible when location access is denied or a local lookup fails.

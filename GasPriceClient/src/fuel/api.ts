@@ -23,6 +23,15 @@ export type DoeFuelPriceFeed = {
   city: string | null; province: string | null; region: string | null;
   weekStart: string | null; weekEnd: string | null; prices: DoeFuelPrice[];
 };
+export type DoePriceLocation = { city: string; province: string };
+export type DoePriceBrowseFeed = {
+  locations: DoePriceLocation[]; selected: DoeFuelPriceFeed | null;
+};
+
+export function getDoePriceBrowse(location?: DoePriceLocation) {
+  const query = location ? `?${new URLSearchParams(location)}` : '';
+  return authClient.request<DoePriceBrowseFeed>(`/fuel-prices/doe/browse${query}`);
+}
 
 export function cheapestDoePrices(feed: DoeFuelPriceFeed, grade: string): DoeFuelPrice[] {
   return feed.prices.filter(price => price.fuelGrade === grade &&

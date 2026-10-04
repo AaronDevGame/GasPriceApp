@@ -69,7 +69,7 @@ export default function HomeScreen() {
           <View style={styles.header}>
             <View style={styles.brand}>
               <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>
-              <ThemedText type="title" style={styles.title}>Fuel prices</ThemedText>
+              <ThemedText type="title" style={styles.title}>Overview</ThemedText>
               <ThemedText themeColor="textSecondary">Diesel, 91 and 95 in ₱/liter.</ThemedText>
             </View>
             {SHOW_LOGOUT_BUTTON && <View style={styles.actions}>
