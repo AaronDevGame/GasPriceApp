@@ -54,6 +54,24 @@ The feed and history omit unavailable snapshots.
 
 ## Feed
 
+`GET /fuel-prices/featured` returns `data.groups` in Luzon, Visayas, Mindanao
+order. Each group has `name` and `items`, with up to three cities in the
+published candidate order. A card contains `city`, `province`, `reportWeekStart`,
+`reportWeekEnd`, `dataAsOf`, `prices` (diesel, gasoline91, gasoline95 PHP-per-liter
+ranges), and a DOE `source` with a report URL. Missing grades have null range
+endpoints. A group with no qualifying city has an empty `items` array. The
+endpoint takes no query parameters and uses the same player authentication as
+the existing feed. It reads only `doe_fuel_price`; it does not import, research,
+geocode, or write to `fuel_price_cache`.
+
+Candidate cities are Quezon City, Baguio City, and Dasmariñas for Luzon; Iloilo
+City, Cebu City, and Tacloban City for Visayas; and Zamboanga City, Cagayan de
+Oro City, and Davao City for Mindanao. The latest city report qualifies when its
+week overlaps today and its end date is within the last seven Philippine calendar
+days. The displayed `dataAsOf` is the report's end date for completed weeks or
+its start date for the current week. A city without a qualifying stored report
+is omitted rather than filled from another source.
+
 `GET /fuel-prices?limit=10` returns up to ten distinct areas, with each
 area's latest `dataAsOf` snapshot. The default limit is 10; accepted values
 are 1 through 10. If the database has fewer areas, `items` is shorter or empty.

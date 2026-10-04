@@ -20,6 +20,7 @@ public class RateLimitMiddleware
         [ApiRoutes.AiChat] = TimeSpan.FromSeconds(5),
         [ApiRoutes.AiFuelPrices] = TimeSpan.FromSeconds(5),
         [ApiRoutes.FuelPrices] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.FeaturedFuelPrices] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelPriceHistory] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelPriceAdjustments] = TimeSpan.FromSeconds(1),
         [ApiRoutes.DoeFuelPrices] = TimeSpan.FromSeconds(5),

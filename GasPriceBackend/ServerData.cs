@@ -113,6 +113,7 @@ public static class ApiRoutes
     public const string AiChat = "/ai/chat";
     public const string AiFuelPrices = "/ai/fuel-prices";
     public const string FuelPrices = "/fuel-prices";
+    public const string FeaturedFuelPrices = "/fuel-prices/featured";
     public const string FuelPriceHistory = "/fuel-prices/history";
     public const string FuelPriceAdjustments = "/fuel-prices/adjustments";
     public const string DoeFuelPrices = "/fuel-prices/doe";
@@ -155,6 +156,7 @@ public static class RouteRegistry
         new(ApiRoutes.AiChat, "POST"),
         new(ApiRoutes.AiFuelPrices, "POST"),
         new(ApiRoutes.FuelPrices, "GET"),
+        new(ApiRoutes.FeaturedFuelPrices, "GET"),
         new(ApiRoutes.FuelPriceHistory, "GET"),
         new(ApiRoutes.FuelPriceAdjustments, "GET"),
         new(ApiRoutes.DoeFuelPrices, "GET"),

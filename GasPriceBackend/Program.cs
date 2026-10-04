@@ -167,6 +167,7 @@ app.MapPlayerProfileEndpoints(auth, InstanceId);
 app.MapAiChatEndpoints(auth, InstanceId);
 app.MapFuelPriceEndpoints(auth, InstanceId);
 app.MapFuelPriceReadEndpoints(auth, InstanceId);
+app.MapFeaturedFuelPriceEndpoints(auth, InstanceId);
 app.MapFuelAdjustmentEndpoints(auth, InstanceId);
 app.MapDoeFuelPriceEndpoints(auth, InstanceId);
 app.MapDoeImportEndpoints(InstanceId);
