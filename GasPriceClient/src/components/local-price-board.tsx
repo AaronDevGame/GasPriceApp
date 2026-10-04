@@ -74,7 +74,9 @@ export function LocalPriceBoard({ item, doePrices }: { item: FeedItem; doePrices
       {doePrices && cheapest.length > 0 && <View style={[styles.doeSection, dark && styles.doeSectionDark]}>
         <View style={styles.doeHeading}>
           <ThemedText type="smallBold">Lowest DOE company prices</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">Top {displayedPrices.length}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Top {displayedPrices.length} of {cheapest.length} available
+          </ThemedText>
         </View>
         <ThemedText type="small" themeColor="textSecondary">
           {doePrices.city || item.area.name} · Week {doePrices.weekStart} to {doePrices.weekEnd}
