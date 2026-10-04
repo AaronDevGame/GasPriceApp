@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Show the total number of available DOE company prices for the selected fuel grade beside the top-five list.
 - Show five lowest reported DOE company prices beneath the Your area board, with an expandable, vertically scrollable list of up to ten per fuel grade; check the DOE feed when location research came from another source.
 - Show recent DOE prices for featured cities under Luzon, Visayas, and Mindanao on first load; keep those sections visible when location access is denied or a local lookup fails.
 - Show only the local price result above the featured sections after location permission is granted, and remove the temporary manual area form from the home screen.
