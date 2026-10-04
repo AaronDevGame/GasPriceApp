@@ -29,8 +29,7 @@ export function cheapestDoePrices(feed: DoeFuelPriceFeed, grade: string): DoeFue
     Number.isFinite(price.minPricePerLiter) && price.minPricePerLiter > 0 &&
     Number.isFinite(price.maxPricePerLiter) && price.maxPricePerLiter >= price.minPricePerLiter)
     .sort((a, b) => a.minPricePerLiter - b.minPricePerLiter ||
-      a.maxPricePerLiter - b.maxPricePerLiter || a.oilCompany.localeCompare(b.oilCompany))
-    .slice(0, 3);
+      a.maxPricePerLiter - b.maxPricePerLiter || a.oilCompany.localeCompare(b.oilCompany));
 }
 export type LocationResult = {
   result: {

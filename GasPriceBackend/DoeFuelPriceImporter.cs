@@ -79,8 +79,13 @@ public sealed class DoeFuelPriceImporter(
     private static readonly Regex PdfLinks = new(
         "<a\\b[^>]*href\\s*=\\s*[\"'](?<url>[^\"']+\\.pdf(?:\\?[^\"']*)?)[\"'][^>]*>(?<label>.*?)</a>",
         RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+    private const string ListingMonths =
+        "January|February|March|April|May|June|July|August|September|Sept|Sep|October|November|December|Dec";
+    // Consume the whole range so the last match in preceding text retains its
+    // start date, including headings such as "September 29 to October 5".
     private static readonly Regex DateLabel = new(
-        "(?<month>January|February|March|April|May|June|July|August|September|Sept|Sep|October|November|December|Dec)\\s*(?<day>\\d{1,2})",
+        "(?<month>" + ListingMonths + ")\\s*(?<day>\\d{1,2})" +
+        "(?:\\s*(?:to|[-–—])\\s*(?:(?:" + ListingMonths + ")\\s*)?\\d{1,2})?",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly HashSet<string> Grades = new(StringComparer.OrdinalIgnoreCase)
         { "RON 91", "RON 95", "RON 97", "RON 100", "DIESEL", "DIESEL PLUS", "KEROSENE" };

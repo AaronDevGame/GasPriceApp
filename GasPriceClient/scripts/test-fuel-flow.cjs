@@ -193,7 +193,7 @@ async function settle(h) {
     doeRow('Third', 'RON 91', 63), doeRow('Second', 'RON 91', 61, 64),
     doeRow('First', 'RON 91', 61, 62), doeRow('Invalid', 'RON 91', 0),
   ] }, 'RON 91');
-  assert.equal(cheapest.map(row => row.oilCompany).join(','), 'First,Second,Third');
+  assert.equal(cheapest.map(row => row.oilCompany).join(','), 'First,Second,Third,Fourth');
   assert.equal(api.cheapestDoePrices({ prices: [] }, 'RON 91').length, 0);
   assert.equal(api.meaningfulUpdates([point('2026-09-28', 60)]).length, 0);
   assert.equal(api.meaningfulUpdates([point('2026-09-28', 60), point('2026-09-27', 60)]).length, 0);

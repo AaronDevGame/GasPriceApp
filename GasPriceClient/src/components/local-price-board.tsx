@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -16,12 +16,22 @@ export function LocalPriceBoard({ item, doePrices }: { item: FeedItem; doePrices
   const dark = useColorScheme() === 'dark';
   const [width, setWidth] = useState(0);
   const [selectedGrade, setSelectedGrade] = useState<string>('RON 91');
+  const [expanded, setExpanded] = useState(false);
   const availableFuels = doePrices ? fuels.filter(fuel => cheapestDoePrices(doePrices, fuel.doeGrade).length) : [];
   const activeFuel = availableFuels.find(fuel => fuel.doeGrade === selectedGrade) ?? availableFuels[0];
   const cheapest = doePrices && activeFuel ? cheapestDoePrices(doePrices, activeFuel.doeGrade) : [];
+  const displayedPrices = cheapest.slice(0, expanded ? 10 : 5);
   const columnWidth = (width - 16) / 3;
   const details = [...new Set([item.area.province, item.area.region].filter(value => value && value !== item.area.name))].join(' · ');
   const date = new Date(item.dataAsOf).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+  const priceRows = displayedPrices.map((price, index) => <View key={`${price.oilCompany}-${price.fuelGrade}`} style={styles.doeRow}>
+    <ThemedText type="smallBold" themeColor="textSecondary" style={styles.rank}>{index + 1}</ThemedText>
+    <ThemedText type="smallBold" style={styles.companyName}>{price.oilCompany}</ThemedText>
+    <ThemedText type="smallBold" style={styles.doeAmount}>{formatPrice({
+      minPrice: price.minPricePerLiter, maxPrice: price.maxPricePerLiter,
+      currency: 'PHP', unit: 'liter',
+    })}</ThemedText>
+  </View>);
 
   return <View style={[styles.card, dark && styles.cardDark]}>
     <View style={styles.topLine} />
@@ -64,7 +74,7 @@ export function LocalPriceBoard({ item, doePrices }: { item: FeedItem; doePrices
       {doePrices && cheapest.length > 0 && <View style={[styles.doeSection, dark && styles.doeSectionDark]}>
         <View style={styles.doeHeading}>
           <ThemedText type="smallBold">Lowest DOE company prices</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">Top {cheapest.length}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">Top {displayedPrices.length}</ThemedText>
         </View>
         <ThemedText type="small" themeColor="textSecondary">
           {doePrices.city || item.area.name} · Week {doePrices.weekStart} to {doePrices.weekEnd}
@@ -72,21 +82,24 @@ export function LocalPriceBoard({ item, doePrices }: { item: FeedItem; doePrices
         <View style={styles.gradeTabs}>
           {availableFuels.map(fuel => <Pressable key={fuel.key} accessibilityRole="button"
             accessibilityState={{ selected: activeFuel.doeGrade === fuel.doeGrade }}
-            onPress={() => setSelectedGrade(fuel.doeGrade)}
+            onPress={() => { setSelectedGrade(fuel.doeGrade); setExpanded(false); }}
             style={[styles.gradeTab, activeFuel.doeGrade === fuel.doeGrade && { backgroundColor: fuel.color }]}>
             <ThemedText type="smallBold" style={activeFuel.doeGrade === fuel.doeGrade && styles.selectedTabText}>
               {fuel.label}
             </ThemedText>
           </Pressable>)}
         </View>
-        {cheapest.map((price, index) => <View key={`${price.oilCompany}-${price.fuelGrade}`} style={styles.doeRow}>
-          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.rank}>{index + 1}</ThemedText>
-          <ThemedText type="smallBold" style={styles.companyName}>{price.oilCompany}</ThemedText>
-          <ThemedText type="smallBold" style={styles.doeAmount}>{formatPrice({
-            minPrice: price.minPricePerLiter, maxPrice: price.maxPricePerLiter,
-            currency: 'PHP', unit: 'liter',
-          })}</ThemedText>
-        </View>)}
+        {expanded ? <ScrollView style={styles.doeListExpanded} nestedScrollEnabled
+          showsVerticalScrollIndicator={displayedPrices.length > 5}>{priceRows}</ScrollView> :
+          <View>{priceRows}</View>}
+        {cheapest.length > 5 && <Pressable accessibilityRole="button"
+          accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)}
+          style={styles.expandButton}>
+          <ThemedText type="smallBold" style={styles.sourceLink}>
+            {expanded ? 'Show top 5 ↑' : cheapest.length <= 10
+              ? `Show all ${cheapest.length} ↓` : 'Show top 10 ↓'}
+          </ThemedText>
+        </Pressable>}
         <ThemedText type="small" themeColor="textSecondary" style={styles.doeNote}>
           Ranked by the low end of each reported range. DOE lists city-level company prices, not individual stations or nearby availability.
         </ThemedText>
@@ -127,6 +140,8 @@ const styles = StyleSheet.create({
   gradeTab: { borderWidth: 1, borderColor: '#B6BFC3', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   selectedTabText: { color: '#FFFFFF' },
   doeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, borderBottomWidth: 1, borderColor: '#D2D5D4' },
+  doeListExpanded: { maxHeight: 245 },
+  expandButton: { alignSelf: 'flex-start', paddingVertical: 4 },
   rank: { width: 18 },
   companyName: { flex: 1, minWidth: 0 },
   doeAmount: { textAlign: 'right', fontVariant: ['tabular-nums'] },
