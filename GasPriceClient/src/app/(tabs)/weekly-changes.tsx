@@ -198,7 +198,7 @@ export default function WeeklyChangesScreen() {
             <ThemedText themeColor="textSecondary">Announced fuel price increases and decreases by oil company, in pesos per liter.</ThemedText>
           </View>
           {authLoading || (authenticated && loading) ? <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">Loading weekly changes…</ThemedText></View> : null}
-          {!authenticated && !authLoading && <ThemedText accessibilityRole="alert">{authError ?? 'You are signed out. Reopen the Gas Price tab to reconnect.'}</ThemedText>}
+          {!authenticated && !authLoading && <ThemedText accessibilityRole="alert">{authError ?? 'You are signed out. Reopen the Overview tab to reconnect.'}</ThemedText>}
           {error && <ThemedText accessibilityRole="alert">{error} {Platform.OS === 'web' ? 'Reload this page to try again.' : 'Pull down to try again.'}</ThemedText>}
           {authenticated && !loading && !error && feed?.groups.length === 0 && <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText style={styles.company}>No weekly changes yet</ThemedText>
