@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - Treat DOE PDF URLs whose query slashes use different percent encoding as the same source when classifying repeat imports.
 
 ### Fixed
+- Re-extract DOE PDFs on normal latest and backfill jobs to add company prices omitted by an earlier extraction, while retaining saved rows if a retry omits them.
 - Include every matching DOE company when the latest report stores a city's companies under different spelling or City suffix variants, without repeating duplicate company and grade rows.
 - Read the start of cross-month DOE listing ranges, such as September 29 to October 5, so bulk and city imports select the correct report week.
 - Retry DOE imports when no company rows remain after a database clear, even if the server recently checked that city.

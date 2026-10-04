@@ -151,7 +151,7 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                     var reportImporter = reportScope.ServiceProvider.GetRequiredService<DoeFuelPriceImporter>();
                     var result = await reportImporter.ImportReportAsync(reportDb, source,
                         timeProvider.GetUtcNow().UtcDateTime, job.From, job.To,
-                        job.Mode == "latest", cancellationToken);
+                        cancellationToken);
                     item = new(source.Section, source.Subdivision, source.WeekStart,
                         source.Url, result.Status, result.Added, result.Updated, null)
                     {

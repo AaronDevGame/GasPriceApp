@@ -409,19 +409,14 @@ public sealed class DoeFuelPriceImporter(
 
     public async Task<DoeReportImportResult> ImportReportAsync(AppDbContext db,
         DoeReportSource source, DateTime nowUtc, DateOnly? from, DateOnly? to,
-        bool checkForCorrections,
         CancellationToken cancellationToken)
     {
         var report = await db.DoePumpPriceReports.FirstOrDefaultAsync(r =>
             r.SourceUrl == source.Url && r.WeekStart == source.WeekStart,
             cancellationToken);
         var wasComplete = report?.Status == "imported";
-        if (report is { Status: "imported", ContentHash: not null } && !checkForCorrections)
-            return new DoeReportImportResult(source.Url, "already_imported", 0, 0, report.PriceRows);
         var pdf = await DownloadAsync(source.Url, cancellationToken);
         var hash = Convert.ToHexString(SHA256.HashData(pdf));
-        if (report is { Status: "imported" } && report.ContentHash == hash)
-            return new DoeReportImportResult(source.Url, "already_imported", 0, 0, report.PriceRows);
         var extraction = await ExtractAllAsync(pdf, source, cancellationToken);
         if (!DateOnly.TryParseExact(extraction.WeekStart, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var start) ||
@@ -439,9 +434,6 @@ public sealed class DoeFuelPriceImporter(
             }).ToArray()
             : extraction.Rows;
         var validated = ValidateBulkRows(extractedRows);
-        if (report is { Status: "imported" } && validated.Rows.Count < report.PriceRows)
-            throw new InvalidDataException(
-                "Corrected DOE report yielded fewer rows than its previous import; review it before replacing prices.");
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         if (report is null)
         {
