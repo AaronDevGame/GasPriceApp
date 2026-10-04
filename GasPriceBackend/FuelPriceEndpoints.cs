@@ -117,6 +117,8 @@ public static class FuelPriceEndpoints
             var cityKey = NormalizeLocation(fuelRequest.City);
             var provinceKey = NormalizeLocation(fuelRequest.Province);
             var regionKey = NormalizeLocation(fuelRequest.Region);
+            var doeRows = await doe.GetAsync(db, location, now, cancellationToken);
+            var doeResult = doeRows.Count > 0 ? BuildDoeResult(fuelRequest, doeRows, now) : (JsonElement?)null;
 
             var cacheCandidates = await db.FuelPriceCaches
                 .AsNoTracking()
@@ -141,7 +143,12 @@ public static class FuelPriceEndpoints
 
             foreach (var cached in cacheCandidates)
             {
+                if ((doeRows.Count > 0) != (cached.Model == "direct:doe"))
+                    continue;
                 using var cachedDocument = JsonDocument.Parse(cached.ResultJson);
+                if (doeResult is { } currentDoeResult &&
+                    !JsonElement.DeepEquals(cachedDocument.RootElement, currentDoeResult))
+                    continue;
                 if (sourcePolicy.HasExcludedSource(cachedDocument.RootElement))
                     continue;
 
@@ -163,9 +170,6 @@ public static class FuelPriceEndpoints
                                 c => c.HitCount + 1),
                             cancellationToken);
 
-                    var cachedDoeRows = cached.Model == "direct:doe"
-                        ? await doe.ReadAsync(db, location, now, cancellationToken)
-                        : [];
                     return ApiResults.Ok(
                         new FuelPriceApiResponse(
                             WithRequestLocation(cachedDocument.RootElement, coordinates, location),
@@ -178,16 +182,15 @@ public static class FuelPriceEndpoints
                             cached.Scope,
                             cached.CachedAt,
                             cached.RefreshAfter,
-                            cached.Model == "direct:doe" ? DoeFuelPriceEndpoints.ToFeed(location, cachedDoeRows) : null),
+                            cached.Model == "direct:doe" ? DoeFuelPriceEndpoints.ToFeed(location, doeRows) : null),
                         "fuel_price_response",
                         instanceId);
                 }
             }
 
-            var doeRows = await doe.GetAsync(db, location, now, cancellationToken);
             if (doeRows.Count > 0)
             {
-                var result = BuildDoeResult(fuelRequest, doeRows, now);
+                var result = doeResult!.Value;
                 var cachedAt = timeProvider.GetUtcNow().UtcDateTime;
                 if (HasUsablePrices(result) &&
                     TryGetFreshDataAsOf(result, cachedAt, out var dataAsOfUtc))

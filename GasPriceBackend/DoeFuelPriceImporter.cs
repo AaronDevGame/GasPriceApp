@@ -154,7 +154,8 @@ public sealed class DoeFuelPriceImporter(
             return cached;
         if (!IsConfigured ||
             (FailedAttempts.TryGetValue(key, out var last) && last > nowUtc.AddMinutes(-15)) ||
-            (ListingChecks.TryGetValue(key, out var checkedAt) && checkedAt > nowUtc.AddMinutes(-15)))
+            (cached.Count > 0 && ListingChecks.TryGetValue(key, out var checkedAt) &&
+             checkedAt > nowUtc.AddMinutes(-15)))
             return cached;
         ListingChecks[key] = nowUtc;
         try
@@ -185,17 +186,20 @@ public sealed class DoeFuelPriceImporter(
     {
         if (string.IsNullOrWhiteSpace(location.City) || string.IsNullOrWhiteSpace(location.Province))
             return [];
-        var cityKey = Normalize(location.City);
-        var provinceKey = Normalize(location.Province);
+        if (!DoeLocationMatcher.RegionConsistent(location.Region, location.Province))
+            return [];
+        var provinceKeys = DoeLocationMatcher.ProvinceKeyCandidates(location.Province);
         var today = PhilippineDate(nowUtc);
         var earliest = today.AddDays(-7);
         var rows = await db.DoeFuelPrices.AsNoTracking()
-            .Where(p => p.CityKey == cityKey && p.ProvinceKey == provinceKey &&
+            .Where(p => provinceKeys.Contains(p.ProvinceKey) &&
                 p.WeekEnd >= earliest && p.WeekStart <= today)
             .OrderByDescending(p => p.WeekStart).ThenBy(p => p.OilCompany)
             .ThenBy(p => p.FuelGrade).ToListAsync(cancellationToken);
-        var latest = rows.FirstOrDefault()?.WeekStart;
-        return latest is null ? [] : rows.Where(p => p.WeekStart == latest).ToArray();
+        var matched = DoeLocationMatcher.MatchCity(rows, location.City,
+            location.Province, location.Region);
+        var latest = matched.FirstOrDefault()?.WeekStart;
+        return latest is null ? [] : matched.Where(p => p.WeekStart == latest).ToArray();
     }
 
     public async Task<DoeFuelPriceImportResult> ImportAsync(
@@ -210,15 +214,18 @@ public sealed class DoeFuelPriceImporter(
             ? await FindLatestPdfAsync(location, nowUtc, cancellationToken)
             : (FuelAdjustmentImporter.ValidatePdfUrl(requestedUrl), (DateOnly?)null);
         var (url, listedWeekStart) = discovered;
-        if (requestedUrl is null && listedWeekStart.HasValue &&
-            await db.DoeFuelPrices.AsNoTracking().AnyAsync(p =>
-                p.CityKey == Normalize(location.City) &&
-                p.ProvinceKey == Normalize(location.Province) &&
-                p.WeekStart == listedWeekStart.Value && p.SourceUrl == url, cancellationToken))
+        var cityKeys = CityKeyCandidates(location.City);
+        var provinceKeys = DoeLocationMatcher.ProvinceKeyCandidates(location.Province);
+        if (requestedUrl is null && listedWeekStart.HasValue)
         {
-            return new DoeFuelPriceImportResult(location.City, location.Province,
-                listedWeekStart.Value, listedWeekStart.Value.AddDays(6), url, 0, 0,
-                "already_imported");
+            var saved = await db.DoeFuelPrices.AsNoTracking().Where(p =>
+                provinceKeys.Contains(p.ProvinceKey) && p.WeekStart == listedWeekStart.Value &&
+                p.SourceUrl == url).ToListAsync(cancellationToken);
+            if (DoeLocationMatcher.MatchCity(saved, location.City,
+                location.Province, location.Region).Count > 0)
+                return new DoeFuelPriceImportResult(location.City, location.Province,
+                    listedWeekStart.Value, listedWeekStart.Value.AddDays(6), url, 0, 0,
+                    "already_imported");
         }
         var pdf = await DownloadAsync(url, cancellationToken);
         var extraction = await ExtractAsync(pdf, location, listedWeekStart, cancellationToken);
@@ -265,8 +272,10 @@ public sealed class DoeFuelPriceImporter(
             db.DoePumpPriceReports.Add(report);
             await db.SaveChangesAsync(cancellationToken);
         }
-        var existing = await db.DoeFuelPrices.Where(p => p.WeekStart == start &&
-            p.CityKey == cityKey && p.ProvinceKey == provinceKey).ToListAsync(cancellationToken);
+        var provinceRows = await db.DoeFuelPrices.Where(p => p.WeekStart == start &&
+            provinceKeys.Contains(p.ProvinceKey)).ToListAsync(cancellationToken);
+        var existing = DoeLocationMatcher.MatchCity(provinceRows, location.City,
+            location.Province, location.Region).ToList();
         var oldReportIds = new HashSet<long>();
         var added = 0;
         var updated = 0;
@@ -316,7 +325,7 @@ public sealed class DoeFuelPriceImporter(
         await db.SaveChangesAsync(cancellationToken);
         if (added + updated > 0)
             await db.FuelPriceCaches.Where(c => c.RefreshAfter > nowUtc &&
-                ((c.Scope == FuelPriceCacheScopes.City && c.CityKey == cityKey &&
+                ((c.Scope == FuelPriceCacheScopes.City && cityKeys.Contains(c.CityKey) &&
                   c.ProvinceKey == provinceKey) ||
                  (c.Scope == FuelPriceCacheScopes.Province && c.ProvinceKey == provinceKey) ||
                  c.Scope == FuelPriceCacheScopes.Region))
@@ -500,8 +509,9 @@ public sealed class DoeFuelPriceImporter(
         await db.SaveChangesAsync(cancellationToken);
         if (added + updated > 0)
         {
-            var cityKeys = validated.Rows.Select(r => Normalize(r.City)).Distinct().ToArray();
-            var provinceKeys = validated.Rows.Select(r => Normalize(r.Province)).Distinct().ToArray();
+            var cityKeys = validated.Rows.SelectMany(r => CityKeyCandidates(r.City)).Distinct().ToArray();
+            var provinceKeys = validated.Rows.SelectMany(r =>
+                DoeLocationMatcher.ProvinceKeyCandidates(r.Province)).Distinct().ToArray();
             await db.FuelPriceCaches.Where(c => c.RefreshAfter > nowUtc &&
                 ((c.Scope == FuelPriceCacheScopes.City && cityKeys.Contains(c.CityKey) &&
                   provinceKeys.Contains(c.ProvinceKey)) ||
@@ -723,6 +733,29 @@ public sealed class DoeFuelPriceImporter(
     public static string Normalize(string value) => string.Join(' ', value.Split(
         (char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)).ToUpperInvariant();
 
+    private static string[] CityKeyCandidates(string city)
+    {
+        var exact = Normalize(city);
+        var withoutMarks = new StringBuilder();
+        foreach (var character in exact.Normalize(NormalizationForm.FormD))
+            if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+                withoutMarks.Append(character);
+        var folded = withoutMarks.ToString();
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var name in new[] { exact, folded })
+        {
+            var baseName = name.StartsWith("CITY OF ", StringComparison.Ordinal)
+                ? name[8..]
+                : name.EndsWith(" CITY", StringComparison.Ordinal)
+                    ? name[..^5]
+                    : name;
+            names.Add(baseName);
+            names.Add(baseName + " CITY");
+            names.Add("CITY OF " + baseName);
+        }
+        return names.ToArray();
+    }
+
     private static DateOnly PhilippineDate(DateTime utc) => DateOnly.FromDateTime(
         TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc),
             TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila")));
@@ -742,36 +775,13 @@ public sealed class DoeFuelPriceImporter(
 
     private static string? RegionSection(ResolvedFuelLocation location)
     {
-        var value = (location.Region ?? location.Province ?? "").ToUpperInvariant();
-        if (value.Contains("NATIONAL CAPITAL") || value.Contains("METRO MANILA") || value == "NCR")
-            return "ncr-pump-prices";
-        if (new[] { "ILOCOS", "CAGAYAN VALLEY", "CENTRAL LUZON", "CORDILLERA" }
-            .Any(value.Contains) || value == "CAR" ||
-            Regex.IsMatch(value, @"\bREGION (?:I|II|III)\b")) return "north-luzon-pump-prices";
-        if (new[] { "CALABARZON", "MIMAROPA", "BICOL" }.Any(value.Contains) ||
-            Regex.IsMatch(value, @"\bREGION (?:IV|V)\b")) return "south-luzon-pump-prices";
-        if (new[] { "VISAYAS", "NEGROS ISLAND" }.Any(value.Contains) || value == "NIR" ||
-            Regex.IsMatch(value, @"\bREGION (?:VI|VII|VIII)\b")) return "visayas-pump-prices";
-        if (new[] { "MINDANAO", "CARAGA", "BANGSAMORO", "SOCCSKSARGEN", "DAVAO", "ZAMBOANGA" }
-            .Any(value.Contains) || value == "BARMM" ||
-            Regex.IsMatch(value, @"\bREGION (?:IX|X|XI|XII|XIII)\b")) return "mindanao-pump-prices";
-        if (SouthSubdivision(location) is not null) return "south-luzon-pump-prices";
-        return null;
+        if (!DoeLocationMatcher.RegionConsistent(location.Region, location.Province)) return null;
+        return DoeLocationMatcher.SectionForProvince(location.Province) ??
+            DoeLocationMatcher.SectionForRegion(location.Region);
     }
 
     private static string? SouthSubdivision(ResolvedFuelLocation location)
     {
-        var region = (location.Region ?? "").ToUpperInvariant();
-        var province = (location.Province ?? "").ToUpperInvariant();
-        if (region.Contains("CALABARZON") || region.Contains("IV-A") || region.Contains("IV - A") ||
-            new[] { "CAVITE", "LAGUNA", "BATANGAS", "RIZAL", "QUEZON" }.Contains(province))
-            return "Calabarzon";
-        if (region.Contains("MIMAROPA") || region.Contains("IV-B") || region.Contains("IV - B") ||
-            new[] { "MARINDUQUE", "OCCIDENTAL MINDORO", "ORIENTAL MINDORO", "PALAWAN", "ROMBLON" }.Contains(province))
-            return "Mimaropa";
-        if (region.Contains("BICOL") || region.Contains("REGION V") ||
-            new[] { "ALBAY", "CAMARINES NORTE", "CAMARINES SUR", "CATANDUANES", "MASBATE", "SORSOGON" }.Contains(province))
-            return "Bicol";
-        return null;
+        return DoeLocationMatcher.SouthSubdivision(location.Province);
     }
 }

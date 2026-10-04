@@ -53,17 +53,29 @@ public sealed class GeoapifyReverseGeocodingClient
 
         var city = ReadString(properties, "city") ??
                    ReadString(properties, "town") ??
-                   ReadString(properties, "municipality") ??
-                   ReadString(properties, "village");
-        var province = ReadString(properties, "state");
+                   ReadString(properties, "municipality");
+        var state = ReadString(properties, "state");
+        var county = ReadString(properties, "county");
+        var province = state;
         var region = ReadString(properties, "region");
 
         // Geoapify can identify NCR as a state without returning a region.
-        if (IsNcr(province))
+        if (IsNcr(state))
         {
             province = "Metro Manila";
             region = "National Capital Region";
         }
+        else if (state is not null && DoeLocationMatcher.SectionForRegion(state) is not null &&
+                 DoeLocationMatcher.SectionForProvince(state) is null)
+        {
+            // Some results put the region in state and the province in county.
+            province = county is not null && DoeLocationMatcher.SectionForProvince(county) is not null
+                ? county : null;
+            region ??= state;
+        }
+        else if (state is null && county is not null &&
+                 DoeLocationMatcher.SectionForProvince(county) is not null)
+            province = county;
 
         if (city is null && province is null && region is null)
             return null;

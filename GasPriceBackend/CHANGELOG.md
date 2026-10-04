@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
 - Treat DOE PDF URLs whose query slashes use different percent encoding as the same source when classifying repeat imports.
 
 ### Fixed
+- Retry DOE imports when no company rows remain after a database clear, even if the server recently checked that city.
+- Match DOE locality and province aliases within the same administrative area, keep Quezon City separate from Quezon province, resolve report sections from province when Geoapify omits region, and prefer saved fresh DOE rows over cached website estimates.
 - Ignore identical repeated DOE PDF price rows and aggregate columns during bulk import, while reporting conflicting or invalid extracted values precisely instead of failing with a combined message.
 - Report `cacheStored: false` when fuel-price research reuses a cached result.
 - Read DOE pump-price listing years from visible page text so URL escapes do not make recent reports appear outdated.
