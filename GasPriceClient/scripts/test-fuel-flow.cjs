@@ -24,6 +24,11 @@ function harness(options = {}) {
         return options.featuredFeed ?? featured;
       }
       if (url.startsWith('/fuel-prices/history')) return { items: [point('2026-09-28', 60), point('2026-09-27', 60)] };
+      if (url.startsWith('/fuel-prices/doe?')) {
+        if (options.doeFailure) throw new Error('DOE feed unavailable');
+        return { city: 'Cebu City', province: 'Cebu', weekStart: '2026-09-22', weekEnd: '2026-09-28',
+          prices: [{ oilCompany: 'Shell', fuelGrade: 'RON 91', minPricePerLiter: 61, maxPricePerLiter: 63 }] };
+      }
       if (url === '/ai/fuel-prices') {
         if (options.aiFailure) throw new Error('AI unavailable');
         return { result: {
@@ -35,7 +40,7 @@ function harness(options = {}) {
             gasoline_95: { min_price: 65, max_price: 69, currency: 'PHP', unit: 'liter' },
           },
         },
-          doePrices: { city: 'Cebu City', province: 'Cebu', weekStart: '2026-09-22', weekEnd: '2026-09-28',
+          doePrices: options.doeInAi === false ? null : { city: 'Cebu City', province: 'Cebu', weekStart: '2026-09-22', weekEnd: '2026-09-28',
             prices: [{ oilCompany: 'Petron', fuelGrade: 'DIESEL', minPricePerLiter: 99, maxPricePerLiter: 101 }] } };
       }
       return feed;
@@ -134,7 +139,15 @@ async function settle(h) {
   assert.equal(granted.states[2].value.prices.gasoline91.minPrice, 60);
   assert.equal(granted.states[2].value.prices.gasoline91.maxPrice, 64);
   assert.equal(granted.states[0].value.groups.length, 3);
+  assert.ok(!granted.calls.some(call => call.url?.startsWith('/fuel-prices/doe?')));
   console.log('PASS featured GET, permission, coordinates POST, then local-area GET');
+  const fallback = harness({ doeInAi: false }); fallback.load('fuel/use-fuel-prices').useFuelPrices(); fallback.effects[0](); await settle(fallback);
+  assert.equal(fallback.states[3].value.prices[0].oilCompany, 'Shell');
+  assert.ok(fallback.calls.some(call => call.url === '/fuel-prices/doe?latitude=10.3&longitude=123.8'));
+  const failedDoe = harness({ doeInAi: false, doeFailure: true }); failedDoe.load('fuel/use-fuel-prices').useFuelPrices(); failedDoe.effects[0](); await settle(failedDoe);
+  assert.equal(failedDoe.states[2].value.area.name, 'Cebu City');
+  assert.equal(failedDoe.states[3].value, null);
+  console.log('PASS DOE fallback displays saved rows without blocking local estimates');
   for (const options of [{ denied: true }, { gpsFailure: true }, { aiFailure: true }]) {
     const h = harness(options); h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
     assert.equal(h.states[0].value.groups.length, 3);
@@ -173,6 +186,15 @@ async function settle(h) {
   }
   console.log('PASS empty, partial and full featured responses');
   const api = granted.load('fuel/api');
+  const doeRow = (oilCompany, fuelGrade, minPricePerLiter, maxPricePerLiter = minPricePerLiter) =>
+    ({ oilCompany, fuelGrade, minPricePerLiter, maxPricePerLiter });
+  const cheapest = api.cheapestDoePrices({ prices: [
+    doeRow('Fourth', 'RON 91', 65), doeRow('Other fuel', 'DIESEL', 40),
+    doeRow('Third', 'RON 91', 63), doeRow('Second', 'RON 91', 61, 64),
+    doeRow('First', 'RON 91', 61, 62), doeRow('Invalid', 'RON 91', 0),
+  ] }, 'RON 91');
+  assert.equal(cheapest.map(row => row.oilCompany).join(','), 'First,Second,Third');
+  assert.equal(api.cheapestDoePrices({ prices: [] }, 'RON 91').length, 0);
   assert.equal(api.meaningfulUpdates([point('2026-09-28', 60)]).length, 0);
   assert.equal(api.meaningfulUpdates([point('2026-09-28', 60), point('2026-09-27', 60)]).length, 0);
   const changes = api.meaningfulUpdates(Array.from({ length: 8 }, (_, i) => point(`2026-09-${28-i}`, 60+i)));

@@ -23,6 +23,15 @@ export type DoeFuelPriceFeed = {
   city: string | null; province: string | null; region: string | null;
   weekStart: string | null; weekEnd: string | null; prices: DoeFuelPrice[];
 };
+
+export function cheapestDoePrices(feed: DoeFuelPriceFeed, grade: string): DoeFuelPrice[] {
+  return feed.prices.filter(price => price.fuelGrade === grade &&
+    Number.isFinite(price.minPricePerLiter) && price.minPricePerLiter > 0 &&
+    Number.isFinite(price.maxPricePerLiter) && price.maxPricePerLiter >= price.minPricePerLiter)
+    .sort((a, b) => a.minPricePerLiter - b.minPricePerLiter ||
+      a.maxPricePerLiter - b.maxPricePerLiter || a.oilCompany.localeCompare(b.oilCompany))
+    .slice(0, 3);
+}
 export type LocationResult = {
   result: {
     location: Area & { resolved_area: string };
@@ -79,6 +88,13 @@ export function getFeaturedPrices() {
   return authClient.request<FeaturedFuelPriceFeed>('/fuel-prices/featured');
 }
 
+export function getDoePrices(coordinates: Coordinates) {
+  const params = new URLSearchParams({
+    latitude: String(coordinates.latitude), longitude: String(coordinates.longitude),
+  });
+  return authClient.request<DoeFuelPriceFeed>(`/fuel-prices/doe?${params}`);
+}
+
 export async function refreshLocation(coordinates: Coordinates) {
   const result = await authClient.request<LocationResult>('/ai/fuel-prices', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(coordinates),
@@ -95,7 +111,12 @@ export async function refreshLocation(coordinates: Coordinates) {
     ).map(item => ({ ...item, isLocal: false }))].slice(0, 10),
     localAreaStatus: 'available',
   } : feed;
-  return { area, feed: localizedFeed, doePrices: result.doePrices ?? null };
+  let doePrices = result.doePrices ?? null;
+  if (!doePrices?.prices.length) {
+    // Research cache entries from other sources may predate newly imported DOE rows.
+    try { doePrices = await getDoePrices(coordinates); } catch { /* Keep the local estimate available. */ }
+  }
+  return { area, feed: localizedFeed, doePrices };
 }
 
 function localPriceItem(result: LocationResult['result']): FeedItem | null {

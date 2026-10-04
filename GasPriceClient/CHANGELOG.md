@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Show the three lowest reported DOE company prices for a selected fuel grade beneath the Your area board, checking the DOE feed when location research came from another source.
 - Show recent DOE prices for featured cities under Luzon, Visayas, and Mindanao on first load; keep those sections visible when location access is denied or a local lookup fails.
 - Show only the local price result above the featured sections after location permission is granted, and remove the temporary manual area form from the home screen.
 - Start the local HTTPS proxy and open its address when running `npm run web`.

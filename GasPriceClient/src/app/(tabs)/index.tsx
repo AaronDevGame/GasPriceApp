@@ -6,7 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { LocalPriceBoard } from '@/components/local-price-board';
 import { useTheme } from '@/hooks/use-theme';
-import { formatPrice, type Prices, type FeaturedFuelPrice, type DoeFuelPriceFeed } from '@/fuel/api';
+import { formatPrice, type Prices, type FeaturedFuelPrice } from '@/fuel/api';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
 import { useAuth } from '@/auth/auth-provider';
 
@@ -42,24 +42,6 @@ function FeaturedPriceCard({ item }: { item: FeaturedFuelPrice }) {
     <ThemedText type="small" themeColor="textSecondary">DOE data as of {asOf(item.dataAsOf)} · Report week {item.reportWeekStart} to {item.reportWeekEnd}</ThemedText>
     <PriceGrid prices={item.prices} />
     <Button title="View DOE source" onPress={() => void Linking.openURL(item.source.url)} />
-  </ThemedView>;
-}
-
-function DoePriceCard({ feed }: { feed: DoeFuelPriceFeed }) {
-  if (!feed.prices.length) return null;
-  const companies = [...new Set(feed.prices.map(price => price.oilCompany))].sort();
-  return <ThemedView type="backgroundElement" style={styles.card}>
-    <ThemedText style={styles.area}>DOE company prices · {feed.city}</ThemedText>
-    <ThemedText type="small" themeColor="textSecondary">Week of {feed.weekStart} to {feed.weekEnd} · ₱/liter. These are city prices or ranges, not individual stations.</ThemedText>
-    {companies.map(company => <View key={company} style={styles.company}>
-      <ThemedText type="smallBold">{company}</ThemedText>
-      {feed.prices.filter(price => price.oilCompany === company).map(price =>
-        <ThemedText key={price.fuelGrade} type="small">{price.fuelGrade}: {formatPrice({
-          minPrice: price.minPricePerLiter, maxPrice: price.maxPricePerLiter,
-          currency: 'PHP', unit: 'liter',
-        })}</ThemedText>)}
-    </View>)}
-    <Button title="View DOE report" onPress={() => void Linking.openURL(feed.prices[0].sourceUrl)} />
   </ThemedView>;
 }
 
@@ -103,8 +85,7 @@ export default function HomeScreen() {
           {!fuel.authenticated && !fuel.busy && !fuel.error && <ThemedText>You are signed out. {refreshHint}</ThemedText>}
           {fuel.error && <ThemedText accessibilityRole="alert">{fuel.error} {refreshHint}</ThemedText>}
           {fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">{fuel.featured ? 'Updating prices…' : 'Loading featured prices…'}</ThemedText></View>}
-          {fuel.localItem && <LocalPriceBoard item={fuel.localItem} />}
-          {fuel.doePrices && <DoePriceCard feed={fuel.doePrices} />}
+          {fuel.localItem && <LocalPriceBoard item={fuel.localItem} doePrices={fuel.doePrices} />}
           <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText style={styles.area}>Find your local prices</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">{fuel.locationNote}</ThemedText>
@@ -149,5 +130,4 @@ const styles = StyleSheet.create({
   amount: { fontSize: 24, lineHeight: 32, fontWeight: '700', flexGrow: 1 },
   history: { gap: 12 },
   tokenLog: { gap: 4 },
-  company: { gap: 4, paddingTop: 8 },
 });
