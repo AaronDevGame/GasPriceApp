@@ -449,8 +449,10 @@ public sealed class DoeFuelPriceImporter(
         var existing = await db.DoeFuelPrices.Where(p => p.WeekStart == start)
             .ToListAsync(cancellationToken);
         var byKey = existing.GroupBy(p =>
-            p.CityKey + "|" + p.ProvinceKey + "|" + Normalize(p.OilCompany) + "|" + p.FuelGrade)
-            .ToDictionary(g => g.Key, g => g.First());
+            BulkRowKey(string.IsNullOrWhiteSpace(p.City) ? p.CityKey : p.City,
+                string.IsNullOrWhiteSpace(p.Province) ? p.ProvinceKey : p.Province,
+                p.OilCompany, p.FuelGrade))
+            .ToDictionary(g => g.Key, g => g.ToList());
         var oldReportIds = new HashSet<long>();
         var added = 0;
         var updated = 0;
@@ -460,25 +462,38 @@ public sealed class DoeFuelPriceImporter(
             var provinceKey = Normalize(row.Province);
             var company = row.OilCompany.Trim();
             var grade = row.FuelGrade!.Trim().ToUpperInvariant();
-            var key = cityKey + "|" + provinceKey + "|" + Normalize(company) + "|" + grade;
-            if (!byKey.TryGetValue(key, out var price))
+            var key = BulkRowKey(row.City, row.Province, company, grade);
+            DoeFuelPrice price;
+            byKey.TryGetValue(key, out var matches);
+            var isNew = matches is null;
+            if (matches is null)
             {
                 price = new DoeFuelPrice { WeekStart = start, CityKey = cityKey,
                     ProvinceKey = provinceKey, OilCompany = company, FuelGrade = grade };
                 db.DoeFuelPrices.Add(price);
-                byKey[key] = price;
+                byKey[key] = [price];
                 added++;
             }
-            else if (price.MinPricePerLiter != row.MinPricePerLiter ||
+            else
+            {
+                price = matches.FirstOrDefault(p => p.CityKey == cityKey &&
+                    p.ProvinceKey == provinceKey &&
+                    Normalize(p.OilCompany) == Normalize(company) && p.FuelGrade == grade)
+                    ?? matches.FirstOrDefault(p => p.MinPricePerLiter == row.MinPricePerLiter &&
+                        p.MaxPricePerLiter == row.MaxPricePerLiter)
+                    ?? matches.OrderByDescending(p => p.ReportId == report.Id)
+                        .ThenByDescending(p => p.FetchedAtUtc).First();
+            }
+            if (!isNew && (price.MinPricePerLiter != row.MinPricePerLiter ||
                 price.MaxPricePerLiter != row.MaxPricePerLiter ||
-                price.ReportId != report.Id || price.SourceUrl != source.Url)
+                price.ReportId != report.Id || price.SourceUrl != source.Url))
                 updated++;
-            else continue;
+            else if (!isNew) continue;
             if (price.ReportId is long oldReportId && oldReportId != report.Id)
                 oldReportIds.Add(oldReportId);
             price.ReportId = report.Id;
-            price.City = row.City.Trim();
-            price.Province = row.Province.Trim();
+            if (isNew || string.IsNullOrWhiteSpace(price.City)) price.City = row.City.Trim();
+            if (isNew || string.IsNullOrWhiteSpace(price.Province)) price.Province = row.Province.Trim();
             price.Region = row.Region?.Trim() ??
                 (source.Section == "ncr-pump-prices" ? "National Capital Region" : source.Subdivision);
             price.WeekEnd = end;
@@ -561,8 +576,7 @@ public sealed class DoeFuelPriceImporter(
                 decimal.Round(row.MaxPricePerLiter, 2) != row.MaxPricePerLiter)
                 throw new InvalidDataException(
                     $"DOE report has an invalid price at extracted row {index + 1}.");
-            var key = Normalize(row.City) + "|" + Normalize(row.Province) + "|" +
-                company + "|" + grade;
+            var key = BulkRowKey(row.City, row.Province, company, grade);
             if (unique.TryGetValue(key, out var previous))
             {
                 if (previous.MinPricePerLiter != row.MinPricePerLiter ||
@@ -581,6 +595,10 @@ public sealed class DoeFuelPriceImporter(
         return new ValidatedDoeBulkRows(unique.Values.ToArray(), duplicatesIgnored,
             aggregatesIgnored);
     }
+
+    private static string BulkRowKey(string city, string province, string company, string grade) =>
+        DoeLocationMatcher.CanonicalCity(city) + "|" + DoeLocationMatcher.Province(province) +
+        "|" + Normalize(company) + "|" + grade.Trim().ToUpperInvariant();
 
     private async Task<(string Url, DateOnly? ListedWeekStart)> FindLatestPdfAsync(ResolvedFuelLocation location, DateTime nowUtc,
         CancellationToken cancellationToken)

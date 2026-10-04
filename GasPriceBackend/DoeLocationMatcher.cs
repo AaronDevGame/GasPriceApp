@@ -189,6 +189,8 @@ public static class DoeLocationMatcher
 
     public static bool CityEquals(string left, string right) => CityBase(left) == CityBase(right);
 
+    public static string CanonicalCity(string city) => CityBase(city);
+
     public static IReadOnlyList<DoeFuelPrice> MatchCity(
         IEnumerable<DoeFuelPrice> rows, string city, string province, string? region = null)
     {
