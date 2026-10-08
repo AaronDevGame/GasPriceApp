@@ -11,6 +11,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(DbConfig.ResolveConnectionString(builder.Configuration)));
 builder.Services.AddBrowserAuthentication();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddScoped<FuelNewsService>();
+builder.Services.AddHostedService<FuelNewsNotificationWorker>();
+builder.Services.AddHttpClient("fuel-news-push", client =>
+{
+    client.BaseAddress = new Uri("https://exp.host/--/api/v2/push/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+}).RemoveAllLoggers(); // Never log device tokens or push access credentials.
 builder.Services.AddSingleton<FuelAdjustmentBackfill>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<FuelAdjustmentBackfill>());
 builder.Services.AddSingleton<DoeImportWorker>();
@@ -169,6 +176,7 @@ app.MapFuelPriceEndpoints(auth, InstanceId);
 app.MapFuelPriceReadEndpoints(auth, InstanceId);
 app.MapFeaturedFuelPriceEndpoints(auth, InstanceId);
 app.MapFuelAdjustmentEndpoints(auth, InstanceId);
+app.MapFuelNewsEndpoints(auth, InstanceId);
 app.MapDoeFuelPriceEndpoints(auth, InstanceId);
 app.MapDoePriceBrowseEndpoints(auth, InstanceId);
 app.MapDoeImportEndpoints(InstanceId);

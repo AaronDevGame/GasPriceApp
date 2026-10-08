@@ -113,6 +113,12 @@ public static class ApiRoutes
     public const string AiChat = "/ai/chat";
     public const string AiFuelPrices = "/ai/fuel-prices";
     public const string FuelPrices = "/fuel-prices";
+    public const string FuelNews = "/fuel-news";
+    public const string FuelNewsLatest = "/fuel-news/latest";
+    public const string FuelNewsDetail = "/fuel-news/{id}";
+    public const string FuelNewsSubscription = "/fuel-news/subscription";
+    public const string AdminFuelNewsImport = "/admin/fuel-news/import";
+    public const string AdminFuelNewsRevisions = "/admin/fuel-news/{id}/revisions";
     public const string FeaturedFuelPrices = "/fuel-prices/featured";
     public const string FuelPriceHistory = "/fuel-prices/history";
     public const string FuelPriceAdjustments = "/fuel-prices/adjustments";
@@ -157,6 +163,12 @@ public static class RouteRegistry
         new(ApiRoutes.AiChat, "POST"),
         new(ApiRoutes.AiFuelPrices, "POST"),
         new(ApiRoutes.FuelPrices, "GET"),
+        new(ApiRoutes.FuelNews, "GET"),
+        new(ApiRoutes.FuelNewsLatest, "GET"),
+        new(ApiRoutes.FuelNewsDetail, "GET"),
+        new(ApiRoutes.FuelNewsSubscription, "GET"),
+        new(ApiRoutes.FuelNewsSubscription, "PUT"),
+        new(ApiRoutes.FuelNewsSubscription, "DELETE"),
         new(ApiRoutes.FeaturedFuelPrices, "GET"),
         new(ApiRoutes.FuelPriceHistory, "GET"),
         new(ApiRoutes.FuelPriceAdjustments, "GET"),
@@ -167,6 +179,8 @@ public static class RouteRegistry
     public static readonly RouteInfo[] Admin =
     {
         new(ApiRoutes.AdminRoutes, "GET"),
+        new(ApiRoutes.AdminFuelNewsImport, "POST"),
+        new(ApiRoutes.AdminFuelNewsRevisions, "GET"),
         new(ApiRoutes.AdminChangelog, "GET"),
         new(ApiRoutes.AdminFuelPriceAdjustmentsImport, "POST"),
         new(ApiRoutes.AdminFuelPriceAdjustmentsImportJob, "GET"),

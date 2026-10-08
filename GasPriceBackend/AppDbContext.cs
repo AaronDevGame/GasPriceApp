@@ -14,9 +14,75 @@ public class AppDbContext : DbContext
     public DbSet<DoePumpPriceReport> DoePumpPriceReports => Set<DoePumpPriceReport>();
     public DbSet<DoeImportJob> DoeImportJobs => Set<DoeImportJob>();
     public DbSet<DoePageCache> DoePageCaches => Set<DoePageCache>();
+    public DbSet<FuelNews> FuelNews => Set<FuelNews>();
+    public DbSet<FuelNewsRevision> FuelNewsRevisions => Set<FuelNewsRevision>();
+    public DbSet<FuelNewsSubscription> FuelNewsSubscriptions => Set<FuelNewsSubscription>();
+    public DbSet<FuelNewsDelivery> FuelNewsDeliveries => Set<FuelNewsDelivery>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<FuelNews>(e =>
+        {
+            e.ToTable("fuel_news");
+            e.HasKey(n => n.Id);
+            e.Property(n => n.Id).HasColumnName("id");
+            e.Property(n => n.ImportKey).HasColumnName("import_key").HasMaxLength(100);
+            e.Property(n => n.TopicKey).HasColumnName("topic_key").HasMaxLength(100);
+            e.Property(n => n.Category).HasColumnName("category").HasMaxLength(20);
+            e.Property(n => n.Status).HasColumnName("status").HasMaxLength(20);
+            e.Property(n => n.ContentJson).HasColumnName("content_json").HasColumnType("jsonb");
+            e.Property(n => n.ContentHash).HasColumnName("content_hash").HasMaxLength(64);
+            e.Property(n => n.Revision).HasColumnName("revision");
+            e.Property(n => n.PublishedAtUtc).HasColumnName("published_at_utc");
+            e.Property(n => n.UpdatedAtUtc).HasColumnName("updated_at_utc");
+            e.Property(n => n.ExpiresAtUtc).HasColumnName("expires_at_utc");
+            e.Property(n => n.SupersededById).HasColumnName("superseded_by_id");
+            e.HasIndex(n => n.ImportKey).IsUnique();
+            e.HasIndex(n => new { n.PublishedAtUtc, n.Id });
+            e.HasIndex(n => new { n.TopicKey, n.Status });
+            e.HasOne<FuelNews>().WithMany().HasForeignKey(n => n.SupersededById).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<FuelNewsRevision>(e =>
+        {
+            e.ToTable("fuel_news_revision");
+            e.HasKey(n => new { n.NewsId, n.Revision });
+            e.Property(n => n.NewsId).HasColumnName("news_id");
+            e.Property(n => n.Revision).HasColumnName("revision");
+            e.Property(n => n.ContentJson).HasColumnName("content_json").HasColumnType("jsonb");
+            e.Property(n => n.SavedAtUtc).HasColumnName("saved_at_utc");
+            e.HasOne<FuelNews>().WithMany().HasForeignKey(n => n.NewsId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<FuelNewsSubscription>(e =>
+        {
+            e.ToTable("fuel_news_subscription");
+            e.HasKey(n => n.AppInstanceId);
+            e.Property(n => n.AppInstanceId).HasColumnName("app_instance_id");
+            e.Property(n => n.PushToken).HasColumnName("push_token").HasMaxLength(230);
+            e.Property(n => n.Enabled).HasColumnName("enabled");
+            e.Property(n => n.IncludeForecasts).HasColumnName("include_forecasts");
+            e.Property(n => n.UpdatedAtUtc).HasColumnName("updated_at_utc");
+            e.HasIndex(n => n.PushToken).IsUnique();
+            e.HasOne<Guest>().WithOne().HasForeignKey<FuelNewsSubscription>(n => n.AppInstanceId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<FuelNewsDelivery>(e =>
+        {
+            e.ToTable("fuel_news_delivery");
+            e.HasKey(n => n.Id);
+            e.Property(n => n.Id).HasColumnName("id");
+            e.Property(n => n.NewsId).HasColumnName("news_id");
+            e.Property(n => n.Revision).HasColumnName("revision");
+            e.Property(n => n.AppInstanceId).HasColumnName("app_instance_id");
+            e.Property(n => n.Status).HasColumnName("status").HasMaxLength(30);
+            e.Property(n => n.Attempts).HasColumnName("attempts");
+            e.Property(n => n.CreatedAtUtc).HasColumnName("created_at_utc");
+            e.Property(n => n.NextAttemptAtUtc).HasColumnName("next_attempt_at_utc");
+            e.Property(n => n.TicketId).HasColumnName("ticket_id").HasMaxLength(100);
+            e.Property(n => n.Error).HasColumnName("error").HasMaxLength(100);
+            e.HasIndex(n => new { n.NewsId, n.Revision, n.AppInstanceId }).IsUnique();
+            e.HasIndex(n => new { n.Status, n.NextAttemptAtUtc });
+            e.HasOne<FuelNewsRevision>().WithMany().HasForeignKey(n => new { n.NewsId, n.Revision }).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<FuelNewsSubscription>().WithMany().HasForeignKey(n => n.AppInstanceId).OnDelete(DeleteBehavior.Cascade);
+        });
         modelBuilder.Entity<DoePageCache>(e =>
         {
             e.ToTable("doe_page_cache");

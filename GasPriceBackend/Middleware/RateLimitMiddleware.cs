@@ -20,6 +20,10 @@ public class RateLimitMiddleware
         [ApiRoutes.AiChat] = TimeSpan.FromSeconds(5),
         [ApiRoutes.AiFuelPrices] = TimeSpan.FromSeconds(5),
         [ApiRoutes.FuelPrices] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.FuelNews] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.FuelNewsLatest] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.FuelNewsDetail] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.FuelNewsSubscription] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FeaturedFuelPrices] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelPriceHistory] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelPriceAdjustments] = TimeSpan.FromSeconds(1),
@@ -51,6 +55,10 @@ public class RateLimitMiddleware
         var ip = (address?.IsIPv4MappedToIPv6 == true ? address.MapToIPv4() : address)?.ToString() ?? "unknown";
         // Routing accepts case changes and trailing slashes; they must share a bucket.
         var path = new PathString((context.Request.Path.Value ?? "").TrimEnd('/').ToLowerInvariant());
+        // Every article detail shares a bucket; varying IDs cannot bypass its limit.
+        if (path.StartsWithSegments(ApiRoutes.FuelNews, out var newsPath) &&
+            newsPath.HasValue && newsPath != "/latest" && newsPath != "/subscription")
+            path = new PathString(ApiRoutes.FuelNewsDetail);
         var isGuestLogin = path == ApiRoutes.AuthGuestLogin || path == ApiRoutes.BrowserGuestLogin;
 
         // 1) Decide cooldown

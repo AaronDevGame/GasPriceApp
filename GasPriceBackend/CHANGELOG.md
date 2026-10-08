@@ -30,6 +30,8 @@ All notable changes to this project will be documented in this file.
 - Exclude clearly out-of-range DOE notice PDFs from backfill job counts and results while retaining the PDF's extracted week as the final import check.
 
 ### Added
+- Add public, database-backed fuel news with validated admin imports, stable pagination, revision history, DOE consistency checks, and forecast supersession. Add opt-in Expo news subscriptions and a persistent push outbox with retries and receipt polling, disabled until deployment configuration enables sending.
+- Document the scheduled ChatGPT publishing contract and provide a secret-environment import script.
 - Persist clean DOE page extractions by PDF content, extraction rules, model, and listing context, so later jobs resume missing pages without paying to re-extract successful pages. Polling exposes per-page `cached` and report `pagesCached` counts; failed pages and skipped-cell pages remain eligible for extraction.
 - Accept sourceUrl-only manual DOE pump-price imports, extracting all localities and coverage dates from the PDF while preserving city/province imports.
 - Include OpenAI model, token usage, and estimated USD extraction cost in DOE city import results and persisted bulk job report results, with job-level totals.
