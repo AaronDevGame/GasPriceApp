@@ -6,7 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.10.4] - 2026-10-09
+
 ### Changed
+- Bump project and API version to `1.10.4`.
 - Pause automatic DOE latest-price imports by default to save extraction tokens. Set `DoeImport__ScheduleEnabled=true` to resume the six-hour schedule; manual and already queued imports remain available.
 - Queue manual DOE city/province and source-URL imports with HTTP `202`, a job ID, and the shared job polling URL. Persist requests and final results, and serialize individual and bulk imports through one durable queue.
 - Show expected and extracted dates in DOE page coverage mismatch errors, with separate messages for missing, malformed, and invalid date ranges.
