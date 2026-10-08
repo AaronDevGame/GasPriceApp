@@ -121,6 +121,44 @@ static class DoePageJobIntegration
             directData.GetProperty("pageProgress").GetProperty("pagesCompleted").GetInt32() == pageCount,
             "An unchanged synchronous import must return final page totals and no duplicate inserts.");
         Console.WriteLine("PASS: job completes with named-company rows; synchronous repeat returns final totals without duplicates");
+        extractor.Scenario = "bad_price";
+        await Task.Delay(1100);
+        using var partialCreated = await client.PostAsJsonAsync(ApiRoutes.AdminDoeFuelPricesImportJobs,
+            new { mode = "backfill", from = "2026-09-29", to = "2026-10-05" });
+        Check(partialCreated.StatusCode == HttpStatusCode.Accepted, "The partial test job must be queued.");
+        using var partialCreatedJson = JsonDocument.Parse(await partialCreated.Content.ReadAsStringAsync());
+        var partialId = partialCreatedJson.RootElement.GetProperty("data").GetProperty("jobId").GetGuid();
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var job = await db.DoeImportJobs.SingleAsync(item => item.Id == partialId);
+            job.Status = "running";
+            await db.SaveChangesAsync();
+        }
+        await (Task)typeof(DoeImportWorker).GetMethod("RunJobAsync", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(worker, [partialId, CancellationToken.None])!;
+        await Task.Delay(1100);
+        using var partialResponse = await client.GetAsync(ApiRoutes.AdminDoeFuelPricesImportJob
+            .Replace("{jobId}", partialId.ToString()));
+        using var partialJson = JsonDocument.Parse(await partialResponse.Content.ReadAsStringAsync());
+        var partialData = partialJson.RootElement.GetProperty("data");
+        var partialReport = partialData.GetProperty("reports")[0];
+        Check(partialData.GetProperty("status").GetString() == "completed_with_gaps" &&
+            partialData.GetProperty("reportsFailed").GetInt32() == 1 &&
+            partialReport.GetProperty("status").GetString() == "partial" &&
+            partialReport.GetProperty("rowsSkipped").GetInt32() == 1 &&
+            partialReport.GetProperty("pageProgress").GetProperty("pages")[3]
+                .GetProperty("cellErrors").GetArrayLength() == 1,
+            "Job polling must expose partial imports and the exact cell diagnostics.");
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            Check((await db.DoePumpPriceReports.SingleAsync()).Status == "partial",
+                "A report with skipped cells must not be marked complete.");
+            Check((await db.DoeFuelPrices.SingleAsync(price => price.City == "City 4")).MinPricePerLiter == 90,
+                "An invalid extraction must not overwrite an existing valid price.");
+        }
+        Console.WriteLine("PASS: partial jobs retain valid prices and expose skipped-cell diagnostics through polling");
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

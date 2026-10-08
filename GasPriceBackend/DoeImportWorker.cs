@@ -11,6 +11,8 @@ public sealed record DoeImportReportStatus(string Section, string? Subdivision,
     public int DuplicatesIgnored { get; init; }
     public int AggregateRowsIgnored { get; init; }
     public DoeReportPageProgress? PageProgress { get; init; }
+    public int RowsSkipped { get; init; }
+    public IReadOnlyList<DoePriceRowError> RowErrors { get; init; } = [];
 }
 
 public sealed record DoeImportJobStatus(Guid JobId, string Mode, DateOnly? From,
@@ -172,7 +174,8 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                         PageProgress = progress,
                         Model = reportImporter.ExtractionModel,
                         Usage = reportImporter.ExtractionUsage,
-                        EstimatedCost = reportImporter.ExtractionCost
+                        EstimatedCost = reportImporter.ExtractionCost,
+                        RowsSkipped = progress?.RowsSkipped ?? 0
                     };
                     job.DetailsJson = JsonSerializer.Serialize(results);
                     job.HeartbeatAtUtc = timeProvider.GetUtcNow().UtcDateTime;
@@ -185,14 +188,17 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                         timeProvider.GetUtcNow().UtcDateTime, job.From, job.To,
                         cancellationToken, (progress, token) => SaveProgressAsync(progress, token));
                     item = new(source.Section, source.Subdivision, source.WeekStart,
-                        source.Url, result.Status, result.Added, result.Updated, null)
+                        source.Url, result.Status, result.Added, result.Updated,
+                        result.Status == "partial" ? $"Imported valid prices; skipped {result.RowsSkipped} invalid row(s)." : null)
                     {
                         Model = result.Model, Usage = result.Usage, EstimatedCost = result.EstimatedCost,
                         DuplicatesIgnored = result.DuplicatesIgnored,
                         AggregateRowsIgnored = result.AggregateRowsIgnored,
-                        PageProgress = result.PageProgress
+                        PageProgress = result.PageProgress, RowsSkipped = result.RowsSkipped,
+                        RowErrors = result.RowErrors
                     };
-                    if (result.Status is "already_imported" or "outside_range") job.ReportsSkipped++;
+                    if (result.Status == "partial") job.ReportsFailed++;
+                    else if (result.Status is "already_imported" or "outside_range") job.ReportsSkipped++;
                     else job.ReportsImported++;
                     job.PriceRowsAdded += result.Added;
                     job.PriceRowsUpdated += result.Updated;
@@ -209,7 +215,8 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                         Model = reportImporter.ExtractionModel,
                         Usage = reportImporter.ExtractionUsage,
                         EstimatedCost = reportImporter.ExtractionCost,
-                        PageProgress = reportImporter.ExtractionProgress
+                        PageProgress = reportImporter.ExtractionProgress,
+                        RowsSkipped = reportImporter.ExtractionProgress?.RowsSkipped ?? 0
                     };
                     job.ReportsFailed++;
                 }

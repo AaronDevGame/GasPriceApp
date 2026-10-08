@@ -13,7 +13,7 @@ using PdfSharp.Pdf.IO;
 // No real AI calls or production database access. Run from the repository root:
 // dotnet run --project GasPriceBackend/tests/DoePageImportChecks -- [optional DOE PDF path]
 var contentRoot = Path.GetFullPath("GasPriceBackend");
-var pdf = args.Length > 0 ? File.ReadAllBytes(args[0]) : MakePdf(4);
+var pdf = args.Length > 0 ? File.ReadAllBytes(args[0]) : MakePdf(6);
 using var counted = new DoePdfPages(pdf);
 var pageCount = counted.Count;
 Check(pageCount >= 4, "The fixture needs at least four pages.");
@@ -88,7 +88,7 @@ Check(retry.Handler.Pages.Count(number => number == 4) == 2 && retry.Handler.Pag
 Check(retry.Importer.ExtractionProgress!.PagesFailed == 0, "A recovered retry must not count as failed.");
 Console.WriteLine("PASS: retry only the failed page and include retry billing");
 
-foreach (var scenario in new[] { "failed", "date_conflict", "incomplete", "bad_price" })
+foreach (var scenario in new[] { "failed", "date_conflict", "incomplete" })
 {
     var failed = await RunAsync(scenario, expectFailure: true);
     Check(failed.Importer.ExtractionProgress!.PagesFailed == 1, "The failed page must be visible.");
@@ -96,6 +96,33 @@ foreach (var scenario in new[] { "failed", "date_conflict", "incomplete", "bad_p
         "A failed page must not count as completed.");
     Console.WriteLine($"PASS: {scenario} prevents completion while remaining pages are processed");
 }
+
+var reversed = await RunAsync("reversed");
+var corrected = reversed.Result!.Rows.Single(row => row.City == "City 4");
+Check(corrected.MinPricePerLiter == 77.50m && corrected.MaxPricePerLiter == 77.84m,
+    "Descending endpoints must be normalized before saving or comparing duplicates.");
+Console.WriteLine("PASS: reversed valid endpoints are normalized without inventing values");
+
+var partial = await RunAsync("bad_price");
+Check(partial.Importer.ExtractionProgress!.PagesCompleted == pageCount &&
+    partial.Importer.ExtractionProgress.RowsSkipped == 1 &&
+    partial.Importer.ExtractionProgress.Pages[3].Status == "completed_with_errors" &&
+    partial.Importer.ExtractionProgress.Pages[3].CellErrors[0].Error.Contains("500"),
+    "An invalid price must be skipped and reported without failing or retrying the page.");
+Check(partial.Result!.Rows.Count == pageCount - 2 && partial.Handler.Pages.Count == pageCount,
+    "The invalid cell and independent cells are excluded; all later pages still run.");
+var conflicting = new ExtractedDoeBulkPrice("Mariveles", "Bataan", null, "REPHIL", "RON 95", 77.84m, 77.50m);
+var mixed = DoeFuelPriceImporter.ValidateBulkRows([
+    conflicting, conflicting with { MinPricePerLiter = 78, MaxPricePerLiter = 78 },
+    conflicting with { City = "Balanga", MinPricePerLiter = 85, MaxPricePerLiter = 85 },
+    conflicting with { City = "Baler", MinPricePerLiter = 77.844m }
+], skipInvalidRows: true);
+Check(mixed.Rows.Count == 1 && mixed.Rows[0].City == "Balanga" && mixed.Errors.Count == 3,
+    "Conflicting duplicate prices and excessive precision must be omitted, preserving unrelated valid cells.");
+Console.WriteLine("PASS: invalid cells and conflicts are reported while valid prices continue");
+
+await RunAsync("headers");
+Console.WriteLine("PASS: continuation pages receive prior ordered headers and new tables replace them");
 
 var canceledHandler = new FakeExtractor("success");
 var canceledImporter = CreateImporter(canceledHandler);
@@ -180,6 +207,7 @@ sealed class PdfHandler(byte[] pdf) : HttpMessageHandler
 
 sealed class FakeExtractor(string scenario) : HttpMessageHandler
 {
+    public string Scenario { get; set; } = scenario;
     public List<int> Pages { get; } = [];
     public TaskCompletionSource PageFourStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public TaskCompletionSource ReleasePageFour { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -196,24 +224,35 @@ sealed class FakeExtractor(string scenario) : HttpMessageHandler
         using var single = PdfReader.Open(stream, PdfDocumentOpenMode.Import);
         if (single.PageCount != 1) throw new Exception("The AI received more than one page.");
         Pages.Add(number);
-        if (scenario == "gated" && number == 4)
+        if (Scenario == "gated" && number == 4)
         {
             PageFourStarted.TrySetResult();
             await ReleasePageFour.Task.WaitAsync(token);
         }
-        if (scenario == "retry" && number == 4 && Pages.Count(page => page == 4) == 1)
+        if (Scenario == "retry" && number == 4 && Pages.Count(page => page == 4) == 1)
             return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
         var bad = number == 4;
+        if (Scenario == "headers" && number == 2 && !prompt.Contains("[\"PETRON\",\"SHELL\""))
+            throw new Exception("The continuation page did not receive its verified column headers.");
+        if (Scenario == "headers" && number == 5 && !prompt.Contains("[\"SHELL\",\"PETRON\""))
+            throw new Exception("New printed headers must replace the preceding table's mapping.");
         var extraction = new DoePageExtraction(
-            scenario == "date_conflict" && bad ? "2026-09-22" : "2026-09-29",
-            scenario == "date_conflict" && bad ? "2026-09-28" : "2026-10-05",
-            scenario == "failed" && bad ? "unreadable" : "read",
+            Scenario == "date_conflict" && bad ? "2026-09-22" : "2026-09-29",
+            Scenario == "date_conflict" && bad ? "2026-09-28" : "2026-10-05",
+            Scenario == "failed" && bad ? "unreadable" : "read",
             [new ExtractedDoeBulkPrice("City " + number, "Basilan", "Region IX",
                 number == 3 ? "INDEPENDENT" : "PETRON", "RON 91",
-                scenario == "bad_price" && bad ? 500 : 90, 90)]);
+                Scenario == "bad_price" && bad ? 500 : Scenario == "reversed" && bad ? 77.84m : 90,
+                Scenario == "reversed" && bad ? 77.50m : 90)])
+        {
+            PrintedColumnHeaders = Scenario == "headers" && number == 1
+                ? ["PETRON", "SHELL", "INDEPENDENT", "OVERALL RANGE", "COMMON PRICE"]
+                : Scenario == "headers" && number == 4
+                    ? ["SHELL", "PETRON", "INDEPENDENT", "OVERALL RANGE", "COMMON PRICE"] : []
+        };
         var result = new
         {
-            model = "gpt-5.6-luna", status = scenario == "incomplete" && bad ? "incomplete" : "completed",
+            model = "gpt-5.6-luna", status = Scenario == "incomplete" && bad ? "incomplete" : "completed",
             usage = new { input_tokens = 100, output_tokens = 10, total_tokens = 110,
                 input_tokens_details = new { cached_tokens = 0 } },
             output = new[] { new { type = "message", content = new[]
