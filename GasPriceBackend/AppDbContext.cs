@@ -13,9 +13,21 @@ public class AppDbContext : DbContext
     public DbSet<DoeFuelPrice> DoeFuelPrices => Set<DoeFuelPrice>();
     public DbSet<DoePumpPriceReport> DoePumpPriceReports => Set<DoePumpPriceReport>();
     public DbSet<DoeImportJob> DoeImportJobs => Set<DoeImportJob>();
+    public DbSet<DoePageCache> DoePageCaches => Set<DoePageCache>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<DoePageCache>(e =>
+        {
+            e.ToTable("doe_page_cache");
+            e.HasKey(p => new { p.ContentHash, p.ExtractorVersion, p.PageNumber });
+            e.Property(p => p.ContentHash).HasColumnName("content_hash").HasMaxLength(64);
+            e.Property(p => p.ExtractorVersion).HasColumnName("extractor_version").HasMaxLength(64);
+            e.Property(p => p.PageNumber).HasColumnName("page_number");
+            e.Property(p => p.PageCount).HasColumnName("page_count");
+            e.Property(p => p.ExtractionJson).HasColumnName("extraction_json").HasColumnType("jsonb");
+            e.Property(p => p.ExtractedAtUtc).HasColumnName("extracted_at_utc");
+        });
         // Map to snake_case columns (the Postgres convention).
         modelBuilder.Entity<Guest>(e =>
         {

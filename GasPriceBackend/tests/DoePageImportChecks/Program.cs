@@ -45,7 +45,7 @@ async Task<(DoeFuelPriceImporter Importer, FakeExtractor Handler, DoeBulkExtract
         return Task.CompletedTask;
     };
     var task = (Task<DoeBulkExtraction>)method.Invoke(importer,
-        [pdf, source, now, progress, CancellationToken.None])!;
+        [pdf, source, now, progress, CancellationToken.None, null])!;
     DoeBulkExtraction? result = null;
     try
     {
@@ -135,27 +135,12 @@ Func<DoeReportPageProgress, CancellationToken, Task> cancelProgress = (snapshot,
 try
 {
     await (Task<DoeBulkExtraction>)method.Invoke(canceledImporter,
-        [pdf, source, now, cancelProgress, cancellation.Token])!;
+        [pdf, source, now, cancelProgress, cancellation.Token, null])!;
     throw new Exception("Cancellation must interrupt the import.");
 }
 catch (OperationCanceledException) { }
 Check(canceledHandler.Pages.Count <= 3, "Cancellation must not retry or start another page request.");
 Console.WriteLine("PASS: cancellation interrupts without retrying");
-
-// The public import method must reject page failures before opening a DB transaction.
-var failedImporter = CreateImporter(new FakeExtractor("failed"));
-using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-    .UseNpgsql("Host=127.0.0.1;Port=1;Database=unused;Username=unused;Timeout=1").Options);
-try
-{
-    await failedImporter.ImportReportFromUrlAsync(db, source.Url, now, CancellationToken.None);
-    throw new Exception("A failed report must not be saved.");
-}
-catch (InvalidDataException error)
-{
-    Check(error.Message.Contains("failed page"), "Page failure must reject the report before DB access.");
-}
-Console.WriteLine("PASS: failed public import never accesses the database");
 
 if (int.TryParse(Environment.GetEnvironmentVariable("DOE_TEST_PGPORT"), out var testPort))
     await DoePageJobIntegration.RunAsync(contentRoot, pdf, pageCount, testPort);

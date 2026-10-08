@@ -46,6 +46,76 @@ static class DoePageJobIntegration
         app.MapDoeFuelPriceEndpoints(new AuthService(), "test-instance");
         using (var scope = app.Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+        // Use separate scopes/importers to model a new job after a failed run.
+        var resumeSource = new DoeReportSource("mindanao-pump-prices", null,
+            new DateOnly(2026, 9, 29), "https://doe.gov.ph/report.pdf");
+        var failedExtractor = new FakeExtractor("failed");
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var importer = new DoeFuelPriceImporter(new HttpClient(new PdfHandler(pdf)),
+                new ClientFactory(failedExtractor), builder.Configuration, builder.Environment,
+                scope.ServiceProvider.GetRequiredService<ILogger<DoeFuelPriceImporter>>());
+            try
+            {
+                await importer.ImportReportAsync(db, resumeSource, DateTime.UtcNow, null, null, CancellationToken.None);
+                throw new Exception("The failed fixture must not import report prices.");
+            }
+            catch (InvalidDataException) { }
+            Check(await db.DoePageCaches.CountAsync() == pageCount - 1 && await db.DoeFuelPrices.CountAsync() == 0,
+                "Clean pages must survive a failed report without storing incomplete report prices.");
+        }
+        var resumedExtractor = new FakeExtractor("success");
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var importer = new DoeFuelPriceImporter(new HttpClient(new PdfHandler(pdf)),
+                new ClientFactory(resumedExtractor), builder.Configuration, builder.Environment,
+                scope.ServiceProvider.GetRequiredService<ILogger<DoeFuelPriceImporter>>());
+            var resumed = await importer.ImportReportAsync(db, resumeSource, DateTime.UtcNow,
+                null, null, CancellationToken.None);
+            Check(resumedExtractor.Pages.SequenceEqual(new[] { 4 }) && resumed.PageProgress!.PagesCached == pageCount - 1,
+                "A new importer must request only the missing page and expose cached-page progress.");
+            Check(resumed.Usage!.InputTokens == 100, "Resumed billing must include only this run's new request.");
+        }
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var before = resumedExtractor.Pages.Count;
+            var importer = new DoeFuelPriceImporter(new HttpClient(new PdfHandler(pdf)),
+                new ClientFactory(resumedExtractor), builder.Configuration, builder.Environment,
+                scope.ServiceProvider.GetRequiredService<ILogger<DoeFuelPriceImporter>>());
+            var unchanged = await importer.ImportReportAsync(db, resumeSource, DateTime.UtcNow,
+                null, null, CancellationToken.None);
+            Check(resumedExtractor.Pages.Count == before && unchanged.PageProgress!.PagesCached == pageCount &&
+                unchanged.Usage is null && unchanged.EstimatedCost is null,
+                "An unchanged complete report must make no AI calls or report historical billing as new cost.");
+            // Changing extraction instructions/model must invalidate the cache.
+            var otherConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+                { ["OPENAI_API_KEY"] = "test-only", ["OPENAI_MODEL"] = "different-test-model" }).Build();
+            var changed = new FakeExtractor("success");
+            var changedImporter = new DoeFuelPriceImporter(new HttpClient(new PdfHandler(pdf)),
+                new ClientFactory(changed), otherConfig, builder.Environment,
+                scope.ServiceProvider.GetRequiredService<ILogger<DoeFuelPriceImporter>>());
+            await changedImporter.ImportReportAsync(db, resumeSource, DateTime.UtcNow, null, null, CancellationToken.None);
+            Check(changed.Pages.Count == pageCount, "A different extractor version must process every page.");
+            using var changedStream = new MemoryStream(pdf);
+            using var changedDocument = PdfSharp.Pdf.IO.PdfReader.Open(changedStream,
+                PdfSharp.Pdf.IO.PdfDocumentOpenMode.Modify);
+            changedDocument.Info.Title = "Revised test report";
+            using var changedOutput = new MemoryStream();
+            changedDocument.Save(changedOutput, closeStream: false);
+            var revisedExtractor = new FakeExtractor("success");
+            var revisedImporter = new DoeFuelPriceImporter(new HttpClient(new PdfHandler(changedOutput.ToArray())),
+                new ClientFactory(revisedExtractor), builder.Configuration, builder.Environment,
+                scope.ServiceProvider.GetRequiredService<ILogger<DoeFuelPriceImporter>>());
+            await revisedImporter.ImportReportAsync(db, resumeSource, DateTime.UtcNow, null, null, CancellationToken.None);
+            Check(revisedExtractor.Pages.Count == pageCount, "Revised PDF bytes must invalidate all old page results.");
+            await db.DoeFuelPrices.ExecuteDeleteAsync();
+            await db.DoePumpPriceReports.ExecuteDeleteAsync();
+            await db.DoePageCaches.ExecuteDeleteAsync();
+        }
+        Console.WriteLine("PASS: durable pages resume in a new importer, skip unchanged reports, and invalidate for model/PDF changes");
         await app.StartAsync();
         var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
         using var client = new HttpClient { BaseAddress = new Uri(address) };
@@ -122,6 +192,8 @@ static class DoePageJobIntegration
             "An unchanged synchronous import must return final page totals and no duplicate inserts.");
         Console.WriteLine("PASS: job completes with named-company rows; synchronous repeat returns final totals without duplicates");
         extractor.Scenario = "bad_price";
+        using (var scope = app.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<AppDbContext>().DoePageCaches.ExecuteDeleteAsync();
         await Task.Delay(1100);
         using var partialCreated = await client.PostAsJsonAsync(ApiRoutes.AdminDoeFuelPricesImportJobs,
             new { mode = "backfill", from = "2026-09-29", to = "2026-10-05" });
