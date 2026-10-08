@@ -938,14 +938,23 @@ public sealed class DoeFuelPriceImporter(
                         string.IsNullOrWhiteSpace(extraction.WeekEnd);
                     if (!undatedEmptyPage)
                     {
+                        if (string.IsNullOrWhiteSpace(extraction.WeekStart) ||
+                            string.IsNullOrWhiteSpace(extraction.WeekEnd))
+                            throw new InvalidDataException("The extracted page coverage dates are missing; both start and end dates are required.");
                         if (!DateOnly.TryParseExact(extraction.WeekStart, "yyyy-MM-dd",
                                 CultureInfo.InvariantCulture, DateTimeStyles.None, out var start) ||
                             !DateOnly.TryParseExact(extraction.WeekEnd, "yyyy-MM-dd",
-                                CultureInfo.InvariantCulture, DateTimeStyles.None, out var end) ||
-                            (source is not null && start != source.WeekStart) ||
-                            start > PhilippineDate(nowUtc).AddDays(1) || end < start || end > start.AddDays(7) ||
-                            (weekStart.HasValue && (start != weekStart || end != weekEnd)))
-                            throw new InvalidDataException("The page has invalid or inconsistent coverage dates.");
+                                CultureInfo.InvariantCulture, DateTimeStyles.None, out var end))
+                            throw new InvalidDataException("The extracted page coverage dates are malformed; expected valid dates in yyyy-MM-dd format.");
+                        if (weekStart.HasValue && (start != weekStart || end != weekEnd))
+                            throw new InvalidDataException(FormattableString.Invariant(
+                                $"Page coverage mismatch: expected {weekStart:yyyy-MM-dd} through {weekEnd:yyyy-MM-dd}, but extracted {start:yyyy-MM-dd} through {end:yyyy-MM-dd}."));
+                        if (source is not null && start != source.WeekStart)
+                            throw new InvalidDataException(FormattableString.Invariant(
+                                $"Page coverage mismatch: expected DOE listing start {source.WeekStart:yyyy-MM-dd}, but extracted {start:yyyy-MM-dd} through {end:yyyy-MM-dd}."));
+                        if (start > PhilippineDate(nowUtc).AddDays(1) || end < start || end > start.AddDays(7))
+                            throw new InvalidDataException(FormattableString.Invariant(
+                                $"Invalid extracted page coverage: {start:yyyy-MM-dd} through {end:yyyy-MM-dd}; the start must not be more than one day in the future and the end must be within seven days of the start."));
                         // Establish dates only after its rows also pass validation.
                         var validated = ValidateBulkRows(extraction.Rows, allowEmpty: true,
                             skipInvalidRows: true);

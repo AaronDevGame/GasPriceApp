@@ -88,12 +88,22 @@ Check(retry.Handler.Pages.Count(number => number == 4) == 2 && retry.Handler.Pag
 Check(retry.Importer.ExtractionProgress!.PagesFailed == 0, "A recovered retry must not count as failed.");
 Console.WriteLine("PASS: retry only the failed page and include retry billing");
 
-foreach (var scenario in new[] { "failed", "date_conflict", "incomplete" })
+foreach (var scenario in new[] { "failed", "date_conflict", "monitoring_dates", "missing_dates", "malformed_dates", "incomplete" })
 {
     var failed = await RunAsync(scenario, expectFailure: true);
     Check(failed.Importer.ExtractionProgress!.PagesFailed == 1, "The failed page must be visible.");
     Check(failed.Importer.ExtractionProgress.PagesCompleted == pageCount - 1,
         "A failed page must not count as completed.");
+    var error = failed.Importer.ExtractionProgress.Pages[3].Error!;
+    if (scenario is "date_conflict" or "monitoring_dates")
+        Check(error.Contains("expected 2026-09-29 through 2026-10-05") &&
+            error.Contains(scenario == "date_conflict"
+                ? "extracted 2026-09-22 through 2026-09-28"
+                : "extracted 2026-09-29 through 2026-10-01"),
+            "Coverage mismatch errors must show the actual expected and extracted dates.");
+    if (scenario is "missing_dates" or "malformed_dates")
+        Check(error.Contains(scenario == "missing_dates" ? "missing" : "malformed") &&
+            !error.Contains("mismatch"), "Missing or malformed dates need distinct errors.");
     Console.WriteLine($"PASS: {scenario} prevents completion while remaining pages are processed");
 }
 
@@ -222,8 +232,11 @@ sealed class FakeExtractor(string scenario) : HttpMessageHandler
         if (Scenario == "headers" && number == 5 && !prompt.Contains("[\"SHELL\",\"PETRON\""))
             throw new Exception("New printed headers must replace the preceding table's mapping.");
         var extraction = new DoePageExtraction(
-            Scenario == "date_conflict" && bad ? "2026-09-22" : "2026-09-29",
-            Scenario == "date_conflict" && bad ? "2026-09-28" : "2026-10-05",
+            bad && Scenario == "missing_dates" ? "" :
+                bad && Scenario == "malformed_dates" ? "2026-09-99" :
+                bad && Scenario == "date_conflict" ? "2026-09-22" : "2026-09-29",
+            bad && Scenario == "monitoring_dates" ? "2026-10-01" :
+                bad && Scenario == "date_conflict" ? "2026-09-28" : "2026-10-05",
             Scenario == "failed" && bad ? "unreadable" : "read",
             [new ExtractedDoeBulkPrice("City " + number, "Basilan", "Region IX",
                 number == 3 ? "INDEPENDENT" : "PETRON", "RON 91",

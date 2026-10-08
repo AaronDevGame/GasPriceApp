@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Show expected and extracted dates in DOE page coverage mismatch errors, with separate messages for missing, malformed, and invalid date ranges.
 - Refresh location research caches when newly imported DOE company prices become available, so prior website or AI results do not hide newer DOE rows.
 - Prefer fresh DOE city/company pump prices on fuel-price cache misses before configured websites and AI web search.
 - Group fuel-adjustment read results by notice week and report the actual number of returned weeks alongside the requested limit.
