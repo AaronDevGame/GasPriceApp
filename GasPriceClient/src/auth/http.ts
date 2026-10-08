@@ -27,7 +27,7 @@ function apiBase() {
 export async function send<T>(path: string, init: RequestInit = {}): Promise<T> {
   // Restrict callers to API paths: credentials must never follow a caller-supplied URL.
   const pathname = path.split('?')[0];
-  if (!/^\/(auth|fuel-prices|ai)(\/|$)/.test(pathname) || /[#\\]/.test(path) ||
+  if (!/^\/(auth|fuel-prices|fuel-news|ai)(\/|$)/.test(pathname) || /[#\\]/.test(path) ||
       /[\u0000-\u0020]/.test(path) || pathname.includes('..') || pathname.includes('%')) {
     throw new ApiError(0, 'invalid_api_path');
   }

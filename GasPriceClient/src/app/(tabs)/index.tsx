@@ -9,6 +9,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { formatPrice, type Prices, type FeaturedFuelPrice } from '@/fuel/api';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
 import { useAuth } from '@/auth/auth-provider';
+import { FuelNewsCard } from '@/components/fuel-news-card';
+import { useLatestNews } from '@/news/use-latest-news';
 
 // Enable temporarily when testing logout and reconnection.
 const SHOW_LOGOUT_BUTTON = false;
@@ -47,6 +49,7 @@ function FeaturedPriceCard({ item }: { item: FeaturedFuelPrice }) {
 
 export default function HomeScreen() {
   const fuel = useFuelPrices();
+  const news = useLatestNews();
   const { tokenLog } = useAuth();
   const theme = useTheme();
   const [refreshing, setRefreshing] = useState(false);
@@ -54,7 +57,7 @@ export default function HomeScreen() {
   const pullToRefresh = async () => {
     if (fuel.busy || refreshing) return;
     setRefreshing(true);
-    try { await fuel.refresh(); } finally { setRefreshing(false); }
+    try { await Promise.allSettled([fuel.refresh(), news.reload()]); } finally { setRefreshing(false); }
   };
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.safe}>
@@ -76,6 +79,11 @@ export default function HomeScreen() {
               <Button title="Logout" disabled={fuel.busy || !fuel.authenticated} onPress={() => void fuel.signOut()} />
             </View>}
           </View>
+          {news.item && <FuelNewsCard item={news.item} compact />}
+          {news.error && <View style={styles.loading}>
+            <ThemedText type="small" themeColor="textSecondary">News could not be updated.</ThemedText>
+            <Button title="Retry news" onPress={() => void news.reload()} disabled={news.loading} />
+          </View>}
           {SHOW_TOKEN_LOG && <View style={styles.tokenLog} accessibilityLiveRegion="polite">
             <ThemedText type="smallBold" themeColor="textSecondary">TOKEN LOG · TESTING</ThemedText>
             {tokenLog.length ? tokenLog.map(entry => <ThemedText key={entry.id} type="small" themeColor="textSecondary">
