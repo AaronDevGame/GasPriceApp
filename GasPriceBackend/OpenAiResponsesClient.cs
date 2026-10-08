@@ -379,7 +379,7 @@ public sealed class OpenAiResponsesClient
         }
     }
 
-    private static AiChatTokenUsage? TryReadUsage(JsonElement root)
+    public static AiChatTokenUsage? TryReadUsage(JsonElement root)
     {
         if (!root.TryGetProperty("usage", out var usage) ||
             usage.ValueKind != JsonValueKind.Object ||

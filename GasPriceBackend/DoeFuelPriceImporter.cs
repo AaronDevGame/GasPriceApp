@@ -21,7 +21,12 @@ public sealed record DoeFuelPriceFeed(
 
 public sealed record DoeFuelPriceImportResult(
     string City, string Province, DateOnly WeekStart, DateOnly WeekEnd,
-    string SourceUrl, int Added, int Updated, string Status);
+    string SourceUrl, int Added, int Updated, string Status)
+{
+    public string? Model { get; init; }
+    public AiChatTokenUsage? Usage { get; init; }
+    public OpenAiCostEstimate? EstimatedCost { get; init; }
+}
 
 public sealed record ExtractedDoeFuelPrice(
     [property: JsonPropertyName("oil_company")] string OilCompany,
@@ -59,6 +64,9 @@ public sealed record DoeBulkExtraction(
 public sealed record DoeReportImportResult(string SourceUrl, string Status,
     int Added, int Updated, int PriceRows)
 {
+    public string? Model { get; init; }
+    public AiChatTokenUsage? Usage { get; init; }
+    public OpenAiCostEstimate? EstimatedCost { get; init; }
     public int DuplicatesIgnored { get; init; }
     public int AggregateRowsIgnored { get; init; }
 }
@@ -138,12 +146,26 @@ public sealed class DoeFuelPriceImporter(
     private readonly string _bulkInstructions = File.ReadAllText(Path.Combine(
         environment.ContentRootPath, "agents/philippines-doe-pump-price-bulk-extractor.md"));
 
+    // Each import uses its own scoped/transient importer. Capture usage before validating
+    // extracted rows so a billed response is still visible when a bulk report fails.
+    public string? ExtractionModel { get; private set; }
+    public AiChatTokenUsage? ExtractionUsage { get; private set; }
+    public OpenAiCostEstimate? ExtractionCost { get; private set; }
+
+    private void ResetExtractionUsage()
+    {
+        ExtractionModel = null;
+        ExtractionUsage = null;
+        ExtractionCost = null;
+    }
+
     public bool IsConfigured => !string.IsNullOrWhiteSpace(configuration["OPENAI_API_KEY"]);
 
     public async Task<IReadOnlyList<DoeFuelPrice>> GetAsync(
         AppDbContext db, ResolvedFuelLocation location, DateTime nowUtc,
         CancellationToken cancellationToken)
     {
+        ResetExtractionUsage();
         if (string.IsNullOrWhiteSpace(location.City) || string.IsNullOrWhiteSpace(location.Province))
             return [];
         var cached = await ReadAsync(db, location, nowUtc, cancellationToken);
@@ -211,6 +233,7 @@ public sealed class DoeFuelPriceImporter(
         AppDbContext db, ResolvedFuelLocation location, DateTime nowUtc,
         string? requestedUrl, CancellationToken cancellationToken)
     {
+        ResetExtractionUsage();
         if (string.IsNullOrWhiteSpace(location.City) || string.IsNullOrWhiteSpace(location.Province))
             throw new InvalidDataException("DOE import requires a city and province.");
         if (!IsConfigured)
@@ -338,7 +361,10 @@ public sealed class DoeFuelPriceImporter(
         await transaction.CommitAsync(cancellationToken);
         return new DoeFuelPriceImportResult(location.City, location.Province, start, end,
             url, added, updated, added == 0 && updated == 0 ? "already_imported" :
-                updated > 0 ? "updated" : "imported");
+                updated > 0 ? "updated" : "imported")
+        {
+            Model = ExtractionModel, Usage = ExtractionUsage, EstimatedCost = ExtractionCost
+        };
     }
 
     public async Task<DoeReportDiscovery> FindReportsAsync(
@@ -411,6 +437,7 @@ public sealed class DoeFuelPriceImporter(
         DoeReportSource source, DateTime nowUtc, DateOnly? from, DateOnly? to,
         CancellationToken cancellationToken)
     {
+        ResetExtractionUsage();
         var report = await db.DoePumpPriceReports.FirstOrDefaultAsync(r =>
             r.SourceUrl == source.Url && r.WeekStart == source.WeekStart,
             cancellationToken);
@@ -426,7 +453,10 @@ public sealed class DoeFuelPriceImporter(
             extraction.Rows is null or { Count: < 1 or > 4000 })
             throw new InvalidDataException("DOE report extraction has an invalid week or no usable prices.");
         if ((from.HasValue && end < from.Value) || (to.HasValue && start > to.Value))
-            return new DoeReportImportResult(source.Url, "outside_range", 0, 0, 0);
+            return new DoeReportImportResult(source.Url, "outside_range", 0, 0, 0)
+            {
+                Model = ExtractionModel, Usage = ExtractionUsage, EstimatedCost = ExtractionCost
+            };
         var extractedRows = source.Section == "ncr-pump-prices"
             ? extraction.Rows.Select(row => row with
             {
@@ -537,6 +567,7 @@ public sealed class DoeFuelPriceImporter(
             added, updated,
             report.PriceRows)
         {
+            Model = ExtractionModel, Usage = ExtractionUsage, EstimatedCost = ExtractionCost,
             DuplicatesIgnored = validated.DuplicatesIgnored,
             AggregateRowsIgnored = validated.AggregateRowsIgnored
         };
@@ -724,6 +755,10 @@ public sealed class DoeFuelPriceImporter(
             throw new HttpRequestException("DOE price extraction failed.", null, response.StatusCode);
         await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(body, cancellationToken: cancellationToken);
+        ExtractionModel = document.RootElement.TryGetProperty("model", out var returnedModel) &&
+            returnedModel.ValueKind == JsonValueKind.String ? returnedModel.GetString() : model;
+        ExtractionUsage = OpenAiResponsesClient.TryReadUsage(document.RootElement);
+        ExtractionCost = OpenAiPricing.Estimate(ExtractionModel ?? model, ExtractionUsage, 0);
         if (!document.RootElement.TryGetProperty("status", out var status) ||
             status.GetString() != "completed" ||
             !document.RootElement.TryGetProperty("output", out var outputs) ||

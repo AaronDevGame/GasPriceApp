@@ -5,6 +5,9 @@ public sealed record DoeImportReportStatus(string Section, string? Subdivision,
     DateOnly? WeekStart, string SourceUrl, string Status, int Added, int Updated,
     string? Error)
 {
+    public string? Model { get; init; }
+    public AiChatTokenUsage? Usage { get; init; }
+    public OpenAiCostEstimate? EstimatedCost { get; init; }
     public int DuplicatesIgnored { get; init; }
     public int AggregateRowsIgnored { get; init; }
 }
@@ -13,7 +16,12 @@ public sealed record DoeImportJobStatus(Guid JobId, string Mode, DateOnly? From,
     DateOnly? To, string Status, DateTime CreatedAtUtc, DateTime? StartedAtUtc,
     DateTime? FinishedAtUtc, int ReportsFound, int ReportsImported,
     int ReportsSkipped, int ReportsFailed, int PriceRowsAdded, int PriceRowsUpdated,
-    IReadOnlyList<DoeImportReportStatus> Reports, string? Error);
+    IReadOnlyList<DoeImportReportStatus> Reports, string? Error)
+{
+    // Null means no recorded usage; historical jobs cannot be reconstructed.
+    public AiChatTokenUsage? Usage => DoeImportBilling.SumUsage(Reports);
+    public OpenAiCostEstimate? EstimatedCost => DoeImportBilling.SumCost(Reports);
+}
 
 public sealed class DoeImportWorker(IServiceScopeFactory scopes,
     TimeProvider timeProvider, ILogger<DoeImportWorker> logger) : BackgroundService
@@ -144,17 +152,18 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 DoeImportReportStatus item;
+                using var reportScope = scopes.CreateScope();
+                var reportDb = reportScope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var reportImporter = reportScope.ServiceProvider.GetRequiredService<DoeFuelPriceImporter>();
                 try
                 {
-                    using var reportScope = scopes.CreateScope();
-                    var reportDb = reportScope.ServiceProvider.GetRequiredService<AppDbContext>();
-                    var reportImporter = reportScope.ServiceProvider.GetRequiredService<DoeFuelPriceImporter>();
                     var result = await reportImporter.ImportReportAsync(reportDb, source,
                         timeProvider.GetUtcNow().UtcDateTime, job.From, job.To,
                         cancellationToken);
                     item = new(source.Section, source.Subdivision, source.WeekStart,
                         source.Url, result.Status, result.Added, result.Updated, null)
                     {
+                        Model = result.Model, Usage = result.Usage, EstimatedCost = result.EstimatedCost,
                         DuplicatesIgnored = result.DuplicatesIgnored,
                         AggregateRowsIgnored = result.AggregateRowsIgnored
                     };
@@ -170,7 +179,12 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                     logger.LogWarning(ex, "DOE report import failed for {Section} {WeekStart}.",
                         source.Section, source.WeekStart);
                     item = new(source.Section, source.Subdivision, source.WeekStart,
-                        source.Url, "failed", 0, 0, SafeError(ex));
+                        source.Url, "failed", 0, 0, SafeError(ex))
+                    {
+                        Model = reportImporter.ExtractionModel,
+                        Usage = reportImporter.ExtractionUsage,
+                        EstimatedCost = reportImporter.ExtractionCost
+                    };
                     job.ReportsFailed++;
                 }
                 results.Add(item);
