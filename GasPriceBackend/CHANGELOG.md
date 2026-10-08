@@ -26,6 +26,7 @@ All notable changes to this project will be documented in this file.
 - Exclude clearly out-of-range DOE notice PDFs from backfill job counts and results while retaining the PDF's extracted week as the final import check.
 
 ### Added
+- Accept sourceUrl-only manual DOE pump-price imports, extracting all localities and coverage dates from the PDF while preserving city/province imports.
 - Include OpenAI model, token usage, and estimated USD extraction cost in DOE city import results and persisted bulk job report results, with job-level totals.
 - Expose authenticated, read-only browsing of recent stored DOE company prices by city for the Fuel Prices tab.
 - Serve ordered Luzon, Visayas, and Mindanao featured city prices directly from recent stored DOE rows through authenticated `GET /fuel-prices/featured`.

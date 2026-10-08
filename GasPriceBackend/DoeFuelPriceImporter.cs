@@ -433,30 +433,47 @@ public sealed class DoeFuelPriceImporter(
             .OrderBy(r => r.Section).ThenBy(r => r.Subdivision).ToArray(), errors);
     }
 
-    public async Task<DoeReportImportResult> ImportReportAsync(AppDbContext db,
+    public Task<DoeReportImportResult> ImportReportFromUrlAsync(AppDbContext db,
+        string sourceUrl, DateTime nowUtc, CancellationToken cancellationToken) =>
+        ImportReportCoreAsync(db, FuelAdjustmentImporter.ValidatePdfUrl(sourceUrl),
+            null, nowUtc, null, null, cancellationToken);
+
+    public Task<DoeReportImportResult> ImportReportAsync(AppDbContext db,
         DoeReportSource source, DateTime nowUtc, DateOnly? from, DateOnly? to,
+        CancellationToken cancellationToken) =>
+        ImportReportCoreAsync(db, source.Url, source, nowUtc, from, to, cancellationToken);
+
+    private async Task<DoeReportImportResult> ImportReportCoreAsync(AppDbContext db,
+        string url, DoeReportSource? source, DateTime nowUtc, DateOnly? from, DateOnly? to,
         CancellationToken cancellationToken)
     {
         ResetExtractionUsage();
-        var report = await db.DoePumpPriceReports.FirstOrDefaultAsync(r =>
-            r.SourceUrl == source.Url && r.WeekStart == source.WeekStart,
-            cancellationToken);
-        var wasComplete = report?.Status == "imported";
-        var pdf = await DownloadAsync(source.Url, cancellationToken);
+        var pdf = await DownloadAsync(url, cancellationToken);
         var hash = Convert.ToHexString(SHA256.HashData(pdf));
         var extraction = await ExtractAllAsync(pdf, source, cancellationToken);
         if (!DateOnly.TryParseExact(extraction.WeekStart, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var start) ||
             !DateOnly.TryParseExact(extraction.WeekEnd, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var end) ||
-            start != source.WeekStart || end < start || end > start.AddDays(7) ||
+            (source is not null && start != source.WeekStart) ||
+            start > PhilippineDate(nowUtc).AddDays(1) || end < start || end > start.AddDays(7) ||
             extraction.Rows is null or { Count: < 1 or > 4000 })
             throw new InvalidDataException("DOE report extraction has an invalid week or no usable prices.");
         if ((from.HasValue && end < from.Value) || (to.HasValue && start > to.Value))
-            return new DoeReportImportResult(source.Url, "outside_range", 0, 0, 0)
+            return new DoeReportImportResult(url, "outside_range", 0, 0, 0)
             {
                 Model = ExtractionModel, Usage = ExtractionUsage, EstimatedCost = ExtractionCost
             };
+        if (source is null)
+        {
+            // Manual PDFs supply their own dates and locality context instead of a DOE listing.
+            var locations = ValidateBulkRows(extraction.Rows).Rows.Select(row =>
+                new ResolvedFuelLocation(row.City, row.Province, row.Region)).ToArray();
+            var sections = locations.Select(RegionSection).Distinct().ToArray();
+            var subdivisions = locations.Select(SouthSubdivision).Distinct().ToArray();
+            source = new DoeReportSource(sections.Length == 1 ? sections[0] ?? "manual" : "manual",
+                subdivisions.Length == 1 ? subdivisions[0] : null, start, url);
+        }
         var extractedRows = source.Section == "ncr-pump-prices"
             ? extraction.Rows.Select(row => row with
             {
@@ -464,6 +481,9 @@ public sealed class DoeFuelPriceImporter(
             }).ToArray()
             : extraction.Rows;
         var validated = ValidateBulkRows(extractedRows);
+        var report = await db.DoePumpPriceReports.FirstOrDefaultAsync(r =>
+            r.SourceUrl == url && r.WeekStart == start, cancellationToken);
+        var wasComplete = report?.Status == "imported";
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         if (report is null)
         {
@@ -719,12 +739,14 @@ public sealed class DoeFuelPriceImporter(
             $"Extract DOE pump prices for city/municipality {location.City}, province {location.Province}. The DOE listing labels this PDF's week as starting {listedWeekStart?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unknown"}.",
             Schema, 6000, cancellationToken);
 
-    private Task<DoeBulkExtraction> ExtractAllAsync(byte[] pdf, DoeReportSource source,
+    private Task<DoeBulkExtraction> ExtractAllAsync(byte[] pdf, DoeReportSource? source,
         CancellationToken cancellationToken) => ExtractDocumentAsync<DoeBulkExtraction>(
             pdf, _bulkInstructions,
-            $"Extract all localities in this {source.Section} DOE report" +
-            (source.Subdivision is null ? "" : $" ({source.Subdivision})") +
-            $". The DOE listing labels the week as starting {source.WeekStart:yyyy-MM-dd}.",
+            source is null
+                ? "Extract all localities in this DOE pump-price report. Read the coverage dates, provinces, and regions from the PDF; no listing context is supplied."
+                : $"Extract all localities in this {source.Section} DOE report" +
+                  (source.Subdivision is null ? "" : $" ({source.Subdivision})") +
+                  $". The DOE listing labels the week as starting {source.WeekStart:yyyy-MM-dd}.",
             BulkSchema, 24000, cancellationToken);
 
     private async Task<T> ExtractDocumentAsync<T>(byte[] pdf, string instructions,

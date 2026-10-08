@@ -57,21 +57,27 @@ public static class DoeFuelPriceEndpoints
             var names = new HashSet<string>(StringComparer.Ordinal);
             if (root.ValueKind != JsonValueKind.Object ||
                 root.EnumerateObject().Any(p =>
-                    !names.Add(p.Name) || p.Name is not ("city" or "province" or "region" or "sourceUrl")) ||
-                !root.TryGetProperty("city", out var cityValue) || cityValue.ValueKind != JsonValueKind.String ||
-                !root.TryGetProperty("province", out var provinceValue) || provinceValue.ValueKind != JsonValueKind.String)
-                return ApiResults.BadRequest("Provide city and province strings; optional region and sourceUrl.", instanceId);
-            var city = cityValue.GetString()?.Trim();
-            var province = provinceValue.GetString()?.Trim();
-            var region = root.TryGetProperty("region", out var regionValue) && regionValue.ValueKind == JsonValueKind.String
+                    !names.Add(p.Name) || p.Name is not ("city" or "province" or "region" or "sourceUrl")))
+                return ApiResults.BadRequest("Provide sourceUrl alone, or city and province with optional region and sourceUrl.", instanceId);
+            var hasCity = root.TryGetProperty("city", out var cityValue);
+            var hasProvince = root.TryGetProperty("province", out var provinceValue);
+            var hasRegion = root.TryGetProperty("region", out var regionValue);
+            var hasUrl = root.TryGetProperty("sourceUrl", out var urlValue);
+            var reportOnly = !hasCity && !hasProvince && !hasRegion;
+            if ((!reportOnly && (!hasCity || cityValue.ValueKind != JsonValueKind.String ||
+                    !hasProvince || provinceValue.ValueKind != JsonValueKind.String)) ||
+                (hasRegion && regionValue.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)) ||
+                (hasUrl && urlValue.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)))
+                return ApiResults.BadRequest("Provide sourceUrl alone, or city and province with optional region and sourceUrl.", instanceId);
+            var city = hasCity ? cityValue.GetString()?.Trim() : null;
+            var province = hasProvince ? provinceValue.GetString()?.Trim() : null;
+            var region = hasRegion && regionValue.ValueKind == JsonValueKind.String
                 ? regionValue.GetString()?.Trim() : null;
-            var url = root.TryGetProperty("sourceUrl", out var urlValue) && urlValue.ValueKind == JsonValueKind.String
+            var url = hasUrl && urlValue.ValueKind == JsonValueKind.String
                 ? urlValue.GetString() : null;
-            if (string.IsNullOrWhiteSpace(city) || city.Length > 100 ||
-                string.IsNullOrWhiteSpace(province) || province.Length > 100 ||
-                region is { Length: > 100 } ||
-                (root.TryGetProperty("region", out regionValue) && regionValue.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)) ||
-                (root.TryGetProperty("sourceUrl", out urlValue) && urlValue.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)))
+            if ((!reportOnly && (string.IsNullOrWhiteSpace(city) || city.Length > 100 ||
+                    string.IsNullOrWhiteSpace(province) || province.Length > 100)) ||
+                region is { Length: > 100 } || (reportOnly && string.IsNullOrWhiteSpace(url)))
                 return ApiResults.BadRequest("Invalid city, province, region, or sourceUrl.", instanceId);
             if (url is not null)
             {
@@ -83,8 +89,14 @@ public static class DoeFuelPriceEndpoints
                 return ApiResults.ServiceUnavailable("doe_price_extractor_not_configured", instanceId);
             try
             {
+                if (reportOnly)
+                {
+                    var report = await importer.ImportReportFromUrlAsync(db, url!,
+                        timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
+                    return ApiResults.Ok(report, "doe_fuel_prices_" + report.Status, instanceId);
+                }
                 var result = await importer.ImportAsync(db,
-                    new ResolvedFuelLocation(city, province, region),
+                    new ResolvedFuelLocation(city!, province!, region),
                     timeProvider.GetUtcNow().UtcDateTime, url, cancellationToken);
                 return ApiResults.Ok(result, "doe_fuel_prices_" + result.Status, instanceId);
             }
