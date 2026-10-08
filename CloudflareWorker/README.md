@@ -34,5 +34,10 @@ EXPO_PUBLIC_API_URL=https://gasprice-api-proxy.aarondevgame.workers.dev
 
 The Expo web client intentionally uses same-origin relative API paths instead.
 
+Fuel news reads (`/fuel-news`, `/fuel-news/latest`, and UUID article paths) and
+authenticated `/fuel-news/subscription` GET/PUT/DELETE requests are allowed.
+News import and revision-history admin routes remain blocked. Deploy these
+Worker routes with the news backend before shipping clients that use them.
+
 Run the local Worker checks with `npm test`. Do not use a production secret in
 `.dev.vars`; local tests supply a test-only value.
