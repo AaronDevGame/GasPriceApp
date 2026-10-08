@@ -10,6 +10,7 @@ public sealed record DoeImportReportStatus(string Section, string? Subdivision,
     public OpenAiCostEstimate? EstimatedCost { get; init; }
     public int DuplicatesIgnored { get; init; }
     public int AggregateRowsIgnored { get; init; }
+    public DoeReportPageProgress? PageProgress { get; init; }
 }
 
 public sealed record DoeImportJobStatus(Guid JobId, string Mode, DateOnly? From,
@@ -77,6 +78,11 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
             job.ActiveSlot = null;
             job.FinishedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
             job.Error = "The import stopped before completion. Start a new job to retry.";
+            var reports = JsonSerializer.Deserialize<DoeImportReportStatus[]>(job.DetailsJson) ?? [];
+            job.DetailsJson = JsonSerializer.Serialize(reports.Select(report =>
+                report.Status == "running"
+                    ? report with { Status = "interrupted", Error = job.Error }
+                    : report));
         }
         if (stale.Count > 0) await db.SaveChangesAsync(cancellationToken);
     }
@@ -155,17 +161,36 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                 using var reportScope = scopes.CreateScope();
                 var reportDb = reportScope.ServiceProvider.GetRequiredService<AppDbContext>();
                 var reportImporter = reportScope.ServiceProvider.GetRequiredService<DoeFuelPriceImporter>();
+                var resultIndex = results.Count;
+                results.Add(new(source.Section, source.Subdivision, source.WeekStart,
+                    source.Url, "running", 0, 0, null));
+                async Task SaveProgressAsync(DoeReportPageProgress? progress,
+                    CancellationToken token)
+                {
+                    results[resultIndex] = results[resultIndex] with
+                    {
+                        PageProgress = progress,
+                        Model = reportImporter.ExtractionModel,
+                        Usage = reportImporter.ExtractionUsage,
+                        EstimatedCost = reportImporter.ExtractionCost
+                    };
+                    job.DetailsJson = JsonSerializer.Serialize(results);
+                    job.HeartbeatAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+                    await db.SaveChangesAsync(token);
+                }
+                await SaveProgressAsync(null, cancellationToken);
                 try
                 {
                     var result = await reportImporter.ImportReportAsync(reportDb, source,
                         timeProvider.GetUtcNow().UtcDateTime, job.From, job.To,
-                        cancellationToken);
+                        cancellationToken, (progress, token) => SaveProgressAsync(progress, token));
                     item = new(source.Section, source.Subdivision, source.WeekStart,
                         source.Url, result.Status, result.Added, result.Updated, null)
                     {
                         Model = result.Model, Usage = result.Usage, EstimatedCost = result.EstimatedCost,
                         DuplicatesIgnored = result.DuplicatesIgnored,
-                        AggregateRowsIgnored = result.AggregateRowsIgnored
+                        AggregateRowsIgnored = result.AggregateRowsIgnored,
+                        PageProgress = result.PageProgress
                     };
                     if (result.Status is "already_imported" or "outside_range") job.ReportsSkipped++;
                     else job.ReportsImported++;
@@ -183,11 +208,12 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                     {
                         Model = reportImporter.ExtractionModel,
                         Usage = reportImporter.ExtractionUsage,
-                        EstimatedCost = reportImporter.ExtractionCost
+                        EstimatedCost = reportImporter.ExtractionCost,
+                        PageProgress = reportImporter.ExtractionProgress
                     };
                     job.ReportsFailed++;
                 }
-                results.Add(item);
+                results[resultIndex] = item;
                 job.DetailsJson = JsonSerializer.Serialize(results);
                 // Also serves as a heartbeat for stale-job recovery.
                 job.HeartbeatAtUtc = timeProvider.GetUtcNow().UtcDateTime;
@@ -233,6 +259,10 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
         {
             job.Status = "interrupted";
             job.Error = "Server stopped during import.";
+            for (var index = 0; index < results.Count; index++)
+                if (results[index].Status == "running")
+                    results[index] = results[index] with { Status = "interrupted", Error = job.Error };
+            job.DetailsJson = JsonSerializer.Serialize(results);
         }
         catch (Exception ex)
         {

@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - Treat DOE PDF URLs whose query slashes use different percent encoding as the same source when classifying repeat imports.
 
 ### Fixed
+- Extract whole DOE pump-price PDFs one page at a time, continue past independent-only pages, and reject incomplete reports before saving prices. Job polling now includes live per-report page counts, page results, and failed-page retries; usage and cost include all page responses.
 - Match DOE bulk-import rows to existing city and province aliases before inserting, so repeated reports count only missing company and fuel-grade prices as added.
 - Re-extract DOE PDFs on normal latest and backfill jobs to add company prices omitted by an earlier extraction, while retaining saved rows if a retry omits them.
 - Include every matching DOE company when the latest report stores a city's companies under different spelling or City suffix variants, without repeating duplicate company and grade rows.

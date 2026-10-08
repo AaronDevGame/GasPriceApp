@@ -61,6 +61,12 @@ public sealed record DoeBulkExtraction(
     [property: JsonPropertyName("week_end")] string WeekEnd,
     [property: JsonPropertyName("rows")] IReadOnlyList<ExtractedDoeBulkPrice> Rows);
 
+public sealed record DoePageExtraction(
+    [property: JsonPropertyName("week_start")] string WeekStart,
+    [property: JsonPropertyName("week_end")] string WeekEnd,
+    [property: JsonPropertyName("page_status")] string PageStatus,
+    [property: JsonPropertyName("rows")] IReadOnlyList<ExtractedDoeBulkPrice> Rows);
+
 public sealed record DoeReportImportResult(string SourceUrl, string Status,
     int Added, int Updated, int PriceRows)
 {
@@ -69,6 +75,7 @@ public sealed record DoeReportImportResult(string SourceUrl, string Status,
     public OpenAiCostEstimate? EstimatedCost { get; init; }
     public int DuplicatesIgnored { get; init; }
     public int AggregateRowsIgnored { get; init; }
+    public DoeReportPageProgress? PageProgress { get; init; }
 }
 
 public sealed record ValidatedDoeBulkRows(IReadOnlyList<ExtractedDoeBulkPrice> Rows,
@@ -140,6 +147,22 @@ public sealed class DoeFuelPriceImporter(
         }
     });
 
+    private static readonly JsonElement PageSchema = CreatePageSchema();
+
+    private static JsonElement CreatePageSchema()
+    {
+        var properties = BulkSchema.GetProperty("properties").EnumerateObject()
+            .ToDictionary(property => property.Name, property => property.Value);
+        properties["page_status"] = JsonSerializer.SerializeToElement(new
+            { type = "string", @enum = new[] { "read", "unreadable" } });
+        return JsonSerializer.SerializeToElement(new
+        {
+            type = "object", additionalProperties = false,
+            required = new[] { "week_start", "week_end", "page_status", "rows" },
+            properties
+        });
+    }
+
     private readonly HttpClient _openAiClient = clients.CreateClient("doe-pump-price-openai");
     private readonly string _instructions = File.ReadAllText(Path.Combine(
         environment.ContentRootPath, "agents/philippines-doe-pump-price-extractor.md"));
@@ -151,12 +174,16 @@ public sealed class DoeFuelPriceImporter(
     public string? ExtractionModel { get; private set; }
     public AiChatTokenUsage? ExtractionUsage { get; private set; }
     public OpenAiCostEstimate? ExtractionCost { get; private set; }
+    public DoeReportPageProgress? ExtractionProgress { get; private set; }
+    private readonly List<DoeImportReportStatus> _extractionCalls = [];
 
     private void ResetExtractionUsage()
     {
         ExtractionModel = null;
         ExtractionUsage = null;
         ExtractionCost = null;
+        ExtractionProgress = null;
+        _extractionCalls.Clear();
     }
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(configuration["OPENAI_API_KEY"]);
@@ -436,21 +463,23 @@ public sealed class DoeFuelPriceImporter(
     public Task<DoeReportImportResult> ImportReportFromUrlAsync(AppDbContext db,
         string sourceUrl, DateTime nowUtc, CancellationToken cancellationToken) =>
         ImportReportCoreAsync(db, FuelAdjustmentImporter.ValidatePdfUrl(sourceUrl),
-            null, nowUtc, null, null, cancellationToken);
+            null, nowUtc, null, null, cancellationToken, null);
 
     public Task<DoeReportImportResult> ImportReportAsync(AppDbContext db,
         DoeReportSource source, DateTime nowUtc, DateOnly? from, DateOnly? to,
-        CancellationToken cancellationToken) =>
-        ImportReportCoreAsync(db, source.Url, source, nowUtc, from, to, cancellationToken);
+        CancellationToken cancellationToken,
+        Func<DoeReportPageProgress, CancellationToken, Task>? progress = null) =>
+        ImportReportCoreAsync(db, source.Url, source, nowUtc, from, to, cancellationToken, progress);
 
     private async Task<DoeReportImportResult> ImportReportCoreAsync(AppDbContext db,
         string url, DoeReportSource? source, DateTime nowUtc, DateOnly? from, DateOnly? to,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<DoeReportPageProgress, CancellationToken, Task>? progress)
     {
         ResetExtractionUsage();
         var pdf = await DownloadAsync(url, cancellationToken);
         var hash = Convert.ToHexString(SHA256.HashData(pdf));
-        var extraction = await ExtractAllAsync(pdf, source, cancellationToken);
+        var extraction = await ExtractAllAsync(pdf, source, nowUtc, progress, cancellationToken);
         if (!DateOnly.TryParseExact(extraction.WeekStart, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var start) ||
             !DateOnly.TryParseExact(extraction.WeekEnd, "yyyy-MM-dd", CultureInfo.InvariantCulture,
@@ -462,7 +491,8 @@ public sealed class DoeFuelPriceImporter(
         if ((from.HasValue && end < from.Value) || (to.HasValue && start > to.Value))
             return new DoeReportImportResult(url, "outside_range", 0, 0, 0)
             {
-                Model = ExtractionModel, Usage = ExtractionUsage, EstimatedCost = ExtractionCost
+                Model = ExtractionModel, Usage = ExtractionUsage, EstimatedCost = ExtractionCost,
+                PageProgress = ExtractionProgress
             };
         if (source is null)
         {
@@ -589,12 +619,13 @@ public sealed class DoeFuelPriceImporter(
         {
             Model = ExtractionModel, Usage = ExtractionUsage, EstimatedCost = ExtractionCost,
             DuplicatesIgnored = validated.DuplicatesIgnored,
-            AggregateRowsIgnored = validated.AggregateRowsIgnored
+            AggregateRowsIgnored = validated.AggregateRowsIgnored,
+            PageProgress = ExtractionProgress
         };
     }
 
     public static ValidatedDoeBulkRows ValidateBulkRows(
-        IReadOnlyList<ExtractedDoeBulkPrice> rows)
+        IReadOnlyList<ExtractedDoeBulkPrice> rows, bool allowEmpty = false)
     {
         var unique = new Dictionary<string, ExtractedDoeBulkPrice>(StringComparer.OrdinalIgnoreCase);
         var duplicatesIgnored = 0;
@@ -641,7 +672,7 @@ public sealed class DoeFuelPriceImporter(
             }
             unique.Add(key, row);
         }
-        if (unique.Count == 0)
+        if (unique.Count == 0 && !allowEmpty)
             throw new InvalidDataException("DOE report extraction has no usable company prices.");
         return new ValidatedDoeBulkRows(unique.Values.ToArray(), duplicatesIgnored,
             aggregatesIgnored);
@@ -739,15 +770,104 @@ public sealed class DoeFuelPriceImporter(
             $"Extract DOE pump prices for city/municipality {location.City}, province {location.Province}. The DOE listing labels this PDF's week as starting {listedWeekStart?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "unknown"}.",
             Schema, 6000, cancellationToken);
 
-    private Task<DoeBulkExtraction> ExtractAllAsync(byte[] pdf, DoeReportSource? source,
-        CancellationToken cancellationToken) => ExtractDocumentAsync<DoeBulkExtraction>(
-            pdf, _bulkInstructions,
-            source is null
-                ? "Extract all localities in this DOE pump-price report. Read the coverage dates, provinces, and regions from the PDF; no listing context is supplied."
-                : $"Extract all localities in this {source.Section} DOE report" +
-                  (source.Subdivision is null ? "" : $" ({source.Subdivision})") +
-                  $". The DOE listing labels the week as starting {source.WeekStart:yyyy-MM-dd}.",
-            BulkSchema, 24000, cancellationToken);
+    private async Task<DoeBulkExtraction> ExtractAllAsync(byte[] pdf, DoeReportSource? source,
+        DateTime nowUtc, Func<DoeReportPageProgress, CancellationToken, Task>? progress,
+        CancellationToken cancellationToken)
+    {
+        using var document = new DoePdfPages(pdf);
+        var pages = Enumerable.Range(1, document.Count)
+            .Select(number => new DoeImportPageStatus(number, "queued", 0, 0, null)).ToArray();
+        var rows = new List<ExtractedDoeBulkPrice>();
+        DateOnly? weekStart = null;
+        DateOnly? weekEnd = null;
+
+        async Task PublishAsync(int? currentPage)
+        {
+            ExtractionProgress = new DoeReportPageProgress(document.Count,
+                pages.Count(page => page.Status == "completed"), currentPage, pages.ToArray());
+            if (progress is not null)
+                await progress(ExtractionProgress, cancellationToken);
+        }
+
+        await PublishAsync(null);
+        for (var index = 0; index < document.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var pageNumber = index + 1;
+            var pagePdf = document.ReadPage(pageNumber);
+            // Successful pages stay in memory; retry only this page, once, before continuing.
+            for (var attempt = 1; attempt <= 2; attempt++)
+            {
+                pages[index] = new(pageNumber, "running", attempt, 0, null);
+                await PublishAsync(pageNumber);
+                try
+                {
+                    var context = source is null
+                        ? "Read the report's dates, provinces, and regions from the attached page."
+                        : $"This is a {source.Section} DOE report" +
+                          (source.Subdivision is null ? "" : $" ({source.Subdivision})") +
+                          $". Its DOE listing starts {source.WeekStart:yyyy-MM-dd}.";
+                    if (weekStart.HasValue)
+                        context += $" Earlier pages printed coverage {weekStart:yyyy-MM-dd} through {weekEnd:yyyy-MM-dd}; use that context only if this page does not print dates.";
+                    var extraction = await ExtractDocumentAsync<DoePageExtraction>(pagePdf,
+                        _bulkInstructions,
+                        $"Extract only original page {pageNumber} of {document.Count}. " + context,
+                        PageSchema, 24000, cancellationToken);
+                    if (extraction.PageStatus != "read" || extraction.Rows is null or { Count: > 4000 })
+                        throw new InvalidDataException("The page was unreadable or returned invalid rows.");
+                    var undatedEmptyPage = extraction.Rows.Count == 0 &&
+                        string.IsNullOrWhiteSpace(extraction.WeekStart) &&
+                        string.IsNullOrWhiteSpace(extraction.WeekEnd);
+                    if (!undatedEmptyPage)
+                    {
+                        if (!DateOnly.TryParseExact(extraction.WeekStart, "yyyy-MM-dd",
+                                CultureInfo.InvariantCulture, DateTimeStyles.None, out var start) ||
+                            !DateOnly.TryParseExact(extraction.WeekEnd, "yyyy-MM-dd",
+                                CultureInfo.InvariantCulture, DateTimeStyles.None, out var end) ||
+                            (source is not null && start != source.WeekStart) ||
+                            start > PhilippineDate(nowUtc).AddDays(1) || end < start || end > start.AddDays(7) ||
+                            (weekStart.HasValue && (start != weekStart || end != weekEnd)))
+                            throw new InvalidDataException("The page has invalid or inconsistent coverage dates.");
+                        // Establish dates only after its rows also pass validation.
+                        var validated = ValidateBulkRows(extraction.Rows, allowEmpty: true);
+                        weekStart = start;
+                        weekEnd = end;
+                        pages[index] = new(pageNumber, "completed", attempt, validated.Rows.Count, null);
+                    }
+                    else
+                    {
+                        pages[index] = new(pageNumber, "completed", attempt, 0, null);
+                    }
+                    rows.AddRange(extraction.Rows);
+                    break;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex) when (ex is HttpRequestException or InvalidDataException or
+                    JsonException or TaskCanceledException)
+                {
+                    var error = ex switch
+                    {
+                        TaskCanceledException => "The page extraction request timed out.",
+                        HttpRequestException => "The page extraction service was unavailable.",
+                        JsonException => "The page extractor returned malformed JSON.",
+                        _ => ex.Message
+                    };
+                    pages[index] = new(pageNumber, attempt == 2 ? "failed" : "retrying",
+                        attempt, 0, error);
+                    await PublishAsync(pageNumber);
+                }
+            }
+            await PublishAsync(null);
+        }
+        if (ExtractionProgress!.PagesFailed > 0)
+            throw new InvalidDataException(
+                $"DOE report has {ExtractionProgress.PagesFailed} failed page(s) out of {document.Count}; no report prices were saved.");
+        return new DoeBulkExtraction(weekStart?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
+            weekEnd?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "", rows);
+    }
 
     private async Task<T> ExtractDocumentAsync<T>(byte[] pdf, string instructions,
         string prompt, JsonElement schema, int maxOutputTokens,
@@ -777,10 +897,17 @@ public sealed class DoeFuelPriceImporter(
             throw new HttpRequestException("DOE price extraction failed.", null, response.StatusCode);
         await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(body, cancellationToken: cancellationToken);
-        ExtractionModel = document.RootElement.TryGetProperty("model", out var returnedModel) &&
+        var billedModel = document.RootElement.TryGetProperty("model", out var returnedModel) &&
             returnedModel.ValueKind == JsonValueKind.String ? returnedModel.GetString() : model;
-        ExtractionUsage = OpenAiResponsesClient.TryReadUsage(document.RootElement);
-        ExtractionCost = OpenAiPricing.Estimate(ExtractionModel ?? model, ExtractionUsage, 0);
+        var usage = OpenAiResponsesClient.TryReadUsage(document.RootElement);
+        _extractionCalls.Add(new DoeImportReportStatus("", null, null, "", "", 0, 0, null)
+        {
+            Model = billedModel, Usage = usage,
+            EstimatedCost = OpenAiPricing.Estimate(billedModel ?? model, usage, 0)
+        });
+        ExtractionModel = billedModel;
+        ExtractionUsage = DoeImportBilling.SumUsage(_extractionCalls);
+        ExtractionCost = DoeImportBilling.SumCost(_extractionCalls);
         if (!document.RootElement.TryGetProperty("status", out var status) ||
             status.GetString() != "completed" ||
             !document.RootElement.TryGetProperty("output", out var outputs) ||

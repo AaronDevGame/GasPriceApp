@@ -10,13 +10,37 @@ Location matching requires the same province (including known names such as NCR/
 
 `POST /admin/fuel-prices/doe/import` accepts JSON `{"city":"Quezon City","province":"Metro Manila","region":"National Capital Region"}` and the admin bearer key. Optional `sourceUrl` selects a DOE PDF explicitly. Without it, the backend finds the newest recent PDF on the matching regional page. The importer extracts only the requested city/province, validates the report week, companies, grades, ranges, and duplicate cells, and upserts matching rows. It returns `imported`, `updated`, or `already_imported`. Admin imports can use older PDFs by supplying `sourceUrl`; the public feed still returns only recent rows.
 
-For a manual whole-report import, send only `{"sourceUrl":"https://doe.gov.ph/path/to/report.pdf"}` to the same endpoint. No city, province, or region is required: the importer extracts all clearly identified localities and the coverage dates from the PDF, validates and upserts company prices, records a complete report, and expires affected research caches. The response contains `sourceUrl`, `status`, `added`, `updated`, `priceRows`, duplicate/aggregate counts, and extraction usage/cost. Repeating the request re-extracts the PDF; unchanged complete reports return `already_imported`. To import only one locality, supply both city and province, with optional region and sourceUrl as above. Partial location fields are rejected.
+For a manual whole-report import, send only `{"sourceUrl":"https://doe.gov.ph/path/to/report.pdf"}` to the same endpoint. No city, province, or region is required: the importer counts pages locally, sends each page separately to the extractor, validates and upserts company prices only after every page succeeds, records a complete report, and expires affected research caches. The response contains `sourceUrl`, `status`, `added`, `updated`, `priceRows`, duplicate/aggregate counts, extraction usage/cost, and final `pageProgress`. This synchronous request has no pollable progress and can take longer than a proxy request timeout for a large PDF; use an import job for live progress. Repeating the request re-extracts the PDF; unchanged complete reports return `already_imported`. To import only one locality, supply both city and province, with optional region and sourceUrl as above. Partial location fields are rejected; city-only extraction remains a single whole-PDF request.
 
 This import endpoint does not accept `from` or `to`. Use the bulk backfill job for a date range.
 
 `GET /fuel-prices/doe/browse` is an authenticated, read-only feed for the Fuel Prices tab. It lists cities and municipalities with a recent stored report and includes the latest week of company prices for the first listed location. Add `?city=Quezon%20City&province=Metro%20Manila` to select a listed location. Both filters must be supplied together. It reads stored rows only; it does not geocode or import a PDF. A report qualifies if its week has started and its end is no more than seven Philippine calendar days old. The feed can be empty when no recent report has been imported.
 
 `POST /admin/fuel-prices/doe/import/jobs` starts a bulk import with `{"mode":"latest"}` or an inclusive historical backfill such as `{"mode":"backfill","from":"2026-09-01","to":"2026-09-30"}`. A backfill request is limited to 91 calendar days; larger archives should be imported in consecutive ranges. The endpoint returns `202` and a job ID. Poll `GET /admin/fuel-prices/doe/import/jobs/{jobId}` for per-PDF results, counts, and errors. One bulk job runs at a time. The server also starts a latest-data job roughly every six hours while it is running. This in-process schedule does not run while the host is asleep or stopped; the manual endpoint remains available.
+
+While a PDF is being extracted, its entry in `reports` has `status: "running"`. Its `pageProgress` is saved before and after each page, including the job heartbeat, so polling can show progress before that PDF finishes:
+
+```json
+{
+  "status": "running",
+  "pageProgress": {
+    "pagesTotal": 19,
+    "pagesCompleted": 3,
+    "currentPage": 4,
+    "pagesFailed": 0,
+    "pages": [
+      { "pageNumber": 1, "status": "completed", "attempts": 1, "priceRows": 34, "error": null },
+      { "pageNumber": 2, "status": "completed", "attempts": 1, "priceRows": 41, "error": null },
+      { "pageNumber": 3, "status": "completed", "attempts": 1, "priceRows": 19, "error": null },
+      { "pageNumber": 4, "status": "running", "attempts": 1, "priceRows": 0, "error": null }
+    ]
+  }
+}
+```
+
+This example omits queued entries for pages 5–19; actual responses include every counted page. `pagesCompleted` counts successfully read and validated pages, including readable pages with zero eligible company prices. `currentPage` is the page currently being extracted or retried, and is null between pages and after extraction. Page statuses are `queued`, `running`, `retrying`, `completed`, or `failed`; `priceRows` counts validated company rows on that page, not database inserts. INDEPENDENT, OVERALL RANGE, and COMMON PRICE remain excluded. A failed page is retried once without re-extracting earlier successful pages; remaining pages are still attempted. If any page remains failed, no prices from that report are saved, its result is `failed`, and the job finishes with gaps. Final report validation also checks consistent dates and conflicting duplicate prices across pages. All extraction requests, including readable billed failure/retry responses, contribute to report and job usage/cost.
+
+Progress is persisted in the existing job details JSON; no schema migration is required. Older job results have `pageProgress: null`. Successful extracted rows are retained in memory for retries within the current run, not as a durable page cache. A new job after interruption reprocesses the PDF. PDFs are bounded to 100 pages in addition to the existing download size limit.
 
 Bulk imports discover every PDF on the five DOE report pages for the selected week or range, including the newest PDF for each South Luzon subdivision. Each PDF is extracted for all clearly identified localities and upserted into `doe_fuel_price`. `doe_pump_price_report` records the source section, subdivision, dates, URL, content hash, and row count; `doe_import_job` retains job progress. Existing city imports are linked to partial legacy report records by the migration. Successful bulk imports mark a report complete. Missing or stale latest report groups appear as job gaps. When new rows arrive, affected research cache entries are expired so subsequent location requests use the stored DOE rows. Both latest and backfill jobs re-extract previously imported PDFs so newly recognized company rows can be added even when the PDF content has not changed. This incurs PDF extraction cost on each run.
 
@@ -27,3 +51,5 @@ An `already_imported` report means re-extraction found no database changes. Prev
 DOE reports and PDFs can change format. An unreadable or ambiguous extraction is rejected or falls through to the existing sources. Compare imported prices with the linked PDF before relying on them; the PDF extraction is not guaranteed to copy every cell correctly. Locations absent from a DOE PDF continue through the existing fallback. A new or not-yet-imported locality can still trigger an on-demand PDF extraction and add latency and OpenAI cost.
 
 DOE city import responses include `model`, `usage`, and `estimatedCost`, using the same token and USD estimate contracts as `/ai/fuel-prices`. A city import that skips extraction returns null billing fields. Bulk job status includes these fields for each PDF and aggregate `usage` and `estimatedCost` for recorded extraction responses, including report failures after a readable AI response. The queued response has null totals until usage is recorded. Usage is saved in the existing job details JSON and survives restarts; historical jobs have null totals. Missing provider usage, unsupported model pricing, or mixed pricing rates can make totals unavailable; per-PDF values remain available. Estimates reuse the existing backend pricing table, with zero web-search calls for PDF extraction, and are not billing invoices. Requests that time out or return an unreadable response cannot report their provider usage.
+
+Run the focused page-import checks from the repository root with `dotnet run --project GasPriceBackend/tests/DoePageImportChecks`. Optionally append `-- /path/to/report.pdf` to exercise splitting a real multi-page PDF. These checks simulate the extraction service without paid AI calls or production database access. Set `DOE_TEST_PGPORT` only for a disposable localhost PostgreSQL cluster to also exercise authenticated HTTP job polling and synchronous imports against `gasprice_doe_page_test`; those optional checks apply existing migrations to that test database and retain normal admin rate limits.
