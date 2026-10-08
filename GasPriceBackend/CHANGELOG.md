@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Queue manual DOE city/province and source-URL imports with HTTP `202`, a job ID, and the shared job polling URL. Persist requests and final results, and serialize individual and bulk imports through one durable queue.
 - Show expected and extracted dates in DOE page coverage mismatch errors, with separate messages for missing, malformed, and invalid date ranges.
 - Refresh location research caches when newly imported DOE company prices become available, so prior website or AI results do not hide newer DOE rows.
 - Prefer fresh DOE city/company pump prices on fuel-price cache misses before configured websites and AI web search.

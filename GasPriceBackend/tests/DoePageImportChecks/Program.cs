@@ -213,6 +213,20 @@ sealed class FakeExtractor(string scenario) : HttpMessageHandler
         using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(token));
         var content = body.RootElement.GetProperty("input")[0].GetProperty("content");
         var prompt = content[0].GetProperty("text").GetString()!;
+        if (!prompt.Contains("original page "))
+        {
+            var cityExtraction = new DoeFuelPriceExtraction("2026-09-29", "2026-10-05",
+                [new ExtractedDoeFuelPrice("PETRON", "RON 91", 90, 90)]);
+            var cityResponse = new
+            {
+                model = "gpt-5.6-luna", status = "completed",
+                usage = new { input_tokens = 100, output_tokens = 10, total_tokens = 110 },
+                output = new[] { new { type = "message", content = new[]
+                    { new { type = "output_text", text = JsonSerializer.Serialize(cityExtraction) } } } }
+            };
+            return new HttpResponseMessage(HttpStatusCode.OK)
+                { Content = new StringContent(JsonSerializer.Serialize(cityResponse), Encoding.UTF8, "application/json") };
+        }
         var number = int.Parse(System.Text.RegularExpressions.Regex.Match(prompt, @"original page (\d+)").Groups[1].Value);
         var data = content[1].GetProperty("file_data").GetString()!.Split(',', 2)[1];
         using var stream = new MemoryStream(Convert.FromBase64String(data));

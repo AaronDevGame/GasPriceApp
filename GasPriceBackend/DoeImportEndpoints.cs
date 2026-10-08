@@ -14,6 +14,16 @@ public sealed record DoePriceHistoryPage(IReadOnlyList<DoePriceHistoryRow> Price
 
 public static class DoeImportEndpoints
 {
+    public static IResult Accepted(HttpRequest request, DoeImportJob job, string instanceId)
+    {
+        request.HttpContext.Response.Headers.Location = DoeImportWorker.ToStatus(job).StatusUrl;
+        return Results.Json(new ApiResponse<DoeImportJobStatus>
+        {
+            Code = StatusCodes.Status202Accepted, Message = "doe_import_queued",
+            InstanceId = instanceId, Data = DoeImportWorker.ToStatus(job)
+        }, statusCode: StatusCodes.Status202Accepted);
+    }
+
     public static void MapDoeImportEndpoints(this WebApplication app, string instanceId)
     {
         app.MapPost(ApiRoutes.AdminDoeFuelPricesImportJobs, async (
@@ -68,26 +78,16 @@ public static class DoeImportEndpoints
             }
             else return ApiResults.BadRequest("mode must be latest or backfill.", instanceId);
 
-            var active = await db.DoeImportJobs.AsNoTracking()
-                .FirstOrDefaultAsync(j => j.ActiveSlot == 1, cancellationToken);
-            if (active is not null)
-                return ApiResults.BadRequest("A DOE import job is already active: " + active.Id, instanceId);
             var job = new DoeImportJob
             {
                 Id = Guid.NewGuid(), Mode = mode, From = from, To = to,
-                Status = "queued", ActiveSlot = 1,
+                Status = "queued",
                 CreatedAtUtc = timeProvider.GetUtcNow().UtcDateTime
             };
             db.DoeImportJobs.Add(job);
-            try { await db.SaveChangesAsync(cancellationToken); }
-            catch (DbUpdateException)
-            { return ApiResults.BadRequest("A DOE import job is already active.", instanceId); }
+            await db.SaveChangesAsync(cancellationToken);
             worker.Wake();
-            return Results.Json(new ApiResponse<DoeImportJobStatus>
-            {
-                Code = StatusCodes.Status202Accepted, Message = "doe_import_queued",
-                InstanceId = instanceId, Data = DoeImportWorker.ToStatus(job)
-            }, statusCode: StatusCodes.Status202Accepted);
+            return Accepted(request, job, instanceId);
         });
 
         app.MapGet(ApiRoutes.AdminDoeFuelPricesImportJob, async (

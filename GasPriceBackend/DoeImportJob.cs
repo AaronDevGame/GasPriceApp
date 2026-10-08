@@ -17,5 +17,7 @@ public sealed class DoeImportJob
     public int PriceRowsAdded { get; set; }
     public int PriceRowsUpdated { get; set; }
     public string DetailsJson { get; set; } = "[]";
+    public string? RequestJson { get; set; }
+    public string? ResultJson { get; set; }
     public string? Error { get; set; }
 }

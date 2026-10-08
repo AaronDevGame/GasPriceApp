@@ -122,6 +122,11 @@ static class DoePageJobIntegration
         var pollPath = ApiRoutes.AdminDoeFuelPricesImportJob.Replace("{jobId}", Guid.NewGuid().ToString());
         Check((await client.GetAsync(pollPath)).StatusCode == HttpStatusCode.Unauthorized,
             "Anonymous job polling must be rejected.");
+        await Task.Delay(1100);
+        using var anonymousImport = await client.PostAsJsonAsync(ApiRoutes.AdminDoeFuelPricesImport,
+            new { sourceUrl = "https://doe.gov.ph/report.pdf" });
+        Check(anonymousImport.StatusCode == HttpStatusCode.Unauthorized,
+            "Anonymous manual imports must be rejected before queueing.");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "test-only-admin-key");
         await Task.Delay(1100); // Keep the actual admin cooldown.
         using var created = await client.PostAsJsonAsync(ApiRoutes.AdminDoeFuelPricesImportJobs,
@@ -135,12 +140,15 @@ static class DoePageJobIntegration
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var job = await db.DoeImportJobs.SingleAsync(item => item.Id == jobId);
             job.Status = "running";
+            job.ActiveSlot = 1;
+            job.HeartbeatAtUtc = DateTime.UtcNow;
             job.StartedAtUtc = DateTime.UtcNow;
             await db.SaveChangesAsync();
         }
         var worker = app.Services.GetRequiredService<DoeImportWorker>();
         var run = (Task)typeof(DoeImportWorker).GetMethod("RunJobAsync", BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(worker, [jobId, CancellationToken.None])!;
+        Guid locationId = default;
         try
         {
             await extractor.PageFourStarted.Task.WaitAsync(TimeSpan.FromSeconds(20));
@@ -155,8 +163,19 @@ static class DoePageJobIntegration
                 progress.GetProperty("pagesCompleted").GetInt32() == 3 &&
                 progress.GetProperty("currentPage").GetInt32() == 4,
                 "The GET endpoint must expose persisted 3/N progress while page 4 is waiting.");
+            await Task.Delay(1100);
+            using var locationCreated = await client.PostAsJsonAsync(ApiRoutes.AdminDoeFuelPricesImport,
+                new { city = "City 1", province = "Basilan", sourceUrl = "https://doe.gov.ph/report.pdf" });
+            Check(locationCreated.StatusCode == HttpStatusCode.Accepted,
+                "A location import must queue while a bulk import is running.");
+            using var locationJson = JsonDocument.Parse(await locationCreated.Content.ReadAsStringAsync());
+            locationId = locationJson.RootElement.GetProperty("data").GetProperty("jobId").GetGuid();
+            await (Task)typeof(DoeImportWorker).GetMethod("ProcessQueuedAsync", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(worker, [CancellationToken.None])!;
             using var scope = app.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            Check((await db.DoeImportJobs.SingleAsync(j => j.Id == locationId)).Status == "queued",
+                "A queued manual import must wait for the active bulk import.");
             Check(await db.DoeFuelPrices.CountAsync() == 0, "No page prices may be saved before all pages finish.");
             Console.WriteLine("PASS: authenticated JobID polling exposes live page 4 progress before any prices are saved");
         }
@@ -183,14 +202,48 @@ static class DoePageJobIntegration
         await Task.Delay(1100);
         using var direct = await client.PostAsJsonAsync(ApiRoutes.AdminDoeFuelPricesImport,
             new { sourceUrl = "https://doe.gov.ph/report.pdf" });
-        Check(direct.IsSuccessStatusCode, "The synchronous report endpoint must still succeed.");
+        Check(direct.StatusCode == HttpStatusCode.Accepted, "Manual PDF imports must return 202 before extraction.");
         using var directJson = JsonDocument.Parse(await direct.Content.ReadAsStringAsync());
         var directData = directJson.RootElement.GetProperty("data");
-        Check(directData.GetProperty("status").GetString() == "already_imported" &&
-            directData.GetProperty("added").GetInt32() == 0 &&
-            directData.GetProperty("pageProgress").GetProperty("pagesCompleted").GetInt32() == pageCount,
-            "An unchanged synchronous import must return final page totals and no duplicate inserts.");
-        Console.WriteLine("PASS: job completes with named-company rows; synchronous repeat returns final totals without duplicates");
+        var directId = directData.GetProperty("jobId").GetGuid();
+        var directPath = directData.GetProperty("statusUrl").GetString()!;
+        Check(direct.Headers.Location?.ToString() == directPath &&
+            directData.GetProperty("status").GetString() == "queued" &&
+            directData.GetProperty("result").ValueKind == JsonValueKind.Null,
+            "Accepted manual imports must include their shared polling URL and no premature result.");
+        await (Task)typeof(DoeImportWorker).GetMethod("ProcessQueuedAsync", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(worker, [CancellationToken.None])!;
+        await Task.Delay(1100);
+        using var directPoll = await client.GetAsync(directPath);
+        using var directPollJson = JsonDocument.Parse(await directPoll.Content.ReadAsStringAsync());
+        var directResult = directPollJson.RootElement.GetProperty("data").GetProperty("result");
+        Check(directResult.GetProperty("status").GetString() == "already_imported" &&
+            directResult.GetProperty("added").GetInt32() == 0 &&
+            directResult.GetProperty("pageProgress").GetProperty("pagesCompleted").GetInt32() == pageCount,
+            "Polling an unchanged manual import must return final page totals without duplicate inserts.");
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var locationJob = await db.DoeImportJobs.SingleAsync(j => j.Id == locationId);
+            Check(locationJob.Status == "completed" && locationJob.ActiveSlot is null &&
+                DoeImportWorker.ToStatus(locationJob).Result!.Value.GetProperty("status").GetString() == "already_imported",
+                "The queued location import must complete after the bulk import and retain its original result.");
+            Check(!await db.DoeImportJobs.AnyAsync(j => j.ActiveSlot != null), "Finished imports must release the worker slot.");
+        }
+        foreach (var invalidBody in new[]
+        {
+            "{}", "{\"city\":\"City 1\"}",
+            "{\"city\":\"City 1\",\"province\":\"Basilan\",\"unknown\":true}",
+            "{\"sourceUrl\":\"https://example.com/report.pdf\"}",
+            "{\"sourceUrl\":\"https://doe.gov.ph/report.pdf\",\"sourceUrl\":null}", "{"
+        })
+        {
+            await Task.Delay(1100);
+            using var invalid = await client.PostAsync(ApiRoutes.AdminDoeFuelPricesImport,
+                new StringContent(invalidBody, System.Text.Encoding.UTF8, "application/json"));
+            Check(invalid.StatusCode == HttpStatusCode.BadRequest, "Invalid manual requests must be rejected before queueing.");
+        }
+        Console.WriteLine("PASS: manual and bulk imports share a durable serial queue; polling returns completed PDF/location results and rejects invalid requests");
         extractor.Scenario = "bad_price";
         using (var scope = app.Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<AppDbContext>().DoePageCaches.ExecuteDeleteAsync();
@@ -256,6 +309,32 @@ static class DoePageJobIntegration
                 "Crash recovery must retain page progress without leaving the report marked running.");
         }
         Console.WriteLine("PASS: interrupted jobs preserve page progress and mark the running report interrupted");
+        extractor.Scenario = "failed";
+        using (var scope = app.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<AppDbContext>().DoePageCaches.ExecuteDeleteAsync();
+        await Task.Delay(1100);
+        using var failedCreated = await client.PostAsJsonAsync(ApiRoutes.AdminDoeFuelPricesImport,
+            new { sourceUrl = "https://doe.gov.ph/report.pdf" });
+        Check(failedCreated.StatusCode == HttpStatusCode.Accepted, "A valid request must queue before upstream work.");
+        using var failedCreatedJson = JsonDocument.Parse(await failedCreated.Content.ReadAsStringAsync());
+        var failedPath = failedCreatedJson.RootElement.GetProperty("data").GetProperty("statusUrl").GetString()!;
+        await (Task)typeof(DoeImportWorker).GetMethod("ProcessQueuedAsync", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(worker, [CancellationToken.None])!;
+        await Task.Delay(1100);
+        using var failedResponse = await client.GetAsync(failedPath);
+        using var failedJson = JsonDocument.Parse(await failedResponse.Content.ReadAsStringAsync());
+        var failedData = failedJson.RootElement.GetProperty("data");
+        Check(failedData.GetProperty("status").GetString() == "failed" &&
+            failedData.GetProperty("reportsFailed").GetInt32() == 1 &&
+            failedData.GetProperty("reports")[0].GetProperty("status").GetString() == "failed" &&
+            failedData.GetProperty("reports")[0].GetProperty("pageProgress").GetProperty("pagesFailed").GetInt32() == 1 &&
+            failedData.GetProperty("error").ValueKind == JsonValueKind.String &&
+            failedData.GetProperty("result").ValueKind == JsonValueKind.Null,
+            "Failed manual imports must persist final failure diagnostics and no successful result.");
+        using (var scope = app.Services.CreateScope())
+            Check(!await scope.ServiceProvider.GetRequiredService<AppDbContext>().DoeImportJobs.AnyAsync(j => j.ActiveSlot != null),
+                "Failed imports must release the slot for subsequent jobs.");
+        Console.WriteLine("PASS: failed manual imports retain page diagnostics and release the shared worker slot");
         await app.StopAsync();
     }
 

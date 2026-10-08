@@ -1,5 +1,8 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+
+public sealed record DoeSingleImportRequest(string? City, string? Province, string? Region, string? SourceUrl);
 
 public sealed record DoeImportReportStatus(string Section, string? Subdivision,
     DateOnly? WeekStart, string SourceUrl, string Status, int Added, int Updated,
@@ -21,6 +24,9 @@ public sealed record DoeImportJobStatus(Guid JobId, string Mode, DateOnly? From,
     int ReportsSkipped, int ReportsFailed, int PriceRowsAdded, int PriceRowsUpdated,
     IReadOnlyList<DoeImportReportStatus> Reports, string? Error)
 {
+    public string StatusUrl => ApiRoutes.AdminDoeFuelPricesImportJob.Replace("{jobId}", JobId.ToString());
+    public DoeSingleImportRequest? Request { get; init; }
+    public JsonElement? Result { get; init; }
     // Null means no recorded usage; historical jobs cannot be reconstructed.
     public AiChatTokenUsage? Usage => DoeImportBilling.SumUsage(Reports);
     public OpenAiCostEstimate? EstimatedCost => DoeImportBilling.SumCost(Reports);
@@ -43,12 +49,16 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
         job.StartedAtUtc, job.FinishedAtUtc, job.ReportsFound,
         job.ReportsImported, job.ReportsSkipped, job.ReportsFailed,
         job.PriceRowsAdded, job.PriceRowsUpdated,
-        JsonSerializer.Deserialize<DoeImportReportStatus[]>(job.DetailsJson) ?? [], job.Error);
+        JsonSerializer.Deserialize<DoeImportReportStatus[]>(job.DetailsJson) ?? [], job.Error)
+    {
+        Request = job.RequestJson is null ? null : JsonSerializer.Deserialize<DoeSingleImportRequest>(job.RequestJson),
+        Result = job.ResultJson is null ? null : JsonSerializer.Deserialize<JsonElement>(job.ResultJson)
+    };
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // The database retains jobs across restarts. A stale running job can be retried
-        // after its worker has stopped; a live worker updates it after each report.
+        // after its worker has stopped; live imports update their heartbeat during work.
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -60,7 +70,7 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex)
             {
-                logger.LogError(ex, "DOE bulk import worker loop failed.");
+                logger.LogError(ex, "DOE import worker loop failed.");
             }
             try { await _wake.WaitAsync(TimeSpan.FromMinutes(1), stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
@@ -96,17 +106,20 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
         var importer = scope.ServiceProvider.GetRequiredService<DoeFuelPriceImporter>();
         if (!importer.IsConfigured) return;
         var now = timeProvider.GetUtcNow().UtcDateTime;
+        // Serialize automatic scheduling across hosts now that queued jobs do not own the active slot.
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(746302191)", cancellationToken);
         if (await db.DoeImportJobs.AsNoTracking().AnyAsync(j =>
-            j.ActiveSlot == 1 ||
+            (j.Status == "queued" || j.Status == "running") ||
             (j.Mode == "latest" && j.CreatedAtUtc > now - ScheduleInterval),
             cancellationToken)) return;
         db.DoeImportJobs.Add(new DoeImportJob
         {
             Id = Guid.NewGuid(), Mode = "latest", Status = "queued",
-            ActiveSlot = 1, CreatedAtUtc = now
+            CreatedAtUtc = now
         });
-        try { await db.SaveChangesAsync(cancellationToken); }
-        catch (DbUpdateException) { /* Another instance scheduled the active slot. */ }
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private async Task ProcessQueuedAsync(CancellationToken cancellationToken)
@@ -119,12 +132,24 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
             .ToListAsync(cancellationToken);
         foreach (var id in queued)
         {
-            var claimed = await db.DoeImportJobs.Where(j => j.Id == id && j.Status == "queued")
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(j => j.Status, "running")
-                    .SetProperty(j => j.StartedAtUtc, timeProvider.GetUtcNow().UtcDateTime)
-                    .SetProperty(j => j.HeartbeatAtUtc, timeProvider.GetUtcNow().UtcDateTime),
-                    cancellationToken);
+            if (await db.DoeImportJobs.AsNoTracking().AnyAsync(
+                j => j.ActiveSlot == 1 && j.Id != id, cancellationToken)) return;
+            int claimed;
+            try
+            {
+                claimed = await db.DoeImportJobs.Where(j => j.Id == id && j.Status == "queued")
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(j => j.ActiveSlot, (int?)1)
+                        .SetProperty(j => j.Status, "running")
+                        .SetProperty(j => j.StartedAtUtc, timeProvider.GetUtcNow().UtcDateTime)
+                        .SetProperty(j => j.HeartbeatAtUtc, timeProvider.GetUtcNow().UtcDateTime),
+                        cancellationToken);
+            }
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+            {
+                // Another host claimed the single database-backed worker slot.
+                return;
+            }
             if (claimed == 0) continue;
             await RunJobAsync(id, cancellationToken);
         }
@@ -139,6 +164,11 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
         var results = new List<DoeImportReportStatus>();
         try
         {
+            if (job.Mode is "location" or "report")
+            {
+                await RunSingleImportAsync(job, db, importer, results, cancellationToken);
+                return;
+            }
             var discovery = await importer.FindReportsAsync(job.From, job.To,
                 timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
             var reports = discovery.Reports;
@@ -276,6 +306,17 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
             logger.LogError(ex, "DOE import job {JobId} failed.", id);
             job.Status = "failed";
             job.Error = SafeError(ex);
+            job.ReportsFailed = Math.Max(1, job.ReportsFailed);
+            for (var index = 0; index < results.Count; index++)
+                if (results[index].Status == "running")
+                    results[index] = results[index] with
+                    {
+                        Status = "failed", Error = job.Error,
+                        Model = importer.ExtractionModel, Usage = importer.ExtractionUsage,
+                        EstimatedCost = importer.ExtractionCost,
+                        PageProgress = importer.ExtractionProgress
+                    };
+            job.DetailsJson = JsonSerializer.Serialize(results);
         }
         finally
         {
@@ -283,6 +324,93 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
             job.FinishedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync(CancellationToken.None);
         }
+    }
+
+    private async Task RunSingleImportAsync(DoeImportJob job, AppDbContext db,
+        DoeFuelPriceImporter importer, List<DoeImportReportStatus> results,
+        CancellationToken cancellationToken)
+    {
+        var request = JsonSerializer.Deserialize<DoeSingleImportRequest>(job.RequestJson
+            ?? throw new InvalidDataException("The import request is missing."))
+            ?? throw new InvalidDataException("The import request is invalid.");
+        job.ReportsFound = 1;
+        results.Add(new("", null, null, request.SourceUrl ?? "", "running", 0, 0, null));
+        job.DetailsJson = JsonSerializer.Serialize(results);
+        await db.SaveChangesAsync(cancellationToken);
+        using var heartbeatStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var heartbeat = KeepAliveAsync(job.Id, heartbeatStop.Token);
+        try
+        {
+            using var importScope = scopes.CreateScope();
+            var importDb = importScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            if (job.Mode == "report")
+            {
+                var result = await importer.ImportReportFromUrlAsync(importDb, request.SourceUrl!,
+                    timeProvider.GetUtcNow().UtcDateTime, cancellationToken, async (progress, token) =>
+                    {
+                        results[0] = results[0] with
+                        {
+                            PageProgress = progress, Model = importer.ExtractionModel,
+                            Usage = importer.ExtractionUsage, EstimatedCost = importer.ExtractionCost,
+                            RowsSkipped = progress.RowsSkipped
+                        };
+                        job.DetailsJson = JsonSerializer.Serialize(results);
+                        await db.SaveChangesAsync(token);
+                    });
+                job.ResultJson = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                results[0] = results[0] with
+                {
+                    SourceUrl = result.SourceUrl, Status = result.Status,
+                    Added = result.Added, Updated = result.Updated,
+                    Model = result.Model, Usage = result.Usage, EstimatedCost = result.EstimatedCost,
+                    DuplicatesIgnored = result.DuplicatesIgnored, AggregateRowsIgnored = result.AggregateRowsIgnored,
+                    PageProgress = result.PageProgress, RowsSkipped = result.RowsSkipped, RowErrors = result.RowErrors
+                };
+            }
+            else
+            {
+                var result = await importer.ImportAsync(importDb,
+                    new ResolvedFuelLocation(request.City!, request.Province!, request.Region),
+                    timeProvider.GetUtcNow().UtcDateTime, request.SourceUrl, cancellationToken);
+                job.ResultJson = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                results[0] = results[0] with
+                {
+                    SourceUrl = result.SourceUrl, WeekStart = result.WeekStart, Status = result.Status,
+                    Added = result.Added, Updated = result.Updated,
+                    Model = result.Model, Usage = result.Usage, EstimatedCost = result.EstimatedCost
+                };
+            }
+            var report = results[0];
+            job.PriceRowsAdded = report.Added;
+            job.PriceRowsUpdated = report.Updated;
+            if (report.Status == "partial") job.ReportsFailed = 1;
+            else if (report.Status == "already_imported") job.ReportsSkipped = 1;
+            else job.ReportsImported = 1;
+            job.DetailsJson = JsonSerializer.Serialize(results);
+            job.Status = job.ReportsFailed == 0 ? "completed" : "completed_with_gaps";
+        }
+        finally
+        {
+            await heartbeatStop.CancelAsync();
+            await heartbeat;
+        }
+    }
+
+    private async Task KeepAliveAsync(Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                using var scope = scopes.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                await db.DoeImportJobs.Where(j => j.Id == id && j.Status == "running")
+                    .ExecuteUpdateAsync(s => s.SetProperty(j => j.HeartbeatAtUtc,
+                        timeProvider.GetUtcNow().UtcDateTime), cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
     }
 
     private static string SafeError(Exception ex) => ex switch

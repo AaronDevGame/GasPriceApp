@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http.Features;
 
 public static class DoeFuelPriceEndpoints
 {
@@ -44,12 +45,15 @@ public static class DoeFuelPriceEndpoints
 
         app.MapPost(ApiRoutes.AdminDoeFuelPricesImport, async (
             HttpRequest request, AppDbContext db, DoeFuelPriceImporter importer,
-            TimeProvider timeProvider, CancellationToken cancellationToken) =>
+            DoeImportWorker worker, TimeProvider timeProvider, CancellationToken cancellationToken) =>
         {
-            if (!request.HasJsonContentType())
-                return ApiResults.BadRequest("Request body must be JSON.", instanceId);
+            if (!request.HasJsonContentType() || request.ContentLength is > 4096)
+                return ApiResults.BadRequest("Provide a small JSON request body.", instanceId);
+            var bodySizeFeature = request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
+            if (bodySizeFeature is { IsReadOnly: false }) bodySizeFeature.MaxRequestBodySize = 4096;
             JsonDocument document;
-            try { document = await JsonDocument.ParseAsync(request.Body, cancellationToken: cancellationToken); }
+            try { document = await JsonDocument.ParseAsync(request.Body,
+                new JsonDocumentOptions { MaxDepth = 3 }, cancellationToken); }
             catch (JsonException)
             { return ApiResults.BadRequest("Request body must be valid JSON.", instanceId); }
             using var _ = document;
@@ -87,27 +91,16 @@ public static class DoeFuelPriceEndpoints
             }
             if (!importer.IsConfigured)
                 return ApiResults.ServiceUnavailable("doe_price_extractor_not_configured", instanceId);
-            try
+            var job = new DoeImportJob
             {
-                if (reportOnly)
-                {
-                    var report = await importer.ImportReportFromUrlAsync(db, url!,
-                        timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
-                    return ApiResults.Ok(report, "doe_fuel_prices_" + report.Status, instanceId);
-                }
-                var result = await importer.ImportAsync(db,
-                    new ResolvedFuelLocation(city!, province!, region),
-                    timeProvider.GetUtcNow().UtcDateTime, url, cancellationToken);
-                return ApiResults.Ok(result, "doe_fuel_prices_" + result.Status, instanceId);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            { return ApiResults.GatewayTimeout("doe_price_import_timeout", instanceId); }
-            catch (HttpRequestException)
-            { return ApiResults.BadGateway("doe_price_upstream_unavailable", instanceId); }
-            catch (InvalidDataException ex)
-            { return ApiResults.BadGateway("doe_price_import_invalid", instanceId, ex.Message); }
-            catch (JsonException)
-            { return ApiResults.BadGateway("doe_price_import_invalid", instanceId); }
+                Id = Guid.NewGuid(), Mode = reportOnly ? "report" : "location",
+                CreatedAtUtc = timeProvider.GetUtcNow().UtcDateTime,
+                RequestJson = JsonSerializer.Serialize(new DoeSingleImportRequest(city, province, region, url))
+            };
+            db.DoeImportJobs.Add(job);
+            await db.SaveChangesAsync(cancellationToken);
+            worker.Wake();
+            return DoeImportEndpoints.Accepted(request, job, instanceId);
         });
     }
 

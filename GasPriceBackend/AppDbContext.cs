@@ -220,6 +220,8 @@ public class AppDbContext : DbContext
             e.Property(p => p.PriceRowsAdded).HasColumnName("price_rows_added");
             e.Property(p => p.PriceRowsUpdated).HasColumnName("price_rows_updated");
             e.Property(p => p.DetailsJson).HasColumnName("details_json").HasColumnType("jsonb");
+            e.Property(p => p.RequestJson).HasColumnName("request_json").HasColumnType("jsonb");
+            e.Property(p => p.ResultJson).HasColumnName("result_json").HasColumnType("jsonb");
             e.Property(p => p.Error).HasColumnName("error").HasMaxLength(500);
             e.HasIndex(p => new { p.Status, p.CreatedAtUtc });
             e.HasIndex(p => p.ActiveSlot).IsUnique().HasFilter("active_slot IS NOT NULL");

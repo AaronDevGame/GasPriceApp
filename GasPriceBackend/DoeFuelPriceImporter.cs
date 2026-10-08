@@ -481,9 +481,10 @@ public sealed class DoeFuelPriceImporter(
     }
 
     public Task<DoeReportImportResult> ImportReportFromUrlAsync(AppDbContext db,
-        string sourceUrl, DateTime nowUtc, CancellationToken cancellationToken) =>
+        string sourceUrl, DateTime nowUtc, CancellationToken cancellationToken,
+        Func<DoeReportPageProgress, CancellationToken, Task>? progress = null) =>
         ImportReportCoreAsync(db, FuelAdjustmentImporter.ValidatePdfUrl(sourceUrl),
-            null, nowUtc, null, null, cancellationToken, null);
+            null, nowUtc, null, null, cancellationToken, progress);
 
     public Task<DoeReportImportResult> ImportReportAsync(AppDbContext db,
         DoeReportSource source, DateTime nowUtc, DateOnly? from, DateOnly? to,
