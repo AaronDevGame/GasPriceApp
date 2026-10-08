@@ -33,7 +33,7 @@ public sealed record DoeImportJobStatus(Guid JobId, string Mode, DateOnly? From,
 }
 
 public sealed class DoeImportWorker(IServiceScopeFactory scopes,
-    TimeProvider timeProvider, ILogger<DoeImportWorker> logger) : BackgroundService
+    TimeProvider timeProvider, IConfiguration configuration, ILogger<DoeImportWorker> logger) : BackgroundService
 {
     private const int MaxReportsPerJob = 120;
     private static readonly TimeSpan ScheduleInterval = TimeSpan.FromHours(6);
@@ -101,6 +101,8 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
 
     private async Task ScheduleLatestAsync(CancellationToken cancellationToken)
     {
+        if (!configuration.GetValue<bool>("DoeImport:ScheduleEnabled")) return;
+
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var importer = scope.ServiceProvider.GetRequiredService<DoeFuelPriceImporter>();
