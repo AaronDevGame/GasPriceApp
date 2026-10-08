@@ -160,3 +160,32 @@ test("rejects removed player-data routes", async () => {
     assert.equal(response.status, 404);
   }
 });
+
+test("forwards news and subscription methods while rejecting arbitrary nested paths and admin imports", async () => {
+  const originalFetch = globalThis.fetch;
+  const forwarded = [];
+  globalThis.fetch = async (input, init) => {
+    forwarded.push({ url: input.toString(), method: init.method });
+    return Response.json({ data: null });
+  };
+  try {
+    for (const [path, method] of [
+      ["/fuel-news?limit=20", "GET"], ["/fuel-news/latest", "GET"],
+      ["/fuel-news/12345678-1234-1234-1234-123456789abc", "GET"],
+      ["/fuel-news/subscription", "GET"], ["/fuel-news/subscription", "PUT"], ["/fuel-news/subscription", "DELETE"],
+    ]) {
+      const response = await worker.fetch(new Request(`https://proxy.example${path}`, {
+        method, headers: { "CF-Connecting-IP": "203.0.113.10" },
+      }), env);
+      assert.equal(response.status, 200);
+      assert.equal(forwarded.at(-1).url, env.ORIGIN_URL + path);
+      assert.equal(forwarded.at(-1).method, method);
+    }
+    const count = forwarded.length;
+    for (const path of ["/admin/fuel-news/import", "/fuel-news/arbitrary", "/fuel-news/latest/nested"]) {
+      assert.equal((await worker.fetch(new Request(`https://proxy.example${path}`), env)).status, 404);
+    }
+    assert.equal((await worker.fetch(new Request("https://proxy.example/fuel-news/latest", { method: "POST" }), env)).status, 405);
+    assert.equal(forwarded.length, count);
+  } finally { globalThis.fetch = originalFetch; }
+});

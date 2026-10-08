@@ -13,6 +13,9 @@ const ALLOWED_ROUTES = new Map([
   ["/ai/chat", new Set(["POST"])],
   ["/ai/fuel-prices", new Set(["POST"])],
   ["/fuel-prices", new Set(["GET"])],
+  ["/fuel-news", new Set(["GET"])],
+  ["/fuel-news/latest", new Set(["GET"])],
+  ["/fuel-news/subscription", new Set(["GET", "PUT", "DELETE"])],
   ["/fuel-prices/featured", new Set(["GET"])],
   ["/fuel-prices/history", new Set(["GET"])],
   ["/fuel-prices/adjustments", new Set(["GET"])],
@@ -57,7 +60,14 @@ function jsonError(status, error) {
 }
 
 function isAllowed(pathname, method) {
-  return ALLOWED_ROUTES.get(pathname)?.has(method) ?? false;
+  return allowedMethods(pathname)?.has(method) ?? false;
+}
+
+function allowedMethods(pathname) {
+  if (/^\/fuel-news\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pathname)) {
+    return new Set(["GET"]);
+  }
+  return ALLOWED_ROUTES.get(pathname);
 }
 
 function isPlausibleIpAddress(value) {
@@ -70,8 +80,7 @@ function isPlausibleIpAddress(value) {
 export default {
   async fetch(request, env) {
     const incomingUrl = new URL(request.url);
-    const allowedMethods = ALLOWED_ROUTES.get(incomingUrl.pathname);
-    if (!allowedMethods) {
+    if (!allowedMethods(incomingUrl.pathname)) {
       return jsonError(404, "route_not_available");
     }
     if (!isAllowed(incomingUrl.pathname, request.method)) {
