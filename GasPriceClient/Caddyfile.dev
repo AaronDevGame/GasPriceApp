@@ -1,7 +1,7 @@
 https://localhost:8443 {
 	tls internal
 
-	@api path /auth/* /player/* /fuel-prices /fuel-prices/* /ai/*
+	@api path /auth/* /player/* /fuel-prices /fuel-prices/* /fuel-news /fuel-news/* /ai/*
 	handle @api {
 		header {
 			Cache-Control "no-store"

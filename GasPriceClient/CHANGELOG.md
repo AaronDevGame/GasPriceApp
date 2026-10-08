@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- Show sourced fuel news in the News tab, full articles with adjustment amounts and Philippine effective dates, and the latest relevant update below the Overview header. News loads independently of guest authentication and location lookup.
+- Add native opt-in confirmed fuel alerts, optional forecasts, and notification links to articles for configured Expo builds.
+
 ### Changed
 - Rename the default Gas Price tab to Overview and place four tabs in the order Overview, Fuel Prices, News, Weekly Changes.
 - Show a city-searchable DOE company price comparison in the new Fuel Prices tab; reserve the News tab for a future feature.
