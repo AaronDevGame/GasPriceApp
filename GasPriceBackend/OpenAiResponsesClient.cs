@@ -450,6 +450,9 @@ public static class OpenAiPricing
         if (usage is null || !TryGetTokenRates(model, out var rates))
             return null;
 
+        if (usage.InputTokens > 272_000)
+            rates = new TokenRates(rates.Input * 2, rates.CachedInput * 2, rates.Output * 1.5m);
+
         var cachedTokens = Math.Clamp(usage.CachedInputTokens, 0, usage.InputTokens);
         var uncachedTokens = usage.InputTokens - cachedTokens;
         var inputCost =
@@ -473,6 +476,11 @@ public static class OpenAiPricing
 
     private static bool TryGetTokenRates(string model, out TokenRates rates)
     {
+        if (model == "gpt-6-luna" || model.StartsWith("gpt-6-luna-", StringComparison.Ordinal))
+        {
+            rates = new TokenRates(0.10m, 0.01m, 0.50m);
+            return true;
+        }
         if (model.StartsWith("gpt-5.6-luna", StringComparison.Ordinal))
         {
             rates = new TokenRates(0.20m, 0.02m, 1.20m);

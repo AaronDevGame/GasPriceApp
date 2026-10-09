@@ -90,7 +90,7 @@ public sealed record ValidatedDoeBulkRows(IReadOnlyList<ExtractedDoeBulkPrice> R
     public IReadOnlyList<DoePriceRowError> Errors { get; init; } = [];
 }
 
-public sealed class DoeFuelPriceImporter(
+public sealed partial class DoeFuelPriceImporter(
     HttpClient sourceClient,
     IHttpClientFactory clients,
     IConfiguration configuration,
@@ -923,7 +923,8 @@ public sealed class DoeFuelPriceImporter(
                     var extraction = fromCache
                         ? JsonSerializer.Deserialize<DoePageExtraction>(cachedPages[pageNumber].ExtractionJson)
                             ?? throw new InvalidDataException("The cached page result was invalid.")
-                        : await ExtractDocumentAsync<DoePageExtraction>(pagePdf,
+                        : _benchmarkLocalPages?.GetValueOrDefault(pageNumber)
+                            ?? await ExtractDocumentAsync<DoePageExtraction>(pagePdf,
                             _bulkInstructions,
                             $"Extract only original page {pageNumber} of {document.Count}. " + context,
                             PageSchema, 24000, cancellationToken);
@@ -1003,6 +1004,8 @@ public sealed class DoeFuelPriceImporter(
                 catch (Exception ex) when (ex is HttpRequestException or InvalidDataException or
                     JsonException or TaskCanceledException)
                 {
+                    // In a benchmark, rejected local output must retry through AI.
+                    _benchmarkLocalPages?.Remove(pageNumber);
                     var error = ex switch
                     {
                         TaskCanceledException => "The page extraction request timed out.",
@@ -1049,6 +1052,7 @@ public sealed class DoeFuelPriceImporter(
             })
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", configuration["OPENAI_API_KEY"]);
+        _benchmarkAiRequests++;
         using var response = await _openAiClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException("DOE price extraction failed.", null, response.StatusCode);
