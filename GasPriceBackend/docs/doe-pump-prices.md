@@ -1,5 +1,27 @@
 # DOE pump prices
 
+## Extraction benchmark
+
+`POST /admin/fuel-prices/doe/benchmark` accepts `{"sourceUrl":"https://doe.gov.ph/path/to/report.pdf"}` with `Authorization: Bearer <ADMIN_API_KEY>` and `Content-Type: application/json`. Only `sourceUrl` is accepted. Use a direct PDF link from the DOE listing, not the listing page itself.
+
+This synchronous diagnostic downloads the PDF once and runs two independent paths with the configured `OPENAI_MODEL` (default `gpt-5.6-luna`): the existing page-by-page AI extractor, then local table extraction with AI fallback for unsupported or ambiguous pages. Set `OPENAI_MODEL=gpt-6-luna` in the server configuration to benchmark Luna; the endpoint does not change the production model. Both runs bypass persisted extraction caches. It neither reads nor writes the production price/report/page-cache tables and does not enqueue an import job.
+
+The experimental local parser currently supports embedded-text NCR tables with the standard ordered company columns, seven fuel grades per city, and explicit coverage dates (or dates from a previously parsed local continuation page). It uses PDF word coordinates to preserve columns, ignores independent/overall/common-price columns, and falls back for scanned PDFs, other regional layouts, incomplete blocks, and ambiguous price pairs. This is an initial benchmark parser, not a guarantee of complete or accurate extraction.
+
+The response uses the usual `ApiResponse` envelope. `data.ai` and `data.hybrid` contain status, error, elapsed milliseconds, model, token usage, estimated cost, AI request count (including retries), extracted dates/rows, and page validation progress. `hybrid.localPages` records each local attempt, accepted row count, and fallback reason. Timing covers extraction, validation, and retries; `downloadMilliseconds` is separate. Partial/failed runs remain visible with their available billing; unknown usage/cost stays null. A local-only run makes zero AI calls and has zero API spend even though usage and estimatedCost are null.
+
+`data.comparison` contains matching rows, date agreement, rows missing/different on either side, and estimated API savings in USD (AI minus hybrid; negative means hybrid cost more). A failed run has no comparison. Agreement measures consistency, not correctness: compare the outputs against manually checked PDF rows. Estimates exclude backend CPU/hosting, use standard token rates for supported models, and do not establish production savings until tested on representative reports. Failed upstream calls with unavailable usage leave the total cost unknown.
+
+Requests are capped at 12 MB and four PDF pages before paid extraction starts, with a ten-minute overall timeout, one benchmark at a time per server process, and a 30-second cooldown using the shared admin rate-limit bucket. This endpoint makes real billable AI requests even for an already imported report. Keep the HTTP connection open; reverse proxies may have shorter timeouts. A timed-out or disconnected request may incur AI usage without delivering a final report. Larger production imports continue to use the existing durable job API.
+
+Run offline checks (fake AI, no production database):
+
+```bash
+dotnet run --project GasPriceBackend/tests/DoeBenchmarkChecks
+# Optional: also check a downloaded NCR report locally, without sending it to AI.
+dotnet run --project GasPriceBackend/tests/DoeBenchmarkChecks -- /absolute/path/to/ncr-report.pdf
+```
+
 `POST /ai/fuel-prices` resolves coordinates and checks fresh DOE city/company pump prices before reusing a research cache or checking the configured direct websites and AI web search. The DOE source is the regional weekly PDF linked from [Retail Pump Prices](https://doe.gov.ph/data-and-prices/liquid-fuels/retail-pump-prices). DOE rows represent a company price or company price range for a city and fuel grade. They do not identify a physical station.
 
 When DOE supplies the research result, `model` is `direct:doe`, `source_tier` is `government`, and the response includes `doePrices` with the individual company rows. Other research responses have `doePrices: null`. The existing area estimate fields remain available. A DOE import can use OpenAI to read the PDF; the `usage` and `estimatedCost` fields in this response do not include that extraction call.

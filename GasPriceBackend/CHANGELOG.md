@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Add admin-only `POST /admin/fuel-prices/doe/benchmark` to compare fresh AI extraction with experimental local NCR table extraction and per-page AI fallback, returning rows, differences, timing, usage, and estimated API savings without database writes.
+
+### Changed
+- Estimate GPT-6 Luna extraction costs and apply the published long-context token rate multiplier.
+
 ## [1.10.4] - 2026-10-09
 
 ### Changed
