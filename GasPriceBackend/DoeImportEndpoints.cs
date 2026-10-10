@@ -14,12 +14,13 @@ public sealed record DoePriceHistoryPage(IReadOnlyList<DoePriceHistoryRow> Price
 
 public static class DoeImportEndpoints
 {
-    public static IResult Accepted(HttpRequest request, DoeImportJob job, string instanceId)
+    public static IResult Accepted(HttpRequest request, DoeImportJob job, string instanceId,
+        string message = "doe_import_queued")
     {
         request.HttpContext.Response.Headers.Location = DoeImportWorker.ToStatus(job).StatusUrl;
         return Results.Json(new ApiResponse<DoeImportJobStatus>
         {
-            Code = StatusCodes.Status202Accepted, Message = "doe_import_queued",
+            Code = StatusCodes.Status202Accepted, Message = message,
             InstanceId = instanceId, Data = DoeImportWorker.ToStatus(job)
         }, statusCode: StatusCodes.Status202Accepted);
     }

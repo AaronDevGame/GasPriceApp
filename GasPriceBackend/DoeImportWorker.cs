@@ -24,7 +24,8 @@ public sealed record DoeImportJobStatus(Guid JobId, string Mode, DateOnly? From,
     int ReportsSkipped, int ReportsFailed, int PriceRowsAdded, int PriceRowsUpdated,
     IReadOnlyList<DoeImportReportStatus> Reports, string? Error)
 {
-    public string StatusUrl => ApiRoutes.AdminDoeFuelPricesImportJob.Replace("{jobId}", JobId.ToString());
+    public string StatusUrl => (Mode == "benchmark" ? ApiRoutes.AdminDoeFuelPricesBenchmarkJob :
+        ApiRoutes.AdminDoeFuelPricesImportJob).Replace("{jobId}", JobId.ToString());
     public DoeSingleImportRequest? Request { get; init; }
     public JsonElement? Result { get; init; }
     // Null means no recorded usage; historical jobs cannot be reconstructed.
@@ -166,6 +167,11 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
         var results = new List<DoeImportReportStatus>();
         try
         {
+            if (job.Mode == "benchmark")
+            {
+                await RunBenchmarkJobAsync(job, db, importer, results, cancellationToken);
+                return;
+            }
             if (job.Mode is "location" or "report")
             {
                 await RunSingleImportAsync(job, db, importer, results, cancellationToken);
@@ -301,6 +307,8 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
             for (var index = 0; index < results.Count; index++)
                 if (results[index].Status == "running")
                     results[index] = results[index] with { Status = "interrupted", Error = job.Error };
+                else if (job.Mode == "benchmark" && results[index].Status == "queued")
+                    results[index] = results[index] with { Status = "not_run", Error = job.Error };
             job.DetailsJson = JsonSerializer.Serialize(results);
         }
         catch (Exception ex)
@@ -318,6 +326,8 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                         EstimatedCost = importer.ExtractionCost,
                         PageProgress = importer.ExtractionProgress
                     };
+                else if (job.Mode == "benchmark" && results[index].Status == "queued")
+                    results[index] = results[index] with { Status = "not_run", Error = job.Error };
             job.DetailsJson = JsonSerializer.Serialize(results);
         }
         finally
@@ -325,6 +335,58 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
             job.ActiveSlot = null;
             job.FinishedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync(CancellationToken.None);
+        }
+    }
+
+    private async Task RunBenchmarkJobAsync(DoeImportJob job, AppDbContext db,
+        DoeFuelPriceImporter importer, List<DoeImportReportStatus> results,
+        CancellationToken cancellationToken)
+    {
+        var request = JsonSerializer.Deserialize<DoeSingleImportRequest>(job.RequestJson
+            ?? throw new InvalidDataException("The benchmark request is missing."));
+        if (request?.SourceUrl is null)
+            throw new InvalidDataException("The benchmark source URL is missing.");
+        job.ReportsFound = 2; // Two extraction paths; no price rows are imported.
+        results.Add(new("ai", null, null, request.SourceUrl, "queued", 0, 0, null));
+        results.Add(new("hybrid", null, null, request.SourceUrl, "queued", 0, 0, null));
+        job.DetailsJson = JsonSerializer.Serialize(results);
+        await db.SaveChangesAsync(cancellationToken);
+        using var heartbeatStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var heartbeat = KeepAliveAsync(job.Id, heartbeatStop.Token);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(10));
+        try
+        {
+            // Extraction does not receive a DbContext. Only diagnostic job state is saved.
+            var result = await importer.BenchmarkAsync(request.SourceUrl,
+                timeProvider.GetUtcNow().UtcDateTime, timeout.Token, async (phase, run, token) =>
+                {
+                    var index = phase == "ai" ? 0 : 1;
+                    results[index] = results[index] with
+                    {
+                        Status = run.Status, Error = run.Error, PageProgress = run.PageProgress,
+                        Model = run.AiCalls == 0 ? null : run.Model,
+                        Usage = run.Usage, EstimatedCost = run.EstimatedCost,
+                        RowsSkipped = run.PageProgress?.RowsSkipped ?? 0
+                    };
+                    job.DetailsJson = JsonSerializer.Serialize(results);
+                    await db.SaveChangesAsync(token);
+                });
+            job.ResultJson = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            job.ReportsFailed = results.Count(run => run.Status is "failed" or "partial");
+            job.Status = results.Any(run => run.Status == "failed") ? "failed" :
+                job.ReportsFailed > 0 ? "completed_with_gaps" : "completed";
+            job.Error = result.Ai.Error ?? result.Hybrid.Error;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Outer worker handling persists failure, billing and releases the active slot.
+            throw new InvalidDataException("DOE benchmark exceeded its ten-minute time limit.");
+        }
+        finally
+        {
+            await heartbeatStop.CancelAsync();
+            await heartbeat;
         }
     }
 

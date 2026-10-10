@@ -25,24 +25,26 @@ public sealed partial class DoeFuelPriceImporter
     private int _benchmarkAiRequests;
 
     public async Task<DoeBenchmarkResult> BenchmarkAsync(string sourceUrl, DateTime nowUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<string, DoeBenchmarkRun, CancellationToken, Task>? progress = null)
     {
         var url = FuelAdjustmentImporter.ValidatePdfUrl(sourceUrl);
         var download = Stopwatch.StartNew();
         var pdf = await DownloadAsync(url, cancellationToken);
         download.Stop();
         using var document = new DoePdfPages(pdf);
-        // A synchronous diagnostic endpoint: bound work before issuing any paid calls.
+        // Bound benchmark work before issuing any paid calls.
         if (document.Count > 4)
             throw new InvalidDataException("Benchmark accepts at most four pages. Use a smaller DOE report.");
-        var ai = await RunBenchmarkAsync(pdf, nowUtc, false, cancellationToken);
-        var hybrid = await RunBenchmarkAsync(pdf, nowUtc, true, cancellationToken);
+        var ai = await RunBenchmarkAsync(pdf, nowUtc, false, cancellationToken, progress);
+        var hybrid = await RunBenchmarkAsync(pdf, nowUtc, true, cancellationToken, progress);
         return new(url, Convert.ToHexString(SHA256.HashData(pdf)), document.Count, nowUtc,
             download.ElapsedMilliseconds, ai, hybrid, CompareBenchmark(ai, hybrid));
     }
 
     private async Task<DoeBenchmarkRun> RunBenchmarkAsync(byte[] pdf, DateTime nowUtc,
-        bool useLocal, CancellationToken cancellationToken)
+        bool useLocal, CancellationToken cancellationToken,
+        Func<string, DoeBenchmarkRun, CancellationToken, Task>? progress)
     {
         _extractionCalls.Clear();
         _benchmarkAiRequests = 0;
@@ -54,6 +56,17 @@ public sealed partial class DoeFuelPriceImporter
         var localPages = new List<DoeLocalPageResult>();
         DoeBulkExtraction? extraction = null;
         string? error = null;
+        DoeBenchmarkRun Snapshot(string status, string? failure, DoeBulkExtraction? output)
+        {
+            var allUsageKnown = _benchmarkAiRequests == _extractionCalls.Count;
+            return new(status, failure, clock.ElapsedMilliseconds,
+                ExtractionModel ?? configuration["OPENAI_MODEL"]?.Trim() ?? "gpt-5.6-luna",
+                allUsageKnown ? ExtractionUsage : null, allUsageKnown ? ExtractionCost : null,
+                _benchmarkAiRequests, output, ExtractionProgress, localPages.ToArray());
+        }
+        Task PublishAsync(CancellationToken token) => progress is null ? Task.CompletedTask :
+            progress(useLocal ? "hybrid" : "ai", Snapshot("running", null, null), token);
+        await PublishAsync(cancellationToken);
         try
         {
             if (useLocal)
@@ -74,11 +87,20 @@ public sealed partial class DoeFuelPriceImporter
                         context = local;
                     }
                     else context = null; // Never borrow baseline AI output for the hybrid run.
+                    await PublishAsync(cancellationToken);
                 }
             }
             // No DbContext: neither persisted page caches nor production writes are possible.
-            var raw = await ExtractAllAsync(pdf, null, nowUtc, null, cancellationToken);
+            var raw = await ExtractAllAsync(pdf, null, nowUtc,
+                progress is null ? null : (_, token) => PublishAsync(token), cancellationToken);
             extraction = raw with { Rows = ValidateBulkRows(raw.Rows).Rows };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            if (progress is not null)
+                await progress(useLocal ? "hybrid" : "ai",
+                    Snapshot("interrupted", "Benchmark execution interrupted.", null), CancellationToken.None);
+            throw;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         { error = "Extraction upstream timed out."; }
@@ -95,12 +117,10 @@ public sealed partial class DoeFuelPriceImporter
             _benchmarkLocalPages = null;
         }
         var status = error is not null ? "failed" : ExtractionProgress?.RowsSkipped > 0 ? "partial" : "completed";
-        var allUsageKnown = _benchmarkAiRequests == _extractionCalls.Count;
-        return new(status, error, clock.ElapsedMilliseconds,
-            ExtractionModel ?? configuration["OPENAI_MODEL"]?.Trim() ?? "gpt-5.6-luna",
-            allUsageKnown ? ExtractionUsage : null, allUsageKnown ? ExtractionCost : null,
-            _benchmarkAiRequests, extraction,
-            ExtractionProgress, localPages);
+        var result = Snapshot(status, error, extraction);
+        if (progress is not null)
+            await progress(useLocal ? "hybrid" : "ai", result, cancellationToken);
+        return result;
     }
 
     public static DoeBenchmarkComparison? CompareBenchmark(DoeBenchmarkRun ai, DoeBenchmarkRun hybrid)

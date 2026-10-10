@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Queue DOE extraction benchmarks with HTTP `202` and admin-only job polling, persist AI/hybrid page progress and final comparisons, and continue execution after client disconnects so slow benchmarks avoid reverse-proxy timeouts. Reuse the durable DOE worker slot without writing fuel prices or extraction caches.
+
 ### Added
 - Add admin-only `POST /admin/fuel-prices/doe/benchmark` to compare fresh AI extraction with experimental local NCR table extraction and per-page AI fallback, returning rows, differences, timing, usage, and estimated API savings without database writes.
 

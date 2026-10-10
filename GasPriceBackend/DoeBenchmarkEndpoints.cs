@@ -1,14 +1,14 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.EntityFrameworkCore;
 
 public static class DoeBenchmarkEndpoints
 {
-    private static readonly SemaphoreSlim Gate = new(1, 1);
-
     public static void MapDoeBenchmarkEndpoints(this WebApplication app, string instanceId)
     {
         app.MapPost(ApiRoutes.AdminDoeFuelPricesBenchmark, async (
-            HttpRequest request, DoeFuelPriceImporter importer, TimeProvider timeProvider,
+            HttpRequest request, AppDbContext db, DoeFuelPriceImporter importer,
+            DoeImportWorker worker, TimeProvider timeProvider,
             CancellationToken cancellationToken) =>
         {
             if (!request.HasJsonContentType() || request.ContentLength is > 4096)
@@ -31,20 +31,30 @@ public static class DoeBenchmarkEndpoints
             catch (BadHttpRequestException) { return ApiResults.BadRequest("Request body exceeds the size limit.", instanceId); }
             if (!importer.IsConfigured)
                 return ApiResults.ServiceUnavailable("doe_price_extractor_not_configured", instanceId);
-            if (!await Gate.WaitAsync(0, cancellationToken))
-                return ApiResults.TooManyRequest("A DOE benchmark is already running.");
-            try
+            var job = new DoeImportJob
             {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(TimeSpan.FromMinutes(10));
-                return ApiResults.Ok(await importer.BenchmarkAsync(url,
-                    timeProvider.GetUtcNow().UtcDateTime, timeout.Token), "doe_extraction_benchmark", instanceId);
-            }
-            catch (InvalidDataException ex) { return ApiResults.BadRequest(ex.Message, instanceId); }
-            catch (HttpRequestException) { return ApiResults.BadGateway("doe_pdf_unavailable", instanceId); }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            { return ApiResults.GatewayTimeout("doe_benchmark_timeout", instanceId); }
-            finally { Gate.Release(); }
+                Id = Guid.NewGuid(), Mode = "benchmark",
+                CreatedAtUtc = timeProvider.GetUtcNow().UtcDateTime,
+                RequestJson = JsonSerializer.Serialize(new DoeSingleImportRequest(null, null, null, url))
+            };
+            db.DoeImportJobs.Add(job);
+            await db.SaveChangesAsync(cancellationToken);
+            worker.Wake();
+            return DoeImportEndpoints.Accepted(request, job, instanceId, "doe_benchmark_queued");
+        });
+
+        app.MapGet(ApiRoutes.AdminDoeFuelPricesBenchmarkJob, async (
+            string jobId, HttpResponse response, AppDbContext db, CancellationToken cancellationToken) =>
+        {
+            response.Headers.CacheControl = "no-store";
+            if (!Guid.TryParse(jobId, out var id))
+                return ApiResults.BadRequest("jobId must be a UUID.", instanceId);
+            var job = await db.DoeImportJobs.AsNoTracking()
+                .FirstOrDefaultAsync(j => j.Id == id && j.Mode == "benchmark", cancellationToken);
+            return job is null
+                ? ApiResults.NotFound("DOE benchmark job was not found.", instanceId,
+                    ApiRoutes.AdminDoeFuelPricesBenchmarkJob)
+                : ApiResults.Ok(DoeImportWorker.ToStatus(job), "doe_benchmark_job", instanceId);
         });
     }
 }
