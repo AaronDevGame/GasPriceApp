@@ -65,7 +65,7 @@ public class RateLimitMiddleware
         TimeSpan cooldown;
 
         // Benchmark uses the shared admin bucket with a longer cooldown to bound AI spend.
-        // Admin: rate-limit all /admin/* uniformly
+        // All admin paths share one bucket; polling retains the normal one-second cooldown.
         if (path.StartsWithSegments("/admin"))
         {
             cooldown = path == ApiRoutes.AdminDoeFuelPricesBenchmark

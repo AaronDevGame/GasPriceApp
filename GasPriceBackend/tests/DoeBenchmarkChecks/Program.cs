@@ -11,6 +11,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Fonts.Standard14Fonts;
 using UglyToad.PdfPig.Writer;
@@ -99,6 +100,8 @@ builder.WebHost.UseUrls("http://127.0.0.1:0");
 builder.Configuration.AddConfiguration(config);
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddTransient(_ => Importer());
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql("Host=127.0.0.1;Port=9;Database=unused_test;Username=test"));
+builder.Services.AddSingleton<DoeImportWorker>();
 await using var app = builder.Build();
 app.UseMiddleware<RateLimitMiddleware>();
 app.UseMiddleware<AdminAuthMiddleware>();
@@ -122,6 +125,8 @@ directBuilder.WebHost.UseUrls("http://127.0.0.1:0");
 directBuilder.Configuration.AddConfiguration(config);
 directBuilder.Services.AddSingleton(TimeProvider.System);
 directBuilder.Services.AddTransient(_ => Importer());
+directBuilder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql("Host=127.0.0.1;Port=9;Database=unused_test;Username=test"));
+directBuilder.Services.AddSingleton<DoeImportWorker>();
 await using var direct = directBuilder.Build();
 direct.UseMiddleware<AdminAuthMiddleware>();
 direct.MapDoeBenchmarkEndpoints("test-instance");
@@ -135,11 +140,14 @@ foreach (var body in new[] { "{}", "[]", "{", "{\"sourceUrl\":7}", "{\"sourceUrl
     var response = await client.PostAsync(ApiRoutes.AdminDoeFuelPricesBenchmark, new StringContent(body, System.Text.Encoding.UTF8, "application/json"));
     Check(response.StatusCode == HttpStatusCode.BadRequest, $"Reject invalid request: {body}");
 }
-var success = await client.PostAsJsonAsync(ApiRoutes.AdminDoeFuelPricesBenchmark, new { sourceUrl = "https://doe.gov.ph/test.pdf" });
-Check(success.StatusCode == HttpStatusCode.OK, "HTTP benchmark success without any database service.");
-Console.WriteLine("PASS: HTTP admin auth, rate limit, JSON/URL validation and successful response without a database");
+var invalidPoll = await client.GetAsync(ApiRoutes.AdminDoeFuelPricesBenchmarkJob.Replace("{jobId}", "invalid"));
+Check(invalidPoll.StatusCode == HttpStatusCode.BadRequest, "Malformed benchmark job ID.");
+Console.WriteLine("PASS: HTTP admin auth, rate limit and JSON/URL/job-ID validation without database access");
 await direct.StopAsync();
 
+
+if (int.TryParse(Environment.GetEnvironmentVariable("DOE_TEST_PGPORT"), out var testPort))
+    await DoeBenchmarkJobChecks.RunAsync(pdf, expected, testPort);
 
 void Check(bool passed, string message) { if (!passed) throw new Exception(message); }
 byte[] MakePdf(bool bad = false, bool unsupported = false)
