@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-15
+
 ### Fixed
 - Queue DOE extraction benchmarks with HTTP `202` and admin-only job polling, persist AI/hybrid page progress and final comparisons, and continue execution after client disconnects so slow benchmarks avoid reverse-proxy timeouts. Reuse the durable DOE worker slot without writing fuel prices or extraction caches.
 
@@ -13,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - Add admin-only `POST /admin/fuel-prices/doe/benchmark` to compare fresh AI extraction with experimental local NCR table extraction and per-page AI fallback, returning rows, differences, timing, usage, and estimated API savings without database writes.
 
 ### Changed
+- Bump project and API version to `1.11.0`.
 - Estimate GPT-6 Luna extraction costs and apply the published long-context token rate multiplier.
 
 ## [1.10.4] - 2026-10-09
