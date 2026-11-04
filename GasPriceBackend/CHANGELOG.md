@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Use printed DOE PDF coverage dates instead of rejecting valid reports when the DOE listing date differs. Log listing mismatches, retain page-to-page date validation, return extracted dates in whole-PDF results and completed job status, and reuse saved PDF coverage for city imports.
+
 ## [1.11.0] - 2026-10-15
 
 ### Fixed

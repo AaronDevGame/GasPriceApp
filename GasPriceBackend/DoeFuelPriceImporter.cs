@@ -74,6 +74,8 @@ public sealed record DoePageExtraction(
 public sealed record DoeReportImportResult(string SourceUrl, string Status,
     int Added, int Updated, int PriceRows)
 {
+    public DateOnly? WeekStart { get; init; }
+    public DateOnly? WeekEnd { get; init; }
     public string? Model { get; init; }
     public AiChatTokenUsage? Usage { get; init; }
     public OpenAiCostEstimate? EstimatedCost { get; init; }
@@ -287,12 +289,13 @@ public sealed partial class DoeFuelPriceImporter(
         if (requestedUrl is null && listedWeekStart.HasValue)
         {
             var saved = await db.DoeFuelPrices.AsNoTracking().Where(p =>
-                provinceKeys.Contains(p.ProvinceKey) && p.WeekStart == listedWeekStart.Value &&
-                p.SourceUrl == url).ToListAsync(cancellationToken);
-            if (DoeLocationMatcher.MatchCity(saved, location.City,
-                location.Province, location.Region).Count > 0)
+                provinceKeys.Contains(p.ProvinceKey) && p.SourceUrl == url)
+                .OrderByDescending(p => p.WeekStart).ToListAsync(cancellationToken);
+            var matched = DoeLocationMatcher.MatchCity(saved, location.City,
+                location.Province, location.Region);
+            if (matched.Count > 0)
                 return new DoeFuelPriceImportResult(location.City, location.Province,
-                    listedWeekStart.Value, listedWeekStart.Value.AddDays(6), url, 0, 0,
+                    matched[0].WeekStart, matched[0].WeekEnd, url, 0, 0,
                     "already_imported");
         }
         var pdf = await DownloadAsync(url, cancellationToken);
@@ -302,10 +305,10 @@ public sealed partial class DoeFuelPriceImporter(
             !DateOnly.TryParseExact(extraction.WeekEnd, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var end) ||
             start.DayOfWeek != DayOfWeek.Tuesday || end != start.AddDays(6) ||
-            (listedWeekStart.HasValue && listedWeekStart.Value != start) ||
             start > PhilippineDate(nowUtc).AddDays(1) ||
             extraction.Rows is null or { Count: < 1 or > 100 })
             throw new InvalidDataException("DOE extraction has an invalid week or no usable prices.");
+        WarnListingDateMismatch(listedWeekStart, start, end);
 
         extraction = extraction with
         {
@@ -505,13 +508,14 @@ public sealed partial class DoeFuelPriceImporter(
                 DateTimeStyles.None, out var start) ||
             !DateOnly.TryParseExact(extraction.WeekEnd, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var end) ||
-            (source is not null && start != source.WeekStart) ||
             start > PhilippineDate(nowUtc).AddDays(1) || end < start || end > start.AddDays(7) ||
             extraction.Rows is null or { Count: < 1 or > 4000 })
             throw new InvalidDataException("DOE report extraction has an invalid week or no usable prices.");
+        WarnListingDateMismatch(source?.WeekStart, start, end);
         if ((from.HasValue && end < from.Value) || (to.HasValue && start > to.Value))
             return new DoeReportImportResult(url, "outside_range", 0, 0, 0)
             {
+                WeekStart = start, WeekEnd = end,
                 Model = ExtractionModel, Usage = ExtractionUsage, EstimatedCost = ExtractionCost,
                 PageProgress = ExtractionProgress
             };
@@ -656,6 +660,7 @@ public sealed partial class DoeFuelPriceImporter(
             added, updated,
             report.PriceRows)
         {
+            WeekStart = start, WeekEnd = end,
             Model = ExtractionModel, Usage = ExtractionUsage, EstimatedCost = ExtractionCost,
             DuplicatesIgnored = validated.DuplicatesIgnored +
                 (ExtractionProgress?.Pages.Sum(page => page.DuplicatesIgnored) ?? 0),
@@ -664,6 +669,14 @@ public sealed partial class DoeFuelPriceImporter(
             PageProgress = ExtractionProgress, RowsSkipped = rowsSkipped,
             RowErrors = validated.Errors
         };
+    }
+
+    private void WarnListingDateMismatch(DateOnly? listedStart, DateOnly start, DateOnly end)
+    {
+        if (listedStart.HasValue && listedStart.Value != start)
+            logger.LogWarning(
+                "DOE listing starts {ListedWeekStart}, but the PDF covers {WeekStart} through {WeekEnd}; using PDF coverage.",
+                listedStart.Value, start, end);
     }
 
     public static ValidatedDoeBulkRows ValidateBulkRows(
@@ -912,7 +925,7 @@ public sealed partial class DoeFuelPriceImporter(
                         ? "Read the report's dates, provinces, and regions from the attached page."
                         : $"This is a {source.Section} DOE report" +
                           (source.Subdivision is null ? "" : $" ({source.Subdivision})") +
-                          $". Its DOE listing starts {source.WeekStart:yyyy-MM-dd}.";
+                          $". Its DOE listing labels the start as {source.WeekStart:yyyy-MM-dd}, which may be incorrect; use the PDF's printed coverage dates.";
                     if (weekStart.HasValue)
                         context += $" Earlier pages printed coverage {weekStart:yyyy-MM-dd} through {weekEnd:yyyy-MM-dd}; use that context only if this page does not print dates.";
                     if (columnHeaders.Count > 0)
@@ -951,9 +964,6 @@ public sealed partial class DoeFuelPriceImporter(
                         if (weekStart.HasValue && (start != weekStart || end != weekEnd))
                             throw new InvalidDataException(FormattableString.Invariant(
                                 $"Page coverage mismatch: expected {weekStart:yyyy-MM-dd} through {weekEnd:yyyy-MM-dd}, but extracted {start:yyyy-MM-dd} through {end:yyyy-MM-dd}."));
-                        if (source is not null && start != source.WeekStart)
-                            throw new InvalidDataException(FormattableString.Invariant(
-                                $"Page coverage mismatch: expected DOE listing start {source.WeekStart:yyyy-MM-dd}, but extracted {start:yyyy-MM-dd} through {end:yyyy-MM-dd}."));
                         if (start > PhilippineDate(nowUtc).AddDays(1) || end < start || end > start.AddDays(7))
                             throw new InvalidDataException(FormattableString.Invariant(
                                 $"Invalid extracted page coverage: {start:yyyy-MM-dd} through {end:yyyy-MM-dd}; the start must not be more than one day in the future and the end must be within seven days of the start."));

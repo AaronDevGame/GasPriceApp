@@ -48,7 +48,7 @@ static class DoePageJobIntegration
             await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
         // Use separate scopes/importers to model a new job after a failed run.
         var resumeSource = new DoeReportSource("mindanao-pump-prices", null,
-            new DateOnly(2026, 9, 29), "https://doe.gov.ph/report.pdf");
+            new DateOnly(2026, 9, 28), "https://doe.gov.ph/report.pdf");
         var failedExtractor = new FakeExtractor("failed");
         using (var scope = app.Services.CreateScope())
         {
@@ -74,6 +74,12 @@ static class DoePageJobIntegration
                 scope.ServiceProvider.GetRequiredService<ILogger<DoeFuelPriceImporter>>());
             var resumed = await importer.ImportReportAsync(db, resumeSource, DateTime.UtcNow,
                 null, null, CancellationToken.None);
+            Check(resumed.WeekStart == new DateOnly(2026, 9, 29) &&
+                resumed.WeekEnd == new DateOnly(2026, 10, 5) &&
+                !await db.DoeFuelPrices.AnyAsync(price => price.WeekStart != resumed.WeekStart ||
+                    price.WeekEnd != resumed.WeekEnd) &&
+                (await db.DoePumpPriceReports.SingleAsync()).WeekStart == resumed.WeekStart,
+                "Report results, saved reports, and prices must use PDF dates despite a listing mismatch.");
             Check(resumedExtractor.Pages.SequenceEqual(new[] { 4 }) && resumed.PageProgress!.PagesCached == pageCount - 1,
                 "A new importer must request only the missing page and expose cached-page progress.");
             Check(resumed.Usage!.InputTokens == 100, "Resumed billing must include only this run's new request.");
@@ -90,6 +96,15 @@ static class DoePageJobIntegration
             Check(resumedExtractor.Pages.Count == before && unchanged.PageProgress!.PagesCached == pageCount &&
                 unchanged.Usage is null && unchanged.EstimatedCost is null,
                 "An unchanged complete report must make no AI calls or report historical billing as new cost.");
+            var outside = await importer.ImportReportAsync(db, resumeSource, DateTime.UtcNow,
+                new DateOnly(2026, 9, 28), new DateOnly(2026, 9, 28), CancellationToken.None);
+            Check(outside.Status == "outside_range" && outside.WeekStart == new DateOnly(2026, 9, 29),
+                "The final range check must use PDF coverage, not the listing date.");
+            var city = await importer.ImportAsync(db, new ResolvedFuelLocation("City 1", "Basilan", "Region IX"),
+                DateTime.UtcNow, null, CancellationToken.None);
+            Check(city.Status == "already_imported" && city.WeekStart == new DateOnly(2026, 9, 29) &&
+                city.WeekEnd == new DateOnly(2026, 10, 5),
+                "City imports must reuse saved PDF coverage even when listing dates disagree.");
             // Changing extraction instructions/model must invalidate the cache.
             var otherConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
                 { ["OPENAI_API_KEY"] = "test-only", ["OPENAI_MODEL"] = "different-test-model" }).Build();
@@ -189,6 +204,8 @@ static class DoePageJobIntegration
         using var finishedJson = JsonDocument.Parse(await finished.Content.ReadAsStringAsync());
         var data = finishedJson.RootElement.GetProperty("data");
         Check(data.GetProperty("status").GetString() == "completed", "The completed job must be pollable.");
+        Check(data.GetProperty("reports")[0].GetProperty("weekStart").GetString() == "2026-09-29",
+            "Completed job polling must expose the PDF start instead of the incorrect listing date.");
         Check(data.GetProperty("reports")[0].GetProperty("pageProgress").GetProperty("pagesCompleted").GetInt32() == pageCount,
             "Final progress must count all pages.");
         using (var scope = app.Services.CreateScope())

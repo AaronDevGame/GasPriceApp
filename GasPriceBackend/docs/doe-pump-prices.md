@@ -1,5 +1,13 @@
 # DOE pump prices
 
+## Report coverage dates
+
+The PDF's printed reporting period determines the saved `weekStart` and `weekEnd`. DOE listing dates are used to discover and select candidate reports; a listing/PDF date mismatch logs a warning and does not reject otherwise valid prices. For example, a North Luzon listing labeled October 26–November 2, 2026 that links to a PDF printed October 27–November 2 is saved with `weekStart: "2026-10-27"` and `weekEnd: "2026-11-02"`.
+
+Whole-PDF import results include the extracted `weekStart` and `weekEnd`, including `outside_range` results. Completed bulk and manual report job entries expose the extracted `weekStart`; queued/running bulk entries use the listing date until extraction completes, and failed entries retain that discovery date. Backfill overlap checks after extraction use PDF coverage. Listing-based discovery remains a preliminary filter, so use a direct PDF import if an incorrect listing date prevents discovery.
+
+Missing, malformed, reversed, or overly long coverage is still rejected, as is a start more than one day in the future in Philippine time. Bulk reports allow coverage from one day through eight inclusive days, and every dated page must agree with the first verified PDF period. Undated continuation pages may reuse previously verified PDF dates; listing dates never override printed dates or supply missing coverage. City imports retain their Tuesday-to-Monday validation and reuse saved PDF dates for an already imported source. A discrepancy with the listing is a server log warning, not a failed-page error.
+
 ## Extraction benchmark
 
 `POST /admin/fuel-prices/doe/benchmark` accepts `{"sourceUrl":"https://doe.gov.ph/path/to/report.pdf"}` with `Authorization: Bearer <ADMIN_API_KEY>` and `Content-Type: application/json`. Only `sourceUrl` is accepted. Use a direct PDF link from the DOE listing, not the listing page itself.

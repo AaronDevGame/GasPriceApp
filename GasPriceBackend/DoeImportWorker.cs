@@ -225,7 +225,7 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                     var result = await reportImporter.ImportReportAsync(reportDb, source,
                         timeProvider.GetUtcNow().UtcDateTime, job.From, job.To,
                         cancellationToken, (progress, token) => SaveProgressAsync(progress, token));
-                    item = new(source.Section, source.Subdivision, source.WeekStart,
+                    item = new(source.Section, source.Subdivision, result.WeekStart,
                         source.Url, result.Status, result.Added, result.Updated,
                         result.Status == "partial" ? $"Imported valid prices; skipped {result.RowsSkipped} invalid row(s)." : null)
                     {
@@ -269,10 +269,12 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                 var localToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
                     timeProvider.GetUtcNow().UtcDateTime,
                     TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila")));
-                foreach (var source in reports.Where(r => r.WeekStart.AddDays(13) < localToday))
+                // Successful results carry PDF dates; failed results retain discovery dates.
+                foreach (var report in results.Where(item => item.WeekStart.HasValue &&
+                    item.WeekStart.Value.AddDays(13) < localToday).ToArray())
                 {
-                    results.Add(new DoeImportReportStatus(source.Section, source.Subdivision,
-                        source.WeekStart, source.Url, "stale", 0, 0,
+                    results.Add(new DoeImportReportStatus(report.Section, report.Subdivision,
+                        report.WeekStart, report.SourceUrl, "stale", 0, 0,
                         "DOE has not published a report recent enough for the public price feed."));
                     job.ReportsFailed++;
                 }
@@ -424,7 +426,7 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                 job.ResultJson = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                 results[0] = results[0] with
                 {
-                    SourceUrl = result.SourceUrl, Status = result.Status,
+                    SourceUrl = result.SourceUrl, WeekStart = result.WeekStart, Status = result.Status,
                     Added = result.Added, Updated = result.Updated,
                     Model = result.Model, Usage = result.Usage, EstimatedCost = result.EstimatedCost,
                     DuplicatesIgnored = result.DuplicatesIgnored, AggregateRowsIgnored = result.AggregateRowsIgnored,

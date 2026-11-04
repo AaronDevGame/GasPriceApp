@@ -34,7 +34,8 @@ var now = new DateTime(2026, 10, 8, 0, 0, 0, DateTimeKind.Utc);
 var method = typeof(DoeFuelPriceImporter).GetMethod("ExtractAllAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
 
 async Task<(DoeFuelPriceImporter Importer, FakeExtractor Handler, DoeBulkExtraction? Result,
-    List<DoeReportPageProgress> Progress)> RunAsync(string scenario, bool expectFailure = false)
+    List<DoeReportPageProgress> Progress)> RunAsync(string scenario, bool expectFailure = false,
+    DoeReportSource? reportSource = null)
 {
     var handler = new FakeExtractor(scenario);
     var importer = CreateImporter(handler);
@@ -45,7 +46,7 @@ async Task<(DoeFuelPriceImporter Importer, FakeExtractor Handler, DoeBulkExtract
         return Task.CompletedTask;
     };
     var task = (Task<DoeBulkExtraction>)method.Invoke(importer,
-        [pdf, source, now, progress, CancellationToken.None, null])!;
+        [pdf, reportSource ?? source, now, progress, CancellationToken.None, null])!;
     DoeBulkExtraction? result = null;
     try
     {
@@ -81,6 +82,17 @@ Check(responseJson.Contains("\"pageProgress\"") && responseJson.Contains("\"page
     "Polling must expose persisted page progress with API JSON names.");
 Check(DoeImportWorker.ToStatus(new DoeImportJob()).Reports.Count == 0, "Legacy jobs must remain readable.");
 Console.WriteLine("PASS: independent-only page completes; later pages run; polling JSON retains progress and billing");
+
+var listingMismatch = await RunAsync("success", reportSource: source with
+    { WeekStart = source.WeekStart.AddDays(-1) });
+Check(listingMismatch.Result!.WeekStart == "2026-09-29" &&
+    listingMismatch.Result.WeekEnd == "2026-10-05" &&
+    listingMismatch.Importer.ExtractionProgress!.PagesFailed == 0 &&
+    listingMismatch.Handler.Pages.Count == pageCount,
+    "Printed PDF coverage must override an incorrect listing without retries or lost rows.");
+Check(listingMismatch.Result.Rows.Count == success.Result.Rows.Count,
+    "A listing mismatch must preserve all eligible company prices.");
+Console.WriteLine("PASS: PDF coverage overrides a listing start one day earlier without retries");
 
 var retry = await RunAsync("retry");
 Check(retry.Handler.Pages.Count(number => number == 4) == 2 && retry.Handler.Pages.Count == pageCount + 1,
@@ -194,7 +206,7 @@ sealed class PdfHandler(byte[] pdf) : HttpMessageHandler
         var content = request.RequestUri!.AbsolutePath.EndsWith(".pdf")
             ? (HttpContent)new ByteArrayContent(pdf)
             : new StringContent(request.RequestUri.AbsolutePath.EndsWith("mindanao-pump-prices")
-                ? "<h2>2026</h2><a href=\"https://doe.gov.ph/report.pdf\">September 29 to October 5</a>"
+                ? "<h2>2026</h2><a href=\"https://doe.gov.ph/report.pdf\">September 28 to October 5</a>"
                 : "<h2>2026</h2>");
         return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
     }
