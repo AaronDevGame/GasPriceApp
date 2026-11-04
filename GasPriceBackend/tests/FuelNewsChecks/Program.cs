@@ -12,6 +12,9 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
+await NewsAuthChecks.RunAsync();
+if (args.Contains("--auth-only")) return;
+
 var connection = Environment.GetEnvironmentVariable("FUEL_NEWS_TEST_CONNECTION")
     ?? throw new InvalidOperationException("Run tests/fuel_news_smoke.py to provide an isolated local database.");
 var parsed = new NpgsqlConnectionStringBuilder(connection);

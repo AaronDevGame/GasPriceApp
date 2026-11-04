@@ -13,6 +13,8 @@ Research current Philippine fuel news and publish only a sourced, material updat
 
 This prompt does not connect a ChatGPT task to the backend by itself. Its runner must have an authenticated import tool or script execution, the repository instructions, and secret configuration available. A chat that can only generate text cannot publish automatically.
 
+The publisher's server-side `FUEL_NEWS_ADMIN_KEY` must contain the backend's separate `NEWS_API_KEY` value, never its general `ADMIN_API_KEY`. The backend accepts this news key only under `/admin/fuel-news` (imports and revision history); other admin operations remain outside the publisher's scope.
+
 ## Short editorial format
 
 - Date: use the server's publication timestamp for the displayed publication date, formatted in Philippine time. The source publication timestamps remain separate. Do not add a fictional publication date to the import.

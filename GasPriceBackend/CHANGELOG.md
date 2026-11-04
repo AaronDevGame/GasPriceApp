@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Require a separate `NEWS_API_KEY` for news admin imports and revision history, reject the general admin key on those routes, and deny the news key access to other admin routes. Missing news-key configuration leaves public reads and unrelated admin operations available.
 - Simplify the fuel-news publisher's editorial format to a status-aware headline, a one-sentence preview, 1–2 short paragraphs, optional calculated impact and 1–3 sources. Document a local subscription-based scheduled publishing prompt and its required backend connection without changing the API contract.
 
 ### Fixed

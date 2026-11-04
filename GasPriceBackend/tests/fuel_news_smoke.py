@@ -31,7 +31,7 @@ def run_checks(base):
         if data is not None:
             request_headers.setdefault("Content-Type", "application/json")
         if admin:
-            request_headers["Authorization"] = "Bearer news-local-admin-fixture"
+            request_headers["Authorization"] = "Bearer news-local-publisher-fixture"
         for _ in range(3):
             request = urllib.request.Request(base + path, data=data, method=method, headers=request_headers)
             try:
@@ -56,6 +56,9 @@ def run_checks(base):
     call("/fuel-news/not-a-uuid", expected=400)
     call("/fuel-news/" + str(uuid.uuid4()), expected=404)
     call("/admin/fuel-news/import", "POST", {}, expected=401)
+    call("/admin/fuel-news/import", "POST", {}, headers={"Authorization": "Bearer news-local-admin-fixture"}, expected=401)
+    call("/admin/routes", headers={"Authorization": "Bearer news-local-publisher-fixture"}, expected=401)
+    call("/admin/routes", headers={"Authorization": "Bearer news-local-admin-fixture"})
     call("/admin/fuel-news/import", "POST", b"{broken", admin=True, raw=True, expected=400)
     call("/admin/fuel-news/import", "POST", b"x" * 32769, admin=True, raw=True, expected=400)
     call("/admin/fuel-news/import", "POST", {}, admin=True, headers={"Content-Type": "text/plain"}, expected=400)
@@ -96,6 +99,7 @@ def run_checks(base):
     revised["expectedRevision"] = 1
     assert call("/admin/fuel-news/import", "POST", revised, admin=True)["item"]["revision"] == 2
     assert len(call(f"/admin/fuel-news/{news_id}/revisions", admin=True)) == 2
+    call(f"/admin/fuel-news/{news_id}/revisions", headers={"Authorization": "Bearer news-local-admin-fixture"}, expected=401)
     print("PASS strict nested validation, missing and duplicate properties, idempotent imports, and revision conflicts")
     confirmed = copy.deepcopy(payload)
     confirmed["article"].update(importKey="http-fixture-confirmed", status="confirmed", title="Isolated fixture confirmed adjustment")
@@ -134,6 +138,7 @@ def main():
         env.pop("DATABASE_URL", None)
         connection = f"Host=127.0.0.1;Port={pg_port};Database=gasprice_news_test;Username=news_test"
         env.update(ConnectionStrings__Postgres=connection, ADMIN_API_KEY="news-local-admin-fixture", OPENAI_API_KEY="",
+            NEWS_API_KEY="news-local-publisher-fixture",
             ASPNETCORE_ENVIRONMENT="Production", FuelNews__PushEnabled="false", FUEL_NEWS_TEST_CONNECTION=connection,
             ASPNETCORE_URLS=f"http://127.0.0.1:{api_port}", PORT=str(api_port))
         try:

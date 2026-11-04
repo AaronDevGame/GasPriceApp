@@ -117,8 +117,9 @@ public static class ApiRoutes
     public const string FuelNewsLatest = "/fuel-news/latest";
     public const string FuelNewsDetail = "/fuel-news/{id}";
     public const string FuelNewsSubscription = "/fuel-news/subscription";
-    public const string AdminFuelNewsImport = "/admin/fuel-news/import";
-    public const string AdminFuelNewsRevisions = "/admin/fuel-news/{id}/revisions";
+    public const string AdminFuelNews = "/admin/fuel-news";
+    public const string AdminFuelNewsImport = AdminFuelNews + "/import";
+    public const string AdminFuelNewsRevisions = AdminFuelNews + "/{id}/revisions";
     public const string FeaturedFuelPrices = "/fuel-prices/featured";
     public const string FuelPriceHistory = "/fuel-prices/history";
     public const string FuelPriceAdjustments = "/fuel-prices/adjustments";

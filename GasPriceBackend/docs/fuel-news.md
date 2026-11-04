@@ -13,7 +13,9 @@ Public news reads use the shared `ApiResponse<T>` envelope and do not require gu
 | `PUT /fuel-news/subscription` | Authenticated opt-in: `{ "pushToken": "<Expo token>", "includeForecasts": false }`. |
 | `DELETE /fuel-news/subscription` | Authenticated opt-out. |
 
-Admin routes require `Authorization: Bearer <ADMIN_API_KEY>` against the direct backend; Cloudflare blocks all admin routes. Subscription routes use existing native bearer + `X-App-Instance-Id` or browser cookies with CSRF on mutations. Public reads are forwarded through Cloudflare and the Expo Web same-origin proxy. Requests retain the existing rate limits; article IDs share one read bucket.
+News admin routes under `/admin/fuel-news` require `Authorization: Bearer <NEWS_API_KEY>` against the direct backend; Cloudflare blocks all admin routes. This protects both imports and revision history. Other admin routes continue to require `ADMIN_API_KEY`. Neither key substitutes for the other: `ADMIN_API_KEY` is rejected on news admin routes, and `NEWS_API_KEY` is rejected on other admin routes. Missing or blank `NEWS_API_KEY` disables access to news admin routes with HTTP 401, without preventing startup or public reads. Configure distinct secret values for the two keys.
+
+Subscription routes use existing native bearer + `X-App-Instance-Id` or browser cookies with CSRF on mutations. Public reads are forwarded through Cloudflare and the Expo Web same-origin proxy. Requests retain the existing rate limits; article IDs share one read bucket.
 
 ## Import contract
 
@@ -40,7 +42,9 @@ Matching confirmed numbers are checked against existing DOE rows for the effecti
 
 ## Automatic publishing
 
-The existing ChatGPT research task needs a connected authenticated publishing tool or a runner that can execute `scripts/import_fuel_news.py`. Give it `agents/philippines-fuel-news-publisher.md` and this contract. Provision `FUEL_NEWS_API_URL` (the direct HTTPS backend origin) and `FUEL_NEWS_ADMIN_KEY` (the backend admin key) in the runner's secret environment, never in prompts, source or frontend settings. The script follows no redirects and prints only the import outcome, ID and revision. `--dry-run` checks JSON without sending; the server remains authoritative for validation.
+The existing ChatGPT research task needs a connected authenticated publishing tool or a runner that can execute `scripts/import_fuel_news.py`. Give it `agents/philippines-fuel-news-publisher.md` and this contract. Provision `FUEL_NEWS_API_URL` (the direct HTTPS backend origin) and `FUEL_NEWS_ADMIN_KEY` (the backend's separate `NEWS_API_KEY` value) in the runner's secret environment, never in prompts, source or frontend settings. Keep `ADMIN_API_KEY` out of the publisher. The script follows no redirects and prints only the import outcome, ID and revision. `--dry-run` checks JSON without sending; the server remains authoritative for validation.
+
+For deployment, set `NEWS_API_KEY` on Render and deploy this backend change, then set the publisher's server-side `FUEL_NEWS_ADMIN_KEY` to that same news-only value. The publisher variable name is unchanged; its value must no longer be the general admin key. Re-upload this contract to Plugin Creator so its authentication instructions match the backend. Keep publishing disabled and the local automation paused until connection and permission tests are verified.
 
 The import endpoint and publishing script do not create or change a ChatGPT schedule. Configure and test its publishing connection after deploying the backend. Until that happens, the News tab has an honest empty state; no demonstration news is seeded into production. A text-only scheduled chat cannot write the database by itself.
 
