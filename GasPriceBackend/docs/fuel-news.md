@@ -42,6 +42,8 @@ Matching confirmed numbers are checked against existing DOE rows for the effecti
 
 ## Automatic publishing
 
+For a Render-hosted MCP connection that calls this backend's news service directly without copying `NEWS_API_KEY` to Sites, see [Fuel-news MCP on Render](mcp-fuel-news.md). OAuth setup, publisher authorization and an explicit MCP publishing switch are required. The external runner instructions below remain applicable to separate REST-based publishers.
+
 The existing ChatGPT research task needs a connected authenticated publishing tool or a runner that can execute `scripts/import_fuel_news.py`. Give it `agents/philippines-fuel-news-publisher.md` and this contract. Provision `FUEL_NEWS_API_URL` (the direct HTTPS backend origin) and `FUEL_NEWS_ADMIN_KEY` (the backend's separate `NEWS_API_KEY` value) in the runner's secret environment, never in prompts, source or frontend settings. Keep `ADMIN_API_KEY` out of the publisher. The script follows no redirects and prints only the import outcome, ID and revision. `--dry-run` checks JSON without sending; the server remains authoritative for validation.
 
 For deployment, set `NEWS_API_KEY` on Render and deploy this backend change, then set the publisher's server-side `FUEL_NEWS_ADMIN_KEY` to that same news-only value. The publisher variable name is unchanged; its value must no longer be the general admin key. Re-upload this contract to Plugin Creator so its authentication instructions match the backend. Keep publishing disabled and the local automation paused until connection and permission tests are verified.

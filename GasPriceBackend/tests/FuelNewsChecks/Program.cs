@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
+if (args.Contains("--mcp-only")) { await McpChecks.RunAsync(); return; }
 await NewsAuthChecks.RunAsync();
 if (args.Contains("--auth-only")) return;
 

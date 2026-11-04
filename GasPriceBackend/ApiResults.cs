@@ -62,6 +62,9 @@ public static class ApiResults
             }
         }, statusCode: StatusCodes.Status429TooManyRequests);
 
+    public static IResult Forbidden(string error, string instanceId, string? detail = null)
+        => Error(StatusCodes.Status403Forbidden, "forbidden", error, instanceId, detail);
+
     public static IResult BadGateway(string error, string instanceId, string? detail = null)
         => Error(
             ErrorCodes.BadGateway,

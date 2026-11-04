@@ -114,6 +114,8 @@ public static class ApiRoutes
     public const string AiFuelPrices = "/ai/fuel-prices";
     public const string FuelPrices = "/fuel-prices";
     public const string FuelNews = "/fuel-news";
+    public const string Mcp = "/mcp";
+    public const string McpMetadata = "/.well-known/oauth-protected-resource/mcp";
     public const string FuelNewsLatest = "/fuel-news/latest";
     public const string FuelNewsDetail = "/fuel-news/{id}";
     public const string FuelNewsSubscription = "/fuel-news/subscription";
@@ -167,6 +169,8 @@ public static class RouteRegistry
         new(ApiRoutes.AiFuelPrices, "POST"),
         new(ApiRoutes.FuelPrices, "GET"),
         new(ApiRoutes.FuelNews, "GET"),
+        new(ApiRoutes.Mcp, "POST"),
+        new(ApiRoutes.McpMetadata, "GET"),
         new(ApiRoutes.FuelNewsLatest, "GET"),
         new(ApiRoutes.FuelNewsDetail, "GET"),
         new(ApiRoutes.FuelNewsSubscription, "GET"),

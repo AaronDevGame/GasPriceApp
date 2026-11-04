@@ -10,6 +10,7 @@ Console.Error.WriteLine("startup: builder created");
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(DbConfig.ResolveConnectionString(builder.Configuration)));
 builder.Services.AddBrowserAuthentication();
+builder.Services.AddFuelNewsMcp(builder.Configuration);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddScoped<FuelNewsService>();
 builder.Services.AddHostedService<FuelNewsNotificationWorker>();
@@ -151,6 +152,9 @@ app.Use(async (context, next) =>
 });
 app.UseMiddleware<RateLimitMiddleware>();
 app.UseMiddleware<AdminAuthMiddleware>();
+app.UseAuthentication();
+app.UseFuelNewsMcpBoundary(InstanceId);
+app.UseAuthorization();
 
 app.MapGet(ApiRoutes.Ping, (HttpContext context) =>
 {
@@ -177,6 +181,7 @@ app.MapFuelPriceReadEndpoints(auth, InstanceId);
 app.MapFeaturedFuelPriceEndpoints(auth, InstanceId);
 app.MapFuelAdjustmentEndpoints(auth, InstanceId);
 app.MapFuelNewsEndpoints(auth, InstanceId);
+app.MapFuelNewsMcp(InstanceId);
 app.MapDoeFuelPriceEndpoints(auth, InstanceId);
 app.MapDoePriceBrowseEndpoints(auth, InstanceId);
 app.MapDoeImportEndpoints(InstanceId);

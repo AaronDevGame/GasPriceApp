@@ -95,9 +95,9 @@ public static class FuelNewsEndpoints
         catch (JsonException) { throw new InvalidDataException("Malformed JSON, unknown properties, or incorrect field types."); }
     }
 
-    private static string Cursor(FuelNews item) => Convert.ToBase64String(Encoding.UTF8.GetBytes(
+    internal static string Cursor(FuelNews item) => Convert.ToBase64String(Encoding.UTF8.GetBytes(
         item.PublishedAtUtc.Ticks.ToString(CultureInfo.InvariantCulture) + ":" + item.Id));
-    private static bool TryCursor(string cursor, out DateTime date, out Guid id)
+    internal static bool TryCursor(string cursor, out DateTime date, out Guid id)
     {
         date = default; id = default;
         if (cursor.Length is < 1 or > 120) return false;

@@ -21,6 +21,9 @@ public class RateLimitMiddleware
         [ApiRoutes.AiFuelPrices] = TimeSpan.FromSeconds(5),
         [ApiRoutes.FuelPrices] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelNews] = TimeSpan.FromSeconds(1),
+        // MCP initialization and discovery arrive in bursts; use a bounded minute window below.
+        [ApiRoutes.Mcp] = TimeSpan.Zero,
+        [ApiRoutes.McpMetadata] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelNewsLatest] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelNewsDetail] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelNewsSubscription] = TimeSpan.FromSeconds(1),
@@ -34,6 +37,7 @@ public class RateLimitMiddleware
     // Key = ip + "|" + route
     private readonly Dictionary<string, DateTimeOffset> _lastRequest = new();
     private readonly Dictionary<string, Queue<DateTimeOffset>> _guestLoginAttempts = new();
+    private readonly Dictionary<string, Queue<DateTimeOffset>> _mcpAttempts = new();
     private DateTimeOffset _lastCleanup;
     private readonly RequestDelegate _next;
     private readonly TimeProvider _timeProvider;
@@ -55,6 +59,7 @@ public class RateLimitMiddleware
         var ip = (address?.IsIPv4MappedToIPv6 == true ? address.MapToIPv4() : address)?.ToString() ?? "unknown";
         // Routing accepts case changes and trailing slashes; they must share a bucket.
         var path = new PathString((context.Request.Path.Value ?? "").TrimEnd('/').ToLowerInvariant());
+        if (path.StartsWithSegments(ApiRoutes.Mcp)) path = new PathString(ApiRoutes.Mcp);
         // Every article detail shares a bucket; varying IDs cannot bypass its limit.
         if (path.StartsWithSegments(ApiRoutes.FuelNews, out var newsPath) &&
             newsPath.HasValue && newsPath != "/latest" && newsPath != "/subscription")
@@ -129,6 +134,12 @@ public class RateLimitMiddleware
                     if (_guestLoginAttempts[loginIp].Count == 0)
                         _guestLoginAttempts.Remove(loginIp);
                 }
+                foreach (var mcpIp in _mcpAttempts.Keys.ToArray())
+                {
+                    while (_mcpAttempts[mcpIp].TryPeek(out var oldest) && oldest <= now.AddMinutes(-1))
+                        _mcpAttempts[mcpIp].Dequeue();
+                    if (_mcpAttempts[mcpIp].Count == 0) _mcpAttempts.Remove(mcpIp);
+                }
             }
 
             if (_lastRequest.TryGetValue(key, out var lastTime))
@@ -159,6 +170,19 @@ public class RateLimitMiddleware
                 // cannot exceed the limit. Failed logins consume permits too.
                 if (!blocked)
                     attempts.Enqueue(now);
+            }
+
+            if (path == ApiRoutes.Mcp)
+            {
+                if (!_mcpAttempts.TryGetValue(ip, out var attempts))
+                    _mcpAttempts[ip] = attempts = new Queue<DateTimeOffset>();
+                while (attempts.TryPeek(out var oldest) && oldest <= now.AddMinutes(-1)) attempts.Dequeue();
+                if (attempts.Count >= 60)
+                {
+                    blocked = true;
+                    retryAfterSeconds = Math.Max(retryAfterSeconds, RetryAfter(attempts.Peek().AddMinutes(1), now));
+                }
+                if (!blocked) attempts.Enqueue(now);
             }
 
             if (!blocked)
