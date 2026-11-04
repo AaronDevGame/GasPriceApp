@@ -23,7 +23,7 @@ Send an `application/json` object containing `article` and `expectedRevision`. M
 | --- | --- |
 | `importKey`, `topicKey` | 3–100 lowercase letters, digits and hyphens, starting with a letter/digit. Stable import identity and shared forecast/confirmed topic identity. |
 | `category`, `status` | `adjustment` with `forecast`/`confirmed`, or `general` with `general`. |
-| `title`, `summary`, `body` | Plain text, respectively 10–160, 20–600, 40–6000 characters. Aim for a 40–60-word summary and 150–250-word article. Body paragraphs use blank lines. |
+| `title`, `summary`, `body` | Plain text, respectively 10–160, 20–600, 40–6000 characters. The publisher aims for a specific headline, a 20–35-word preview and 1–2 paragraphs totaling 60–100 words. Body paragraphs use blank lines. |
 | `effectiveDatePhilippines` | `yyyy-MM-dd` for adjustments; null for general news. Within 7 days before to 14 days after today's Philippine date. |
 | `effectiveAtUtc` | UTC timestamp ending in `Z`, or null if no verified time. Must match the Philippine effective date. |
 | `expiresAtUtc` | Future UTC timestamp within 30 days. Forecast expiry cannot exceed midnight following its effective Philippine date. |
@@ -43,6 +43,14 @@ Matching confirmed numbers are checked against existing DOE rows for the effecti
 The existing ChatGPT research task needs a connected authenticated publishing tool or a runner that can execute `scripts/import_fuel_news.py`. Give it `agents/philippines-fuel-news-publisher.md` and this contract. Provision `FUEL_NEWS_API_URL` (the direct HTTPS backend origin) and `FUEL_NEWS_ADMIN_KEY` (the backend admin key) in the runner's secret environment, never in prompts, source or frontend settings. The script follows no redirects and prints only the import outcome, ID and revision. `--dry-run` checks JSON without sending; the server remains authoritative for validation.
 
 The import endpoint and publishing script do not create or change a ChatGPT schedule. Configure and test its publishing connection after deploying the backend. Until that happens, the News tab has an honest empty state; no demonstration news is seeded into production. A text-only scheduled chat cannot write the database by itself.
+
+### Concise subscription-based publishing
+
+The short editorial format and a ready-to-use local scheduled-task prompt are in `agents/philippines-fuel-news-publisher.md`. The schedule performs research and calls the existing import script; the backend itself does not call a model to write news. Local scheduled runs use the account's available Codex access and limits and require the desktop app and computer to be available. They do not make an API-based cloud publisher part of a ChatGPT subscription.
+
+Configure `FUEL_NEWS_API_URL` and `FUEL_NEWS_ADMIN_KEY` securely in the scheduled process environment, then test a real researched import and read it back using `/fuel-news/{id}` and `/fuel-news/latest`. Do not put secrets in the prompt, source, frontend, or chat. The existing script reads these variables at execution time; configuration held only in Postman's vault is not available to it. If the integration is missing, the task must report that condition instead of claiming it inserted news.
+
+No API or database schema change is needed for the concise format. The headline maps to `article.title`; the preview to `article.summary`; short news, confirmation context and optional calculated impact to `article.body`; changes, dates and sources use their existing fields. The home page already requests `/fuel-news/latest` and displays the compact card. The editorial target is 1–3 sources while the API continues to accept 1–10 for compatibility. A `Forecast:` or `Confirmed:` title prefix preserves status when the headline is displayed without its badge. All displayed dates should be Philippine time; never invent a 6 AM implementation time.
 
 ## Mobile notifications
 

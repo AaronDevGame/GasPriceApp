@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Simplify the fuel-news publisher's editorial format to a status-aware headline, a one-sentence preview, 1–2 short paragraphs, optional calculated impact and 1–3 sources. Document a local subscription-based scheduled publishing prompt and its required backend connection without changing the API contract.
+
 ### Fixed
 - Use printed DOE PDF coverage dates instead of rejecting valid reports when the DOE listing date differs. Log listing mismatches, retain page-to-page date validation, return extracted dates in whole-PDF results and completed job status, and reuse saved PDF coverage for city imports.
 
