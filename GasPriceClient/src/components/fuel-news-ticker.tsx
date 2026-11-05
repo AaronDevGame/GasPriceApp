@@ -9,7 +9,13 @@ export function FuelNewsTicker({ item }: { item: NewsItem }) {
   // Keep the ticker concise; the full summary remains available in the article.
   const message = item.article.title
     .replace(/\b(?:up|increases?|rises?)\b(?=\s*₱)/gi, '↑')
-    .replace(/\b(?:down|decreases?|drops?|cuts?)\b(?=\s*₱)/gi, '↓');
+    .replace(/\b(?:down|decreases?|drops?|cuts?)\b(?=\s*₱)/gi, '↓')
+    .replace(/;\s*/g, '  ');
+  const headline = message.split(/(Confirmed:?|(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.? \d{1,2}(?:,? \d{4})?|\d{4}-\d{2}-\d{2})/gi)
+    .map((part, index) => <ThemedText key={index} style={[
+      styles.headline,
+      /^Confirmed:?$/i.test(part) ? styles.confirmed : /\d/.test(part) && /^(?:[A-Za-z]+\.? \d|\d{4}-)/.test(part) ? styles.date : undefined,
+    ]}>{part}</ThemedText>);
   const [offset] = useState(() => new Animated.Value(0));
   const [viewport, setViewport] = useState(0);
   const [textWidth, setTextWidth] = useState(0);
@@ -40,11 +46,11 @@ export function FuelNewsTicker({ item }: { item: NewsItem }) {
       <ThemedView type="backgroundElement" style={styles.header}>
         <View style={styles.viewport} onLayout={event => setViewport(event.nativeEvent.layout.width)}>
           <Animated.View style={[styles.track, { transform: [{ translateX: offset }] }]}>
-            <ThemedText type="smallBold" numberOfLines={1} style={[styles.headline, { paddingRight: Math.max(96, viewport * 0.75) }]}
-              onLayout={event => setTextWidth(event.nativeEvent.layout.width)}>{message}</ThemedText>
+            <ThemedText type="smallBold" numberOfLines={1} style={[styles.headline, { paddingRight: Math.max(48, viewport * 0.375) }]}
+              onLayout={event => setTextWidth(event.nativeEvent.layout.width)}>{headline}</ThemedText>
             {Array.from({ length: textWidth ? Math.max(1, Math.ceil(viewport / textWidth)) : 1 }, (_, index) =>
-              <ThemedText key={index} type="smallBold" numberOfLines={1} style={[styles.headline, { paddingRight: Math.max(96, viewport * 0.75) }]}
-                accessible={false} aria-hidden>{message}</ThemedText>)}
+              <ThemedText key={index} type="smallBold" numberOfLines={1} style={[styles.headline, { paddingRight: Math.max(48, viewport * 0.375) }]}
+                accessible={false} aria-hidden>{headline}</ThemedText>)}
           </Animated.View>
         </View>
       </ThemedView>
@@ -55,5 +61,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 14, gap: 12, height: 52, overflow: 'hidden' },
   viewport: { flex: 1, height: 28, overflow: 'hidden', justifyContent: 'center' },
   track: { position: 'absolute', flexDirection: 'row', alignItems: 'center' },
-  headline: { flexShrink: 0, fontSize: 16, lineHeight: 26, fontWeight: '600' },
+  headline: { flexShrink: 0, fontSize: 16, lineHeight: 26, fontWeight: '400' },
+  confirmed: { color: '#208AEF' },
+  date: { fontWeight: '700' },
 });

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Halve ticker repeat spacing, remove headline semicolons, color Confirmed blue, and bold only headline dates.
 - Space repeated ticker headlines apart with a responsive gap for easier reading.
 - Improve ticker readability with a larger headline, slower scrolling, and ↑/↓ symbols for price directions; keep the summary in the full article.
 - Replace the Overview news card above Your area with a compact, looping headline and summary ticker that opens the full article. Start the text immediately at the left edge without extra labels or arrows, repeat seamlessly, and resume from the paused position.
