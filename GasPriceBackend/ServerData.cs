@@ -211,5 +211,5 @@ public record RouteInfo(string Route, string Method, bool IsLegacy = false);
 
 public static class APIVersion
 {
-    public const string Version = "1.11.0";
+    public const string Version = "1.12.0";
 }

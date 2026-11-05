@@ -6,10 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-11-06
+
 ### Added
 - Add an OAuth-protected `/mcp` Streamable HTTP endpoint for fuel-news history, article reads and validated publishing on the existing backend. Require signed resource-audience tokens, a publisher subject allowlist and scopes; keep MCP and MCP publishing disabled by default. Reuse the existing atomic news import and notification outbox without exposing or copying `NEWS_API_KEY`, and document Render setup and the remaining OAuth/client configuration.
 
 ### Changed
+- Bump project and API version to `1.12.0`.
 - Require a separate `NEWS_API_KEY` for news admin imports and revision history, reject the general admin key on those routes, and deny the news key access to other admin routes. Missing news-key configuration leaves public reads and unrelated admin operations available.
 - Simplify the fuel-news publisher's editorial format to a status-aware headline, a one-sentence preview, 1–2 short paragraphs, optional calculated impact and 1–3 sources. Document a local subscription-based scheduled publishing prompt and its required backend connection without changing the API contract.
 
