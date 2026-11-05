@@ -13,14 +13,23 @@ export function FuelNewsTicker({ item }: { item: NewsItem }) {
   const [paused, setPaused] = useState(false);
   useEffect(() => {
     if (!viewport || !textWidth || paused) return;
-    offset.setValue(0);
-    const animation = Animated.loop(Animated.timing(offset, {
-      toValue: -textWidth, duration: (textWidth / 45) * 1000,
-      easing: Easing.linear, useNativeDriver: true, isInteraction: false,
-    }));
-    animation.start();
-    return () => animation.stop();
+    let active = true;
+    let animation: Animated.CompositeAnimation | undefined;
+    const run = (position: number) => {
+      if (!active) return;
+      const distance = textWidth + position;
+      animation = Animated.timing(offset, {
+        toValue: -textWidth, duration: Math.max(1, distance / 45 * 1000),
+        easing: Easing.linear, useNativeDriver: true, isInteraction: false,
+      });
+      animation.start(({ finished }) => {
+        if (finished && active) { offset.setValue(0); run(0); }
+      });
+    };
+    offset.stopAnimation(position => run(Math.max(-textWidth, Math.min(0, position))));
+    return () => { active = false; animation?.stop(); };
   }, [viewport, textWidth, message, offset, paused]);
+
   return <Link href={{ pathname: '/news-detail', params: { id: item.id } }} asChild>
     <Pressable accessibilityRole="link" accessibilityLabel={`Read fuel news: ${message}`}
       onHoverIn={() => setPaused(true)} onHoverOut={() => setPaused(false)}
@@ -29,7 +38,10 @@ export function FuelNewsTicker({ item }: { item: NewsItem }) {
         <View style={styles.viewport} onLayout={event => setViewport(event.nativeEvent.layout.width)}>
           <Animated.View style={[styles.track, { transform: [{ translateX: offset }] }]}>
             <ThemedText type="smallBold" numberOfLines={1} style={styles.headline}
-              onLayout={event => setTextWidth(event.nativeEvent.layout.width)}>{message}</ThemedText>
+              onLayout={event => setTextWidth(event.nativeEvent.layout.width)}>{message}   •   </ThemedText>
+            {Array.from({ length: textWidth ? Math.max(1, Math.ceil(viewport / textWidth)) : 1 }, (_, index) =>
+              <ThemedText key={index} type="smallBold" numberOfLines={1} style={styles.headline}
+                accessible={false} aria-hidden>{message}   •   </ThemedText>)}
           </Animated.View>
         </View>
       </ThemedView>
