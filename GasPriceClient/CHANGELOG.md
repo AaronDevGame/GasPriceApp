@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Replace the Overview news card above Your area with a compact, looping headline and summary ticker that opens the full article. Start the text immediately at the left edge without extra labels or arrows.
+
 ### Fixed
 - Allow database-backed news reads time to complete while the hosted server starts up.
 - Retry failed older-news requests at their original page while keeping loaded articles.

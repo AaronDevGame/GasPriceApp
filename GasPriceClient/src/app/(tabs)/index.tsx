@@ -9,7 +9,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { formatPrice, type Prices, type FeaturedFuelPrice } from '@/fuel/api';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
 import { useAuth } from '@/auth/auth-provider';
-import { FuelNewsCard } from '@/components/fuel-news-card';
+import { FuelNewsTicker } from '@/components/fuel-news-ticker';
 import { useLatestNews } from '@/news/use-latest-news';
 
 // Enable temporarily when testing logout and reconnection.
@@ -79,7 +79,7 @@ export default function HomeScreen() {
               <Button title="Logout" disabled={fuel.busy || !fuel.authenticated} onPress={() => void fuel.signOut()} />
             </View>}
           </View>
-          {news.item && <FuelNewsCard item={news.item} compact />}
+          {news.item && <FuelNewsTicker item={news.item} />}
           {news.error && <View style={styles.loading}>
             <ThemedText type="small" themeColor="textSecondary">News could not be updated.</ThemedText>
             <Button title="Retry news" onPress={() => void news.reload()} disabled={news.loading} />
