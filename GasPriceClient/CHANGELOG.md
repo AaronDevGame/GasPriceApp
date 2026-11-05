@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- Allow database-backed news reads time to complete while the hosted server starts up.
+- Retry failed older-news requests at their original page while keeping loaded articles.
+
 ## [1.0.4] - 2026-10-09
 
 ### Added
