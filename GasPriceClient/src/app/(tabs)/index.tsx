@@ -1,5 +1,6 @@
+import { Link } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Button, Linking, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -8,13 +9,10 @@ import { LocalPriceBoard } from '@/components/local-price-board';
 import { useTheme } from '@/hooks/use-theme';
 import { formatPrice, type Prices, type FeaturedFuelPrice } from '@/fuel/api';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
-import { useAuth } from '@/auth/auth-provider';
-import { FuelNewsTicker } from '@/components/fuel-news-ticker';
+import { FuelNewsHeadline } from '@/components/fuel-news-headline';
+import { DashboardAction } from '@/components/dashboard-action';
+import { AppIcon } from '@/components/app-icon';
 import { useLatestNews } from '@/news/use-latest-news';
-
-// Enable temporarily when testing logout and reconnection.
-const SHOW_LOGOUT_BUTTON = false;
-const SHOW_TOKEN_LOG = true;
 
 function asOf(value: string) {
   return new Date(value).toLocaleDateString('en-PH', {
@@ -43,14 +41,15 @@ function FeaturedPriceCard({ item }: { item: FeaturedFuelPrice }) {
     <ThemedText style={styles.area}>{item.city}, {item.province}</ThemedText>
     <ThemedText type="small" themeColor="textSecondary">DOE data as of {asOf(item.dataAsOf)} · Report week {item.reportWeekStart} to {item.reportWeekEnd}</ThemedText>
     <PriceGrid prices={item.prices} />
-    <Button title="View DOE source" onPress={() => void Linking.openURL(item.source.url)} />
+    <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(item.source.url)} style={styles.sourceLink}><ThemedText type="smallBold" style={styles.accent}>View DOE source ↗</ThemedText></Pressable>
   </ThemedView>;
 }
 
 export default function HomeScreen() {
   const fuel = useFuelPrices();
   const news = useLatestNews();
-  const { tokenLog } = useAuth();
+  const { width } = useWindowDimensions();
+  const wide = width >= 1000;
   const theme = useTheme();
   const [refreshing, setRefreshing] = useState(false);
   const refreshHint = Platform.OS === 'web' ? 'Reload this page to reconnect or update prices.' : 'Pull down to reconnect or update prices.';
@@ -69,44 +68,46 @@ export default function HomeScreen() {
         />}
       >
         <View style={styles.content}>
-          <View style={styles.header}>
-            <View style={styles.brand}>
-              <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>
-              <ThemedText type="title" style={styles.title}>Overview</ThemedText>
-              <ThemedText themeColor="textSecondary">Diesel, 91 and 95 in ₱/liter.</ThemedText>
-            </View>
-            {SHOW_LOGOUT_BUTTON && <View style={styles.actions}>
-              <Button title="Logout" disabled={fuel.busy || !fuel.authenticated} onPress={() => void fuel.signOut()} />
-            </View>}
+          <View style={[styles.mobileBrand, Platform.OS === 'web' && width >= 900 && { display: 'none' }]}>
+            <AppIcon name="fuel" color="#76B4FF" />
+            <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>
           </View>
-          {news.item && <FuelNewsTicker item={news.item} />}
+          {news.item && <FuelNewsHeadline item={news.item} />}
+          {news.loading && !news.item && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small" themeColor="textSecondary">Loading fuel news…</ThemedText></View>}
           {news.error && <View style={styles.loading}>
             <ThemedText type="small" themeColor="textSecondary">News could not be updated.</ThemedText>
-            <Button title="Retry news" onPress={() => void news.reload()} disabled={news.loading} />
+            <DashboardAction title="Retry news" onPress={() => void news.reload()} disabled={news.loading} />
           </View>}
-          {SHOW_TOKEN_LOG && <View style={styles.tokenLog} accessibilityLiveRegion="polite">
-            <ThemedText type="smallBold" themeColor="textSecondary">TOKEN LOG · TESTING</ThemedText>
-            {tokenLog.length ? tokenLog.map(entry => <ThemedText key={entry.id} type="small" themeColor="textSecondary">
-              {new Date(entry.time).toLocaleTimeString()} · {entry.message}
-            </ThemedText>) : <ThemedText type="small" themeColor="textSecondary">Checking token…</ThemedText>}
-          </View>}
+          {!news.item && !news.loading && !news.error && <ThemedText type="small" themeColor="textSecondary">No fuel news has been published yet.</ThemedText>}
+          <View style={styles.header}>
+            <View style={styles.brand}>
+              <ThemedText accessibilityRole="header" style={styles.title}>Your fuel price dashboard</ThemedText>
+              <ThemedText themeColor="textSecondary">Compare fuel prices before your next fill-up.</ThemedText>
+            </View>
+            <Link href="/weekly-changes" style={styles.quickLink}>Weekly adjustments ↗</Link>
+          </View>
+          <ThemedView type="backgroundElement" style={styles.locationCard}>
+            <View style={styles.locationText}>
+              <ThemedText type="smallBold">{fuel.localItem ? `Your area · ${fuel.localItem.area.name}` : 'Where are you filling up?'}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">{fuel.locationNote}</ThemedText>
+            </View>
+            <View style={styles.locationActions}>
+              <DashboardAction title="Use my location" primary disabled={fuel.busy || !fuel.authenticated} onPress={() => void fuel.useLocation()} />
+              <Link href="/fuel-prices" asChild><Pressable accessibilityRole="link" style={styles.cityButton}><ThemedText type="smallBold" style={styles.accent}>Choose a city →</ThemedText></Pressable></Link>
+            </View>
+          </ThemedView>
           {!fuel.authenticated && !fuel.busy && !fuel.error && <ThemedText>You are signed out. {refreshHint}</ThemedText>}
           {fuel.error && <ThemedText accessibilityRole="alert">{fuel.error} {refreshHint}</ThemedText>}
           {fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">{fuel.featured ? 'Updating prices…' : 'Loading featured prices…'}</ThemedText></View>}
           {fuel.localItem && <LocalPriceBoard item={fuel.localItem} doePrices={fuel.doePrices} />}
-          <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText style={styles.area}>Find your local prices</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">{fuel.locationNote}</ThemedText>
-            <Button title="Use my location" disabled={fuel.busy || !fuel.authenticated} onPress={() => void fuel.useLocation()} />
-          </ThemedView>
           <View style={styles.history}>
             <ThemedText style={styles.area}>Fuel prices across the Philippines</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">Featured DOE city prices are examples, not prices near you.</ThemedText>
             {fuel.featuredError && <ThemedText accessibilityRole="alert">Featured prices could not be updated. Pull down or reload to retry.</ThemedText>}
             {fuel.featured?.groups.map(group => <View key={group.name} style={styles.history}>
               <ThemedText style={styles.area}>{group.name}</ThemedText>
-              {group.items.length ? group.items.map(item =>
-                <FeaturedPriceCard key={`${item.city}-${item.province}`} item={item} />) :
+              {group.items.length ? <View style={[styles.featuredGrid, wide && styles.featuredGridWide]}>{group.items.map(item =>
+                <View key={`${item.city}-${item.province}`} style={wide ? styles.featuredColumn : undefined}><FeaturedPriceCard item={item} /></View>)}</View> :
                 <ThemedText type="small" themeColor="textSecondary">No recent DOE prices for the featured cities.</ThemedText>}
             </View>)}
           </View>
@@ -126,16 +127,21 @@ export default function HomeScreen() {
   </ThemedView>;
 }
 const styles = StyleSheet.create({
-  page: { flex: 1 }, safe: { flex: 1 }, scroll: { padding: 24, alignItems: 'center' },
-  content: { width: '100%', maxWidth: 900, gap: 20, paddingVertical: 16 },
-  header: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 20, marginBottom: 12 },
-  brand: { flexGrow: 1, gap: 8 }, title: { fontSize: 38, lineHeight: 44 },
-  accent: { color: '#208AEF' }, actions: { gap: 8 }, loading: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  card: { padding: 20, borderRadius: 20, gap: 12 }, area: { fontSize: 21, lineHeight: 28, fontWeight: '600' },
-  prices: { flexDirection: 'row', gap: 12, marginTop: 8 }, pricesCompact: { gap: 8 },
-  price: { flex: 1, minWidth: 0, gap: 4 },
+  page: { flex: 1 }, safe: { flex: 1 }, scroll: { padding: 20, alignItems: 'center' },
+  content: { width: '100%', maxWidth: 1160, gap: 20, paddingVertical: 8, paddingBottom: 24 },
+  mobileBrand: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 4 },
+  header: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 16, marginTop: 12 },
+  brand: { flex: 1, minWidth: 240, gap: 6 }, title: { fontSize: 28, lineHeight: 36, fontWeight: '600', letterSpacing: -0.6 },
+  accent: { color: '#76B4FF' }, quickLink: { color: '#76B4FF', fontSize: 14, fontWeight: '600', paddingVertical: 12 },
+  loading: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center' },
+  locationCard: { borderRadius: 14, padding: 20, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 16 },
+  locationText: { flexGrow: 1, flexShrink: 1, flexBasis: 250, gap: 4 },
+  locationActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
+  cityButton: { minHeight: 44, paddingVertical: 12, paddingHorizontal: 4 },
+  card: { padding: 20, borderRadius: 14, gap: 12 }, area: { fontSize: 19, lineHeight: 26, fontWeight: '600' },
+  prices: { flexDirection: 'row', gap: 12, marginTop: 8 }, pricesCompact: { gap: 8 }, price: { flex: 1, minWidth: 0, gap: 4 },
   priceCaptionCompact: { fontSize: 12, lineHeight: 18 }, priceLabelNarrow: { minHeight: 36 },
-  amount: { fontSize: 24, lineHeight: 32, fontWeight: '700', flexGrow: 1 },
-  history: { gap: 12 },
-  tokenLog: { gap: 4 },
+  amount: { fontSize: 24, lineHeight: 32, fontWeight: '700', flexGrow: 1, fontVariant: ['tabular-nums'] },
+  history: { gap: 16, marginTop: 8 }, featuredGrid: { gap: 12 }, featuredGridWide: { flexDirection: 'row', flexWrap: 'wrap' },
+  featuredColumn: { flexBasis: '48%', flexGrow: 1, minWidth: 0 }, sourceLink: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
 });

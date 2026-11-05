@@ -31,9 +31,9 @@ export function FuelNewsCard({ item, compact = false, detail = false }: { item: 
   </ThemedView>;
 }
 const styles = StyleSheet.create({
-  card: { padding: 20, borderRadius: 20, gap: 12 },
+  card: { padding: 20, borderRadius: 14, gap: 12 },
   metadata: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 },
-  badge: { color: '#208AEF' }, title: { fontSize: 21, lineHeight: 28, fontWeight: '600' },
+  badge: { color: '#76B4FF' }, title: { fontSize: 21, lineHeight: 28, fontWeight: '600' },
   change: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 },
-  link: { color: '#208AEF', fontWeight: '600', paddingVertical: 6 },
+  link: { color: '#76B4FF', fontWeight: '600', paddingVertical: 6 },
 });

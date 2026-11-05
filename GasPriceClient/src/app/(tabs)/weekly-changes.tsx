@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Image, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
@@ -46,7 +46,7 @@ function StationLogo({ name, logo }: { name: string; logo: 'caltex' | 'cleanfuel
 }
 
 function Change({ label, amount }: { label: string; amount: number | null }) {
-  const color = amount === null ? undefined : amount > 0 ? '#BA3636' : amount < 0 ? '#087443' : undefined;
+  const color = amount === null ? undefined : amount > 0 ? '#FF9595' : amount < 0 ? '#6BD5A1' : undefined;
   const value = amount === null ? 'Not listed' : amount > 0
     ? `↑ Increase ₱${amount.toFixed(2)}` : amount < 0 ? `↓ Decrease ₱${Math.abs(amount).toFixed(2)}` : 'No change';
   const spoken = amount === null ? 'not listed' : amount > 0
@@ -73,12 +73,16 @@ function AdjustmentCard({ item }: { item: FuelAdjustment }) {
       <Change label="Diesel" amount={item.dieselChangePerLiter} />
       <Change label="Kerosene" amount={item.keroseneChangePerLiter} />
     </View>
+    <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(item.sourceUrl)} style={styles.sourceLink}>
+      <ThemedText type="smallBold" style={styles.accent}>View source notice ↗</ThemedText>
+    </Pressable>
   </ThemedView>;
 }
 
 export default function WeeklyChangesScreen() {
   const { session, loading: authLoading, error: authError } = useAuth();
   const theme = useTheme();
+  const { width } = useWindowDimensions();
   const [feed, setFeed] = useState<FuelAdjustmentFeed | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -223,9 +227,9 @@ export default function WeeklyChangesScreen() {
                 </Pressable>;
               })}
             </ScrollView>
-            <Animated.View style={[styles.week, { opacity: cardEntrance,
+            <Animated.View style={[styles.week, width >= 1000 && styles.adjustmentGrid, { opacity: cardEntrance,
               transform: [{ translateY: cardEntrance.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
-              {activeWeek.adjustments.map(item => <AdjustmentCard key={item.id} item={item} />)}
+              {activeWeek.adjustments.map(item => <View key={item.id} style={width >= 1000 ? styles.adjustmentColumn : undefined}><AdjustmentCard item={item} /></View>)}
             </Animated.View>
           </View>}
           <ThemedText type="small" themeColor="textSecondary">Based on DOE notices. These are changes per liter, not current pump prices.</ThemedText>
@@ -236,23 +240,24 @@ export default function WeeklyChangesScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1 }, safe: { flex: 1 }, scroll: { padding: 24, alignItems: 'center' },
-  content: { width: '100%', maxWidth: 900, gap: 20, paddingVertical: 16 },
-  header: { gap: 8, marginBottom: 12 }, accent: { color: '#208AEF' },
-  title: { fontSize: 38, lineHeight: 44 }, loading: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  week: { gap: 12 },
+  page: { flex: 1 }, safe: { flex: 1 }, scroll: { padding: 20, alignItems: 'center' },
+  content: { width: '100%', maxWidth: 1160, gap: 20, paddingVertical: 12 },
+  header: { gap: 8, marginBottom: 12 }, accent: { color: '#76B4FF' },
+  title: { fontSize: 28, lineHeight: 36, fontWeight: '600' }, loading: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  week: { gap: 12 }, adjustmentGrid: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' }, adjustmentColumn: { flexBasis: '48%', flexGrow: 1, minWidth: 0 },
   weekTabs: { gap: 8, paddingBottom: 8 },
   weekTab: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 2, borderColor: 'transparent' },
-  selectedWeekTab: { borderColor: '#208AEF' },
-  selectedWeekTabText: { color: '#208AEF' },
-  card: { padding: 20, borderRadius: 20, gap: 16 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  brand: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  selectedWeekTab: { borderColor: '#76B4FF' },
+  selectedWeekTabText: { color: '#76B4FF' },
+  card: { padding: 20, borderRadius: 14, gap: 16 },
+  cardHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  brand: { flex: 1, minWidth: 150, flexDirection: 'row', alignItems: 'center', gap: 10 },
   logo: { width: 44, height: 44 }, logoCrop: { width: 44, height: 44, overflow: 'hidden' },
   cleanfuelLogo: { width: 301, height: 44, left: -2 },
   ecooilLogo: { width: 110, height: 44, left: -4 },
   logoFallback: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#34526A', alignItems: 'center', justifyContent: 'center' },
   logoInitials: { color: '#FFFFFF' },
+  sourceLink: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   company: { fontSize: 21, lineHeight: 28, fontWeight: '600', flexShrink: 1 },
   effectiveDate: { textAlign: 'right', flexShrink: 1 },
   changes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

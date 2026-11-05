@@ -51,7 +51,7 @@ function FuelNewsArticle({ validId }: { validId: string | null }) {
   </SafeAreaView></ThemedView>;
 }
 const styles = StyleSheet.create({
-  page: { flex: 1 }, scroll: { padding: 24, alignItems: 'center' },
+  page: { flex: 1 }, scroll: { padding: 20, alignItems: 'center' },
   content: { width: '100%', maxWidth: 900, gap: 20, paddingVertical: 16 },
-  link: { color: '#208AEF', fontWeight: '600', paddingVertical: 8 }, source: { gap: 4, alignItems: 'flex-start' },
+  link: { color: '#76B4FF', fontWeight: '600', paddingVertical: 8 }, source: { gap: 4, alignItems: 'flex-start' },
 });

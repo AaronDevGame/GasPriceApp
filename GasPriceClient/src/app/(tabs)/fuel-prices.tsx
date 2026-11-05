@@ -105,14 +105,14 @@ export default function FuelPricesScreen() {
             <ThemedView type="backgroundElement" style={styles.card}>
               <ThemedText type="smallBold">City or municipality</ThemedText>
               <Pressable accessibilityRole="button" accessibilityLabel="Choose city" onPress={() => setShowCities(value => !value)}
-                style={[styles.selector, { borderColor: theme.backgroundSelected }]}>
+                style={[styles.selector, { borderColor: theme.backgroundSelected, backgroundColor: theme.background }]}>
                 <ThemedText>{selected ? `${selected.city}, ${selected.province}` : 'Choose a city'}</ThemedText>
                 <ThemedText themeColor="textSecondary">{showCities ? '▲' : '▼'}</ThemedText>
               </Pressable>
               {showCities && <View style={styles.cityList}>
                 <TextInput value={search} onChangeText={setSearch} placeholder="Search city or province"
                   placeholderTextColor={theme.textSecondary} accessibilityLabel="Search city or province"
-                  style={[styles.search, { color: theme.text, borderColor: theme.backgroundSelected }]} />
+                  style={[styles.search, { color: theme.text, borderColor: theme.backgroundSelected, backgroundColor: theme.background }]} />
                 {locations.slice(0, 30).map(location => <Pressable key={`${location.city}|${location.province}`}
                   accessibilityRole="button" onPress={() => { setShowCities(false); setSearch(''); void load(location); }}
                   style={styles.cityOption}>
@@ -131,7 +131,7 @@ export default function FuelPricesScreen() {
               <View style={styles.controls}>
                 {grades.map(item => <Pressable key={item.value} accessibilityRole="button"
                   accessibilityState={{ selected: grade === item.value }} onPress={() => setGrade(item.value)}
-                  style={[styles.chip, { borderColor: grade === item.value ? '#208AEF' : theme.backgroundSelected,
+                  style={[styles.chip, { borderColor: grade === item.value ? '#76B4FF' : theme.backgroundSelected,
                     backgroundColor: grade === item.value ? theme.backgroundSelected : theme.backgroundElement }]}>
                   <ThemedText type="smallBold" style={grade === item.value ? styles.accent : undefined}>{item.label}</ThemedText>
                 </Pressable>)}
@@ -160,17 +160,17 @@ export default function FuelPricesScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1 }, scroll: { padding: 24, alignItems: 'center' },
-  content: { width: '100%', maxWidth: 900, gap: 16, paddingVertical: 16 },
-  header: { gap: 8, marginBottom: 12 }, accent: { color: '#208AEF' },
-  title: { fontSize: 38, lineHeight: 44 }, loading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  card: { padding: 20, borderRadius: 20, gap: 12 },
+  page: { flex: 1 }, scroll: { padding: 20, alignItems: 'center' },
+  content: { width: '100%', maxWidth: 1160, gap: 16, paddingVertical: 12 },
+  header: { gap: 8, marginBottom: 12 }, accent: { color: '#76B4FF' },
+  title: { fontSize: 28, lineHeight: 36, fontWeight: '600' }, loading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  card: { padding: 20, borderRadius: 14, gap: 12 },
   selector: { borderWidth: 1, borderRadius: 12, padding: 14, flexDirection: 'row', justifyContent: 'space-between' },
   cityList: { gap: 8 }, search: { borderWidth: 1, borderRadius: 10, padding: 12 },
   cityOption: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#77777733' },
   reportHeading: { gap: 4 }, sectionTitle: { fontSize: 22, lineHeight: 28, fontWeight: '700' },
   controls: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
-  priceRow: { borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  company: { flex: 1, gap: 4 }, amount: { textAlign: 'right', fontVariant: ['tabular-nums'] },
+  priceRow: { borderRadius: 14, padding: 16, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
+  company: { flex: 1, minWidth: 110, gap: 4 }, amount: { textAlign: 'right', fontVariant: ['tabular-nums'] },
 });

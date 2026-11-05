@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Changed
+- Redesign the frontend with charcoal surfaces, responsive desktop navigation, and labeled mobile tab icons.
+- Replace the Overview ticker with a static news headline, publication date, and article link above local prices.
+- Bring location and city selection forward, simplify fuel price cards, and separate company comparisons from area estimates.
+- Hide development token logs from the dashboard and improve responsive layouts for featured prices and weekly adjustments.
 - Halve ticker repeat spacing, remove headline semicolons, color Confirmed blue, and bold only headline dates.
 - Space repeated ticker headlines apart with a responsive gap for easier reading.
 - Improve ticker readability with a larger headline, slower scrolling, and ↑/↓ symbols for price directions; keep the summary in the full article.

@@ -63,8 +63,8 @@ export default function NewsScreen() {
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  scroll: { padding: 24, alignItems: 'center' },
-  content: { width: '100%', maxWidth: 900, gap: 20, paddingVertical: 16 },
-  accent: { color: '#208AEF' },
-  title: { fontSize: 38, lineHeight: 44 },
+  scroll: { padding: 20, alignItems: 'center' },
+  content: { width: '100%', maxWidth: 1160, gap: 20, paddingVertical: 12 },
+  accent: { color: '#76B4FF' },
+  title: { fontSize: 28, lineHeight: 36, fontWeight: '600' },
 });
