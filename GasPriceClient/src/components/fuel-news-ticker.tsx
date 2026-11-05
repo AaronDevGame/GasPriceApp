@@ -40,11 +40,11 @@ export function FuelNewsTicker({ item }: { item: NewsItem }) {
       <ThemedView type="backgroundElement" style={styles.header}>
         <View style={styles.viewport} onLayout={event => setViewport(event.nativeEvent.layout.width)}>
           <Animated.View style={[styles.track, { transform: [{ translateX: offset }] }]}>
-            <ThemedText type="smallBold" numberOfLines={1} style={styles.headline}
-              onLayout={event => setTextWidth(event.nativeEvent.layout.width)}>{message}   •   </ThemedText>
+            <ThemedText type="smallBold" numberOfLines={1} style={[styles.headline, { paddingRight: Math.max(96, viewport * 0.75) }]}
+              onLayout={event => setTextWidth(event.nativeEvent.layout.width)}>{message}</ThemedText>
             {Array.from({ length: textWidth ? Math.max(1, Math.ceil(viewport / textWidth)) : 1 }, (_, index) =>
-              <ThemedText key={index} type="smallBold" numberOfLines={1} style={styles.headline}
-                accessible={false} aria-hidden>{message}   •   </ThemedText>)}
+              <ThemedText key={index} type="smallBold" numberOfLines={1} style={[styles.headline, { paddingRight: Math.max(96, viewport * 0.75) }]}
+                accessible={false} aria-hidden>{message}</ThemedText>)}
           </Animated.View>
         </View>
       </ThemedView>
