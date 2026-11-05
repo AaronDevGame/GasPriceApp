@@ -15,7 +15,7 @@ The MCP connection instead uses short-lived OAuth access tokens issued for this 
 This code is an OAuth **resource server**, not a login or token-issuing service. It does not create an OAuth account, authorization endpoint, client registration endpoint, or consent screen. Choose an OAuth provider first (for example Auth0, Keycloak or Entra ID), then configure it to:
 
 1. Serve HTTPS authorization-server/OpenID discovery and public signing keys. Its discovery `issuer` must exactly match `Mcp__Authority`, including a trailing slash if present.
-2. Issue signed JWT **access tokens** with audience `https://backendserver-rtqi.onrender.com/mcp`. Do not use an ID token or the guest login token.
+2. Issue signed JWT **access tokens** with audience `https://gaspricebackend.onrender.com/mcp`. Do not use an ID token or the guest login token.
 3. Define the scopes `fuel-news:read` and `fuel-news:publish`. Grant publishing only to your publisher account. The token needs both scopes to publish.
 4. Support the connecting MCP client's OAuth flow: authorization code with PKCE S256, resource indicators for this resource, and a compatible registration method (dynamic registration, client metadata documents, or a pre-registered client). If pre-registering, use the exact redirect URI shown by the client; do not guess a callback URL. Provider support must be verified before choosing it.
 5. Obtain your publisher account's stable `sub` claim through the provider's account/admin interface. Configure that subject as an allowlisted identity. An email address is not a substitute for `sub`.
@@ -30,7 +30,7 @@ On the **existing backend service**, set these non-secret values under **Environ
 | --- | --- |
 | `Mcp__Enabled` | `true` after the OAuth settings below are ready; otherwise omit or `false` |
 | `Mcp__Authority` | Exact HTTPS issuer URL from your OAuth provider |
-| `Mcp__Resource` | `https://backendserver-rtqi.onrender.com/mcp` |
+| `Mcp__Resource` | `https://gaspricebackend.onrender.com/mcp` |
 | `Mcp__AllowedSubjects` | Your provider-issued publisher `sub`; comma-separated for multiple publishers |
 | `Mcp__PublishEnabled` | `false` for initial connection checks |
 
@@ -38,14 +38,14 @@ The double underscores are ASP.NET Core's environment-variable representation of
 
 Use the direct Render HTTPS endpoint, not the Cloudflare proxy, which does not forward these routes. The protected resource metadata document is at:
 
-`https://backendserver-rtqi.onrender.com/.well-known/oauth-protected-resource/mcp`
+`https://gaspricebackend.onrender.com/.well-known/oauth-protected-resource/mcp`
 
 It lists the resource, authorization server and supported scopes, never secrets. Unauthorized `/mcp` requests return HTTP 401 and advertise this URL in `WWW-Authenticate`. Valid tokens with an unlisted subject or missing read scope return HTTP 403. Only header bearer authentication is supported; cookies and query-string tokens are not accepted. Browser requests with an `Origin` different from the configured resource origin are rejected; server-to-server MCP clients omit `Origin`.
 
 ## Connect and enable
 
 1. Configure the provider and deploy this backend with `Mcp__PublishEnabled=false`.
-2. Add `https://backendserver-rtqi.onrender.com/mcp` as a remote MCP server in your MCP client, using its supported OAuth connection flow. The previous Sites connection does not automatically change destinations. Check client/plan support for custom remote MCP servers before expecting the connection to appear.
+2. Add `https://gaspricebackend.onrender.com/mcp` as a remote MCP server in your MCP client, using its supported OAuth connection flow. The previous Sites connection does not automatically change destinations. Check client/plan support for custom remote MCP servers before expecting the connection to appear.
 3. Sign in as the allowlisted publisher, discover the tools and call `list_news`/`read_article`. Verify that no token, guest token, `NEWS_API_KEY` or `ADMIN_API_KEY` alone authorizes `/mcp`, and that another OAuth user's token cannot connect.
 4. Explicitly set `Mcp__PublishEnabled=true` in Render and redeploy when ready. An authorized caller still needs `fuel-news:read` and `fuel-news:publish`. Read-only tokens cannot publish even with the switch on.
 5. Publish only a real, researched article after verifying its source timestamps. Read it back and retain its revision for later updates. Imports may queue subscriber notifications through the existing outbox. Do not test with sample news in production.
