@@ -6,7 +6,10 @@ import { ThemedView } from '@/components/themed-view';
 import type { NewsItem } from '@/news/api';
 
 export function FuelNewsTicker({ item }: { item: NewsItem }) {
-  const message = `${item.article.title}   •   ${item.article.summary}`;
+  // Keep the ticker concise; the full summary remains available in the article.
+  const message = item.article.title
+    .replace(/\b(?:up|increases?|rises?)\b(?=\s*₱)/gi, '↑')
+    .replace(/\b(?:down|decreases?|drops?|cuts?)\b(?=\s*₱)/gi, '↓');
   const [offset] = useState(() => new Animated.Value(0));
   const [viewport, setViewport] = useState(0);
   const [textWidth, setTextWidth] = useState(0);
@@ -19,7 +22,7 @@ export function FuelNewsTicker({ item }: { item: NewsItem }) {
       if (!active) return;
       const distance = textWidth + position;
       animation = Animated.timing(offset, {
-        toValue: -textWidth, duration: Math.max(1, distance / 45 * 1000),
+        toValue: -textWidth, duration: Math.max(1, distance / 28 * 1000),
         easing: Easing.linear, useNativeDriver: true, isInteraction: false,
       });
       animation.start(({ finished }) => {
@@ -31,7 +34,7 @@ export function FuelNewsTicker({ item }: { item: NewsItem }) {
   }, [viewport, textWidth, message, offset, paused]);
 
   return <Link href={{ pathname: '/news-detail', params: { id: item.id } }} asChild>
-    <Pressable accessibilityRole="link" accessibilityLabel={`Read fuel news: ${message}`}
+    <Pressable accessibilityRole="link" accessibilityLabel={`Read fuel news: ${item.article.title}. ${item.article.summary}`}
       onHoverIn={() => setPaused(true)} onHoverOut={() => setPaused(false)}
       onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
       <ThemedView type="backgroundElement" style={styles.header}>
@@ -49,8 +52,8 @@ export function FuelNewsTicker({ item }: { item: NewsItem }) {
   </Link>;
 }
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 14, gap: 12, height: 48, overflow: 'hidden' },
-  viewport: { flex: 1, height: 24, overflow: 'hidden', justifyContent: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 14, gap: 12, height: 52, overflow: 'hidden' },
+  viewport: { flex: 1, height: 28, overflow: 'hidden', justifyContent: 'center' },
   track: { position: 'absolute', flexDirection: 'row', alignItems: 'center' },
-  headline: { flexShrink: 0 },
+  headline: { flexShrink: 0, fontSize: 16, lineHeight: 26, fontWeight: '600' },
 });
