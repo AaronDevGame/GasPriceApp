@@ -62,6 +62,14 @@ namespace BackendServer.Migrations
                         .HasColumnType("numeric(8,2)")
                         .HasColumnName("min_price_per_liter");
 
+                    b.Property<DateOnly?>("MonitoringEnd")
+                        .HasColumnType("date")
+                        .HasColumnName("monitoring_end");
+
+                    b.Property<DateOnly?>("MonitoringStart")
+                        .HasColumnType("date")
+                        .HasColumnName("monitoring_start");
+
                     b.Property<string>("OilCompany")
                         .IsRequired()
                         .HasMaxLength(100)
