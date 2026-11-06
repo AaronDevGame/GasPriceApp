@@ -47,7 +47,7 @@ async Task<(DoeFuelPriceImporter Importer, FakeExtractor Handler, DoeBulkExtract
     };
     var task = (Task<DoeBulkExtraction>)method.Invoke(importer,
         [pdf, reportSource ?? source, scenario == "bicol_monitoring"
-            ? now.AddMonths(1) : now, progress, CancellationToken.None, null])!;
+            ? now.AddMonths(1) : now, progress, CancellationToken.None, null, null])!;
     DoeBulkExtraction? result = null;
     try
     {
@@ -211,7 +211,7 @@ Func<DoeReportPageProgress, CancellationToken, Task> cancelProgress = (snapshot,
 try
 {
     await (Task<DoeBulkExtraction>)method.Invoke(canceledImporter,
-        [pdf, source, now, cancelProgress, cancellation.Token, null])!;
+        [pdf, source, now, cancelProgress, cancellation.Token, null, null])!;
     throw new Exception("Cancellation must interrupt the import.");
 }
 catch (OperationCanceledException) { }

@@ -91,6 +91,12 @@ public class AppDbContext : DbContext
             e.Property(p => p.ExtractorVersion).HasColumnName("extractor_version").HasMaxLength(64);
             e.Property(p => p.PageNumber).HasColumnName("page_number");
             e.Property(p => p.PageCount).HasColumnName("page_count");
+            e.Property(p => p.SourceUrl).HasColumnName("source_url").HasMaxLength(2048);
+            e.Property(p => p.Section).HasColumnName("section").HasMaxLength(40);
+            e.Property(p => p.Subdivision).HasColumnName("subdivision").HasMaxLength(60);
+            e.Property(p => p.ListingWeekStart).HasColumnName("listing_week_start");
+            e.HasIndex(p => p.SourceUrl);
+            e.HasIndex(p => new { p.Section, p.Subdivision, p.ListingWeekStart });
             e.Property(p => p.ExtractionJson).HasColumnName("extraction_json").HasColumnType("jsonb");
             e.Property(p => p.ExtractedAtUtc).HasColumnName("extracted_at_utc");
         });

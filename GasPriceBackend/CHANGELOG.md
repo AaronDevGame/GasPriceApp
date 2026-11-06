@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Add indexed source URL, section, subdivision, and listing-week metadata to DOE page caches for manual database inspection without changing cache identity or AI usage. Existing entries are labeled when reused; direct PDF imports have no listing metadata.
+
 ### Fixed
 - Resolve DOE report dates after scanning every page, prefer explicit report coverage anywhere in the PDF, and use a single clearly report-wide monitoring period only when explicit coverage is absent. Persist the date source and expose resolved dates, date source, and report-level date errors in page progress; reject ambiguous or conflicting ranges without saving report prices.
 - Preserve sanitized extraction HTTP status, error code, and request ID in DOE page failures. Retry transient HTTP/network failures with a cancellation-aware delay and respect Retry-After; stop retrying permanent request/authentication/quota errors or server delays over one minute. Preserve the existing one retry for invalid extractor output.

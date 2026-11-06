@@ -62,10 +62,27 @@ static class DoePageJobIntegration
                 prices.Single(price => price.City == "City 2").MonitoringEnd == new DateOnly(2026, 10, 29) &&
                 prices.Where(price => price.City != "City 2").All(price => price.MonitoringStart is null && price.MonitoringEnd is null),
                 "Persist monitoring dates only on the original page's prices while preserving report coverage.");
+            var cacheRows = await db.DoePageCaches.AsNoTracking().ToListAsync();
+            Check(cacheRows.Count == pageCount && cacheRows.All(page =>
+                    page.SourceUrl == monitoringSource.Url && page.Section == monitoringSource.Section &&
+                    page.Subdivision == monitoringSource.Subdivision && page.ListingWeekStart == monitoringSource.WeekStart),
+                "Clean page caches must store searchable listing metadata.");
+            // Model rows created before the metadata migration, then reuse them.
+            await db.DoePageCaches.ExecuteUpdateAsync(setters => setters
+                .SetProperty(page => page.SourceUrl, (string?)null)
+                .SetProperty(page => page.Section, (string?)null)
+                .SetProperty(page => page.Subdivision, (string?)null)
+                .SetProperty(page => page.ListingWeekStart, (DateOnly?)null));
             var cached = await importer.ImportReportAsync(db, monitoringSource, monitoringNow, null, null, CancellationToken.None);
             Check(cached.Added == 0 && cached.Updated == 0 && cached.PageProgress!.PagesCached == pageCount &&
                 cached.PageProgress.Pages[1].MonitoringEnd == new DateOnly(2026, 10, 29),
                 "Cached page reimports must preserve monitoring dates and remain unchanged.");
+            var enriched = await db.DoePageCaches.AsNoTracking().ToListAsync();
+            Check(cached.Usage is null && enriched.All(page =>
+                    page.SourceUrl == monitoringSource.Url && page.Section == monitoringSource.Section &&
+                    page.ListingWeekStart == monitoringSource.WeekStart &&
+                    page.ExtractedAtUtc == cacheRows.Single(old => old.PageNumber == page.PageNumber).ExtractedAtUtc),
+                "Legacy cache rows must gain metadata without AI usage or changing extraction timestamps.");
             await db.DoePageCaches.Where(page => page.PageNumber == 2).ExecuteDeleteAsync();
             monitoringExtractor.MonitoringEndOverride = new DateOnly(2026, 10, 30);
             var revised = await importer.ImportReportAsync(db, monitoringSource, monitoringNow, null, null, CancellationToken.None);
@@ -125,6 +142,9 @@ static class DoePageJobIntegration
             catch (InvalidDataException) { }
             Check(await db.DoePageCaches.CountAsync() == pageCount - 1 && await db.DoeFuelPrices.CountAsync() == 0,
                 "Clean pages must survive a failed report without storing incomplete report prices.");
+            Check(await db.DoePageCaches.AllAsync(page => page.SourceUrl == resumeSource.Url &&
+                    page.Section == resumeSource.Section && page.ListingWeekStart == resumeSource.WeekStart),
+                "A failed report must still label its clean cached pages with the listing date, not the PDF date.");
         }
         var resumedExtractor = new FakeExtractor("success");
         using (var scope = app.Services.CreateScope())
@@ -302,6 +322,9 @@ static class DoePageJobIntegration
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            Check(await db.DoePageCaches.AnyAsync(page => page.SourceUrl == "https://doe.gov.ph/report.pdf" &&
+                    page.Section == null && page.Subdivision == null && page.ListingWeekStart == null),
+                "Direct PDF imports must label cached pages with their URL without inventing listing metadata.");
             var locationJob = await db.DoeImportJobs.SingleAsync(j => j.Id == locationId);
             Check(locationJob.Status == "completed" && locationJob.ActiveSlot is null &&
                 DoeImportWorker.ToStatus(locationJob).Result!.Value.GetProperty("status").GetString() == "already_imported",

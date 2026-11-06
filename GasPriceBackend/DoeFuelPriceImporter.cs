@@ -540,7 +540,7 @@ public sealed partial class DoeFuelPriceImporter(
         ResetExtractionUsage();
         var pdf = await DownloadAsync(url, cancellationToken);
         var hash = Convert.ToHexString(SHA256.HashData(pdf));
-        var extraction = await ExtractAllAsync(pdf, source, nowUtc, progress, cancellationToken, db);
+        var extraction = await ExtractAllAsync(pdf, source, nowUtc, progress, cancellationToken, db, url);
         if (!DateOnly.TryParseExact(extraction.WeekStart, "yyyy-MM-dd", CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out var start) ||
             !DateOnly.TryParseExact(extraction.WeekEnd, "yyyy-MM-dd", CultureInfo.InvariantCulture,
@@ -917,7 +917,7 @@ public sealed partial class DoeFuelPriceImporter(
 
     private async Task<DoeBulkExtraction> ExtractAllAsync(byte[] pdf, DoeReportSource? source,
         DateTime nowUtc, Func<DoeReportPageProgress, CancellationToken, Task>? progress,
-        CancellationToken cancellationToken, AppDbContext? cacheDb = null)
+        CancellationToken cancellationToken, AppDbContext? cacheDb = null, string? sourceUrl = null)
     {
         using var document = new DoePdfPages(pdf);
         var contentHash = Convert.ToHexString(SHA256.HashData(pdf));
@@ -933,6 +933,21 @@ public sealed partial class DoeFuelPriceImporter(
             await cacheDb.DoePageCaches.AsNoTracking().Where(page =>
                 page.ContentHash == contentHash && page.ExtractorVersion == extractorVersion &&
                 page.PageCount == document.Count).ToDictionaryAsync(page => page.PageNumber, cancellationToken);
+        // These labels aid inspection only; keep them out of cache identity. Enrich
+        // older entries on reuse without re-extracting pages or changing their age.
+        var cacheSourceUrl = sourceUrl ?? source?.Url;
+        if (cacheDb is not null && cachedPages.Values.Any(page =>
+                page.SourceUrl != cacheSourceUrl || page.Section != source?.Section ||
+                page.Subdivision != source?.Subdivision || page.ListingWeekStart != source?.WeekStart))
+            await cacheDb.DoePageCaches.Where(page =>
+                    page.ContentHash == contentHash && page.ExtractorVersion == extractorVersion &&
+                    page.PageCount == document.Count)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(page => page.SourceUrl, cacheSourceUrl)
+                    .SetProperty(page => page.Section, source == null ? null : source.Section)
+                    .SetProperty(page => page.Subdivision, source == null ? null : source.Subdivision)
+                    .SetProperty(page => page.ListingWeekStart, source == null ? (DateOnly?)null : source.WeekStart),
+                    cancellationToken);
         var pages = Enumerable.Range(1, document.Count)
             .Select(number => new DoeImportPageStatus(number, "queued", 0, 0, null)).ToArray();
         var rows = new List<ExtractedDoeBulkPrice>();
@@ -1052,12 +1067,16 @@ public sealed partial class DoeFuelPriceImporter(
                         var payload = JsonSerializer.Serialize(extraction);
                         await cacheDb.Database.ExecuteSqlInterpolatedAsync($"""
                             INSERT INTO doe_page_cache
-                                (content_hash, extractor_version, page_number, page_count, extraction_json, extracted_at_utc)
+                                (content_hash, extractor_version, page_number, page_count, extraction_json, extracted_at_utc,
+                                 source_url, section, subdivision, listing_week_start)
                             VALUES ({contentHash}, {extractorVersion}, {pageNumber}, {document.Count},
-                                CAST({payload} AS jsonb), {nowUtc})
+                                CAST({payload} AS jsonb), {nowUtc},
+                                {cacheSourceUrl}, {source?.Section}, {source?.Subdivision}, {source?.WeekStart})
                             ON CONFLICT (content_hash, extractor_version, page_number)
                             DO UPDATE SET extraction_json = EXCLUDED.extraction_json,
-                                page_count = EXCLUDED.page_count, extracted_at_utc = EXCLUDED.extracted_at_utc
+                                page_count = EXCLUDED.page_count, extracted_at_utc = EXCLUDED.extracted_at_utc,
+                                source_url = EXCLUDED.source_url, section = EXCLUDED.section,
+                                subdivision = EXCLUDED.subdivision, listing_week_start = EXCLUDED.listing_week_start
                             """, cancellationToken);
                     }
                     break;

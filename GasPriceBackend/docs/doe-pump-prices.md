@@ -80,6 +80,23 @@ When all pages were readable but some rows were skipped, valid prices are saved,
 
 Progress is persisted in the existing job details JSON. Older job results have `pageProgress: null`. The `AddDoePageCache` migration adds `doe_page_cache`, which stores each clean page extraction immediately, before the report price transaction. A new job or process restart can reuse those results and retry only missing pages. Cache keys include the whole PDF content hash, page number, extraction instruction/schema version, configured model, and listing context. Cached payloads are revalidated, and their dates and ordered table headers are restored for continuation pages. Readable empty or independent-only pages are cached too; pages with skipped cells are not. If PDF content or extraction rules change, old results are not mixed into the new extraction. No existing report prices are removed. PDFs are bounded to 100 pages in addition to the existing download size limit.
 
+The `AddDoePageCacheMetadata` migration adds nullable `source_url`, `section`, `subdivision`, and `listing_week_start` columns, with indexes for URL and section/subdivision/week lookups. These labels do not change cache identity or AI usage. `listing_week_start` is the DOE listing date, which can differ from the PDF's extracted coverage. Direct PDF imports store their URL but leave listing fields null. Existing cache rows remain usable and gain labels when encountered again; rows that are never reused retain null labels. Cache hits preserve `extracted_at_utc`. When identical PDF bytes and extraction settings are encountered at another URL, the label records the most recently encountered URL, not a complete source history.
+
+For example, find Bicol's cached pages without searching the extracted JSON:
+
+```sql
+SELECT source_url, section, subdivision, listing_week_start,
+       page_number, page_count, extracted_at_utc,
+       content_hash, extractor_version
+FROM doe_page_cache
+WHERE section = 'south-luzon-pump-prices'
+  AND subdivision = 'Bicol'
+  AND listing_week_start = DATE '2026-10-27'
+ORDER BY extracted_at_utc DESC, content_hash, extractor_version, page_number;
+```
+
+Multiple PDF or extraction versions can appear for the same listing. Inspect `content_hash` and `extractor_version` to distinguish them. Cached pages have no report foreign key because they can exist even when the report fails before any report or price records are saved.
+
 Bulk imports discover every PDF on the five DOE report pages for the selected week or range, including the newest PDF for each South Luzon subdivision. Each PDF is extracted for all clearly identified localities and upserted into `doe_fuel_price`. `doe_pump_price_report` records the source section, subdivision, dates, URL, content hash, and row count; `doe_import_job` retains job progress. Existing city imports are linked to partial legacy report records by the migration. Successful bulk imports mark a report complete. Missing or stale latest report groups appear as job gaps. When new rows arrive, affected research cache entries are expired so subsequent location requests use the stored DOE rows. Both latest and backfill jobs download the source PDF to check its content hash, reuse clean cached page results, and extract only missing or invalid pages. Revised PDFs or extraction settings require new extraction. Reports imported before the page cache was introduced need one extraction to populate it; existing report status alone is not proof of a usable page cache.
 
 An `already_imported` report means validated extraction results, whether newly read or cached, found no database changes. Previously saved prices remain when a later extraction omits them. Bulk upserts match existing rows across the same city and province aliases used for reads, then add only missing company and fuel-grade rows. `priceRowsAdded` counts physical inserts across all PDFs in the job; existing duplicate rows are retained. Extracted rows repeated identically by the PDF parser and aggregate columns are ignored; each report result includes `duplicatesIgnored` and `aggregateRowsIgnored`. NCR rows use Metro Manila and National Capital Region as their canonical province and region. Individual invalid or conflicting rows are skipped and reported as described above; unreadable pages and invalid report dates still fail the report. Failed or partial reports are retried by the next latest import.

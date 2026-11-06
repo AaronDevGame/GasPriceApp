@@ -248,11 +248,34 @@ namespace BackendServer.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("extraction_json");
 
+                    b.Property<DateOnly?>("ListingWeekStart")
+                        .HasColumnType("date")
+                        .HasColumnName("listing_week_start");
+
                     b.Property<int>("PageCount")
                         .HasColumnType("integer")
                         .HasColumnName("page_count");
 
+                    b.Property<string>("Section")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("section");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("source_url");
+
+                    b.Property<string>("Subdivision")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("subdivision");
+
                     b.HasKey("ContentHash", "ExtractorVersion", "PageNumber");
+
+                    b.HasIndex("SourceUrl");
+
+                    b.HasIndex("Section", "Subdivision", "ListingWeekStart");
 
                     b.ToTable("doe_page_cache", (string)null);
                 });

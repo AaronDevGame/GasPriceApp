@@ -31,7 +31,7 @@ static class DoeExtractionFailureChecks
             try
             {
                 await (Task<DoeBulkExtraction>)method.Invoke(importer,
-                    [pdf, source, now, progress, cancellation.Token, null])!;
+                    [pdf, source, now, progress, cancellation.Token, null, null])!;
                 Check(transient, "Permanent failures must prevent report completion.");
             }
             catch (InvalidDataException) when (!transient && scenario != "cancel_delay") { }
