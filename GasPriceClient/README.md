@@ -6,6 +6,23 @@ The shared app, routes, components, API client, and configuration will live at t
 
 Native build caches and local signing files are ignored. Before generating native projects, choose whether to commit the generated `ios/` and `android/` source or regenerate it from Expo configuration; the current ignore rules leave either choice open.
 
+## Releases and Cloudflare web hosting
+
+The frontend is version `1.0.5`; release notes live in [CHANGELOG.md](CHANGELOG.md).
+Keep the version synchronized in `package.json`, `package-lock.json`, and `app.json`.
+Backend versions and release notes are maintained independently in `GasPriceBackend/`.
+
+[CloudflareWeb/](../CloudflareWeb/README.md) serves the Expo web export and its
+same-origin browser API gateway through the `pagas` Worker, configured for
+`https://pagas.aarondevgame.workers.dev`. Record web hosting and browser gateway
+updates in the frontend changelog, alongside web, iOS, and Android UI changes.
+Group supporting Cloudflare web documentation with the frontend scope.
+
+[CloudflareWorker/](../CloudflareWorker/README.md) is the separate native API proxy;
+it does not host the frontend. Record native API proxy changes with the backend
+release they support. Documentation follows the component it describes; shared
+repository documentation belongs to the repo scope.
+
 ## Guest authentication (1.0.0)
 
 Native uses Expo SDK 57 SecureStore for a single session record containing both

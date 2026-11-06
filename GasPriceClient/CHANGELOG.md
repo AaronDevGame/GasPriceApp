@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-11-06
+
+### Added
+- Add the Cloudflare web deployment in `CloudflareWeb/`, serving the Expo static export and a same-origin browser API gateway from the `pagas` Worker. Keep its frontend hosting and browser gateway release notes in this changelog.
+
 ### Changed
+- Bump the Expo client version to `1.0.5`.
 - Redesign the frontend with charcoal surfaces, responsive desktop navigation, and labeled mobile tab icons.
 - Replace the Overview ticker with a static news headline, publication date, and article link above local prices.
 - Bring location and city selection forward, simplify fuel price cards, and separate company comparisons from area estimates.

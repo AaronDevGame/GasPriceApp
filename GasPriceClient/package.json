@@ -1,7 +1,7 @@
 {
   "name": "gasprice-client",
   "main": "expo-router/entry",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "dependencies": {
     "@expo/ui": "~57.0.19",
     "expo": "~57.0.24",
