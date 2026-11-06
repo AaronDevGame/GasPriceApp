@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-11-06
+
+### Changed
+- Bump project and API version to `1.12.1`. This release changes version metadata only.
+
 ## [1.12.0] - 2026-11-06
 
 ### Added
