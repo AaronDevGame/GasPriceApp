@@ -1,5 +1,7 @@
 # DOE pump prices
 
+For PDFs extracted directly in a chat, use the API-free [external extraction import](doe-external-import.md): `POST /admin/fuel-prices/doe/import/extracted`, followed by the existing job polling URL. The older import endpoints below continue to run backend extraction.
+
 ## Report coverage dates
 
 The PDF's printed reporting period determines the saved `weekStart` and `weekEnd`. DOE listing dates are used to discover and select candidate reports; a listing/PDF date mismatch logs a warning and does not reject otherwise valid prices. For example, a North Luzon listing labeled October 26–November 2, 2026 that links to a PDF printed October 27–November 2 is saved with `weekStart: "2026-10-27"` and `weekEnd: "2026-11-02"`.

@@ -590,8 +590,18 @@ public sealed partial class DoeFuelPriceImporter(
                 .ExecuteDeleteAsync(cancellationToken);
         }
         var rowsSkipped = (ExtractionProgress?.RowsSkipped ?? 0) + validated.Errors.Count;
+        return await PersistReportAsync(db, source, extraction, validated, start, end, hash,
+            nowUtc, rowsSkipped, cancellationToken);
+    }
+
+    // Both import paths share atomic upserts, report counts and research-cache invalidation.
+    private async Task<DoeReportImportResult> PersistReportAsync(AppDbContext db,
+        DoeReportSource source, DoeBulkExtraction extraction, ValidatedDoeBulkRows validated,
+        DateOnly start, DateOnly end, string? hash, DateTime nowUtc, int rowsSkipped,
+        CancellationToken cancellationToken, bool complete = true)
+    {
         var report = await db.DoePumpPriceReports.FirstOrDefaultAsync(r =>
-            r.SourceUrl == url && r.WeekStart == start, cancellationToken);
+            r.SourceUrl == source.Url && r.WeekStart == start, cancellationToken);
         var wasComplete = report?.Status == "imported";
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         if (report is null)
@@ -671,7 +681,7 @@ public sealed partial class DoeFuelPriceImporter(
         report.CoverageSource = extraction.CoverageSource;
         report.ContentHash = hash;
         report.ImportedAtUtc = nowUtc;
-        report.Status = rowsSkipped > 0 ? "partial" : "imported";
+        report.Status = rowsSkipped > 0 || !complete ? "partial" : "imported";
         report.PriceRows = await db.DoeFuelPrices.CountAsync(p => p.ReportId == report.Id,
             cancellationToken);
         foreach (var oldReportId in oldReportIds)
@@ -696,7 +706,7 @@ public sealed partial class DoeFuelPriceImporter(
         }
         await transaction.CommitAsync(cancellationToken);
         return new DoeReportImportResult(source.Url,
-            rowsSkipped > 0 ? "partial" :
+            rowsSkipped > 0 || !complete ? "partial" :
                 wasComplete && added + updated == 0 ? "already_imported" : "imported",
             added, updated,
             report.PriceRows)

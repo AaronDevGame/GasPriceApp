@@ -70,6 +70,7 @@ public class RateLimitMiddleware
         TimeSpan cooldown;
 
         // Benchmark uses the shared admin bucket with a longer cooldown to bound AI spend.
+        // Extracted imports also use this admin bucket (one second); they make no AI calls.
         // All admin paths share one bucket; polling retains the normal one-second cooldown.
         if (path.StartsWithSegments("/admin"))
         {

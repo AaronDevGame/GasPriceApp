@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Add admin-only `POST /admin/fuel-prices/doe/import/extracted` for externally extracted DOE company prices, with strict request validation, durable job polling, transactional upserts/cache expiration and explicit complete/partial report status. Require no OpenAI key or API calls; document the payload and future scheduled-chat workflow.
 - Add indexed source URL, section, subdivision, and listing-week metadata to DOE page caches for manual database inspection without changing cache identity or AI usage. Existing entries are labeled when reused; direct PDF imports have no listing metadata.
 
 ### Fixed

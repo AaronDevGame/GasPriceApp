@@ -173,7 +173,7 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                 await RunBenchmarkJobAsync(job, db, importer, results, cancellationToken);
                 return;
             }
-            if (job.Mode is "location" or "report")
+            if (job.Mode is "location" or "report" or "extracted")
             {
                 await RunSingleImportAsync(job, db, importer, results, cancellationToken);
                 return;
@@ -411,9 +411,14 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
         {
             using var importScope = scopes.CreateScope();
             var importDb = importScope.ServiceProvider.GetRequiredService<AppDbContext>();
-            if (job.Mode == "report")
+            if (job.Mode is "report" or "extracted")
             {
-                var result = await importer.ImportReportFromUrlAsync(importDb, request.SourceUrl!,
+                var result = job.Mode == "extracted"
+                    ? await importer.ImportSubmittedReportAsync(importDb,
+                        JsonSerializer.Deserialize<DoeExtractedImportRequest>(job.RequestJson!)
+                            ?? throw new InvalidDataException("The extracted import request is invalid."),
+                        timeProvider.GetUtcNow().UtcDateTime, cancellationToken)
+                    : await importer.ImportReportFromUrlAsync(importDb, request.SourceUrl!,
                     timeProvider.GetUtcNow().UtcDateTime, cancellationToken, async (progress, token) =>
                     {
                         results[0] = results[0] with
