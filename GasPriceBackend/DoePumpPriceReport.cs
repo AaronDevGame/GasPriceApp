@@ -5,6 +5,7 @@ public sealed class DoePumpPriceReport
     public string? Subdivision { get; set; }
     public DateOnly WeekStart { get; set; }
     public DateOnly WeekEnd { get; set; }
+    public string CoverageSource { get; set; } = "report";
     public string SourceUrl { get; set; } = "";
     public string? ContentHash { get; set; }
     public DateTime ImportedAtUtc { get; set; }

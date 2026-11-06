@@ -8,6 +8,7 @@ public sealed record DoeImportReportStatus(string Section, string? Subdivision,
     DateOnly? WeekStart, string SourceUrl, string Status, int Added, int Updated,
     string? Error)
 {
+    public string? CoverageSource { get; init; }
     public string? Model { get; init; }
     public AiChatTokenUsage? Usage { get; init; }
     public OpenAiCostEstimate? EstimatedCost { get; init; }
@@ -229,6 +230,7 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                         source.Url, result.Status, result.Added, result.Updated,
                         result.Status == "partial" ? $"Imported valid prices; skipped {result.RowsSkipped} invalid row(s)." : null)
                     {
+                        CoverageSource = result.CoverageSource,
                         Model = result.Model, Usage = result.Usage, EstimatedCost = result.EstimatedCost,
                         DuplicatesIgnored = result.DuplicatesIgnored,
                         AggregateRowsIgnored = result.AggregateRowsIgnored,
@@ -427,6 +429,7 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
                 results[0] = results[0] with
                 {
                     SourceUrl = result.SourceUrl, WeekStart = result.WeekStart, Status = result.Status,
+                    CoverageSource = result.CoverageSource,
                     Added = result.Added, Updated = result.Updated,
                     Model = result.Model, Usage = result.Usage, EstimatedCost = result.EstimatedCost,
                     DuplicatesIgnored = result.DuplicatesIgnored, AggregateRowsIgnored = result.AggregateRowsIgnored,
@@ -482,6 +485,7 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
     private static string SafeError(Exception ex) => ex switch
     {
         TaskCanceledException => "A DOE or extraction request timed out.",
+        DoeExtractionRequestException failure => failure.Message,
         HttpRequestException => "DOE or extraction service was unavailable.",
         JsonException => "The extractor returned malformed JSON.",
         DbUpdateException => "The database could not save the report.",

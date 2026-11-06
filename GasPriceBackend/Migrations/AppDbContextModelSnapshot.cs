@@ -271,6 +271,14 @@ namespace BackendServer.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("content_hash");
 
+                    b.Property<string>("CoverageSource")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("report")
+                        .HasColumnName("coverage_source");
+
                     b.Property<DateTime>("ImportedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("imported_at_utc");

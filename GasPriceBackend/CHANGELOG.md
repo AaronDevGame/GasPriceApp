@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Resolve DOE report dates after scanning every page, prefer explicit report coverage anywhere in the PDF, and use a single clearly report-wide monitoring period only when explicit coverage is absent. Persist the date source and expose resolved dates, date source, and report-level date errors in page progress; reject ambiguous or conflicting ranges without saving report prices.
+- Preserve sanitized extraction HTTP status, error code, and request ID in DOE page failures. Retry transient HTTP/network failures with a cancellation-aware delay and respect Retry-After; stop retrying permanent request/authentication/quota errors or server delays over one minute. Preserve the existing one retry for invalid extractor output.
 - Keep DOE report coverage separate from DATE MONITORING, survey, and collection periods so continuation pages inherit the report week without a false coverage mismatch. Persist nullable monitoring dates per price row, expose them in price feeds and page progress, and retain rejection of conflicting report coverage or invalid monitoring ranges. Existing rows remain undated until re-imported; revised extraction rules invalidate prior page caches.
 
 ## [1.12.1] - 2026-11-06

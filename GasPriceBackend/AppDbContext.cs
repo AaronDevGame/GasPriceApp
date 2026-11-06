@@ -252,6 +252,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<DoePumpPriceReport>(e =>
         {
             e.ToTable("doe_pump_price_report");
+            e.Property(p => p.CoverageSource).HasColumnName("coverage_source").HasMaxLength(20)
+                .HasDefaultValue("report");
             e.HasKey(p => p.Id);
             e.Property(p => p.Id).HasColumnName("id");
             e.Property(p => p.Section).HasColumnName("section").HasMaxLength(40);

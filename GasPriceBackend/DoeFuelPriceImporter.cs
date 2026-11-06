@@ -76,7 +76,10 @@ public sealed record ExtractedDoeBulkPrice(
 public sealed record DoeBulkExtraction(
     [property: JsonPropertyName("week_start")] string WeekStart,
     [property: JsonPropertyName("week_end")] string WeekEnd,
-    [property: JsonPropertyName("rows")] IReadOnlyList<ExtractedDoeBulkPrice> Rows);
+    [property: JsonPropertyName("rows")] IReadOnlyList<ExtractedDoeBulkPrice> Rows)
+{
+    public string CoverageSource { get; init; } = "report";
+}
 
 public sealed record DoePageExtraction(
     [property: JsonPropertyName("week_start")] string WeekStart,
@@ -90,11 +93,14 @@ public sealed record DoePageExtraction(
     public DateOnly? MonitoringStart { get; init; }
     [JsonPropertyName("monitoring_end")]
     public DateOnly? MonitoringEnd { get; init; }
+    [JsonPropertyName("monitoring_applies_to_report")]
+    public bool MonitoringAppliesToReport { get; init; }
 }
 
 public sealed record DoeReportImportResult(string SourceUrl, string Status,
     int Added, int Updated, int PriceRows)
 {
+    public string? CoverageSource { get; init; }
     public DateOnly? WeekStart { get; init; }
     public DateOnly? WeekEnd { get; init; }
     public string? Model { get; init; }
@@ -194,10 +200,11 @@ public sealed partial class DoeFuelPriceImporter(
         properties["monitoring_start"] = JsonSerializer.SerializeToElement(new
             { type = new[] { "string", "null" } });
         properties["monitoring_end"] = properties["monitoring_start"];
+        properties["monitoring_applies_to_report"] = JsonSerializer.SerializeToElement(new { type = "boolean" });
         return JsonSerializer.SerializeToElement(new
         {
             type = "object", additionalProperties = false,
-            required = new[] { "week_start", "week_end", "page_status", "printed_column_headers", "monitoring_start", "monitoring_end", "rows" },
+            required = new[] { "week_start", "week_end", "page_status", "printed_column_headers", "monitoring_start", "monitoring_end", "monitoring_applies_to_report", "rows" },
             properties
         });
     }
@@ -545,7 +552,7 @@ public sealed partial class DoeFuelPriceImporter(
         if ((from.HasValue && end < from.Value) || (to.HasValue && start > to.Value))
             return new DoeReportImportResult(url, "outside_range", 0, 0, 0)
             {
-                WeekStart = start, WeekEnd = end,
+                WeekStart = start, WeekEnd = end, CoverageSource = extraction.CoverageSource,
                 Model = ExtractionModel, Usage = ExtractionUsage, EstimatedCost = ExtractionCost,
                 PageProgress = ExtractionProgress
             };
@@ -661,6 +668,7 @@ public sealed partial class DoeFuelPriceImporter(
         report.Section = source.Section;
         report.Subdivision = source.Subdivision;
         report.WeekEnd = end;
+        report.CoverageSource = extraction.CoverageSource;
         report.ContentHash = hash;
         report.ImportedAtUtc = nowUtc;
         report.Status = rowsSkipped > 0 ? "partial" : "imported";
@@ -693,7 +701,7 @@ public sealed partial class DoeFuelPriceImporter(
             added, updated,
             report.PriceRows)
         {
-            WeekStart = start, WeekEnd = end,
+            WeekStart = start, WeekEnd = end, CoverageSource = extraction.CoverageSource,
             Model = ExtractionModel, Usage = ExtractionUsage, EstimatedCost = ExtractionCost,
             DuplicatesIgnored = validated.DuplicatesIgnored +
                 (ExtractionProgress?.Pages.Sum(page => page.DuplicatesIgnored) ?? 0),
@@ -930,13 +938,20 @@ public sealed partial class DoeFuelPriceImporter(
         var rows = new List<ExtractedDoeBulkPrice>();
         DateOnly? weekStart = null;
         DateOnly? weekEnd = null;
+        string? coverageSource = null;
+        string? coverageError = null;
+        var readPages = new DoePageExtraction?[document.Count];
         IReadOnlyList<string> columnHeaders = [];
 
         async Task PublishAsync(int? currentPage)
         {
             ExtractionProgress = new DoeReportPageProgress(document.Count,
                 pages.Count(page => page.Status is "completed" or "completed_with_errors"),
-                currentPage, pages.ToArray());
+                currentPage, pages.ToArray())
+            {
+                WeekStart = weekStart, WeekEnd = weekEnd,
+                CoverageSource = coverageSource, CoverageError = coverageError
+            };
             if (progress is not null)
                 await progress(ExtractionProgress, cancellationToken);
         }
@@ -960,7 +975,7 @@ public sealed partial class DoeFuelPriceImporter(
                           (source.Subdivision is null ? "" : $" ({source.Subdivision})") +
                           $". Its DOE listing labels the start as {source.WeekStart:yyyy-MM-dd}, which may be incorrect; use the PDF's printed coverage dates.";
                     if (weekStart.HasValue)
-                        context += $" Earlier pages printed report coverage {weekStart:yyyy-MM-dd} through {weekEnd:yyyy-MM-dd}; inherit that coverage unless this page explicitly prints a report coverage period. DATE MONITORING, survey, and collection dates are separate monitoring metadata and do not override report coverage. Never inherit monitoring dates from another page.";
+                        context += $" Earlier pages printed report coverage {weekStart:yyyy-MM-dd} through {weekEnd:yyyy-MM-dd}. Return this page's explicitly printed coverage only; leave both coverage strings empty if absent. DATE MONITORING is separate metadata. Never copy dates from another page; the server resolves dates after all pages are read.";
                     if (columnHeaders.Count > 0)
                         context += " The most recent successfully read table's price-column headers, in left-to-right order, are " +
                             JsonSerializer.Serialize(columnHeaders) +
@@ -982,19 +997,12 @@ public sealed partial class DoeFuelPriceImporter(
                         extraction.PrintedColumnHeaders.Any(header => string.IsNullOrWhiteSpace(header) || header.Length > 100))
                         throw new InvalidDataException("The page extractor returned invalid table-column headers.");
                     ValidateMonitoringDates(extraction.MonitoringStart, extraction.MonitoringEnd, nowUtc);
-                    // Continuations can omit report coverage even when they print monitoring dates.
-                    if (weekStart is DateOnly inheritedStart && weekEnd is DateOnly inheritedEnd &&
-                        string.IsNullOrWhiteSpace(extraction.WeekStart) &&
-                        string.IsNullOrWhiteSpace(extraction.WeekEnd))
-                        extraction = extraction with
-                        {
-                            WeekStart = inheritedStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                            WeekEnd = inheritedEnd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
-                        };
-                    var undatedEmptyPage = extraction.Rows.Count == 0 &&
-                        string.IsNullOrWhiteSpace(extraction.WeekStart) &&
-                        string.IsNullOrWhiteSpace(extraction.WeekEnd);
-                    if (!undatedEmptyPage)
+                    // Missing coverage is resolved report-wide after later pages have been read.
+                    var hasCoverage = !string.IsNullOrWhiteSpace(extraction.WeekStart) ||
+                        !string.IsNullOrWhiteSpace(extraction.WeekEnd);
+                    DateOnly? pageStart = null;
+                    DateOnly? pageEnd = null;
+                    if (hasCoverage)
                     {
                         if (string.IsNullOrWhiteSpace(extraction.WeekStart) ||
                             string.IsNullOrWhiteSpace(extraction.WeekEnd))
@@ -1007,36 +1015,32 @@ public sealed partial class DoeFuelPriceImporter(
                         if (weekStart.HasValue && (start != weekStart || end != weekEnd))
                             throw new InvalidDataException(FormattableString.Invariant(
                                 $"Page coverage mismatch: expected {weekStart:yyyy-MM-dd} through {weekEnd:yyyy-MM-dd}, but extracted {start:yyyy-MM-dd} through {end:yyyy-MM-dd}."));
-                        if (start > PhilippineDate(nowUtc).AddDays(1) || end < start || end > start.AddDays(7))
-                            throw new InvalidDataException(FormattableString.Invariant(
-                                $"Invalid extracted page coverage: {start:yyyy-MM-dd} through {end:yyyy-MM-dd}; the start must not be more than one day in the future and the end must be within seven days of the start."));
-                        // Establish dates only after its rows also pass validation.
-                        var validated = ValidateBulkRows(extraction.Rows, allowEmpty: true,
-                            skipInvalidRows: true);
-                        weekStart = start;
-                        weekEnd = end;
-                        pages[index] = new(pageNumber,
-                            validated.Errors.Count > 0 ? "completed_with_errors" : "completed",
-                            attempt, validated.Rows.Count,
-                            validated.Errors.Count > 0 ? $"Skipped {validated.Errors.Count} invalid price row(s)." : null)
-                        {
-                            CellErrors = validated.Errors, DuplicatesIgnored = validated.DuplicatesIgnored,
-                            AggregateRowsIgnored = validated.AggregateRowsIgnored,
-                            MonitoringStart = extraction.MonitoringStart, MonitoringEnd = extraction.MonitoringEnd
-                        };
-                        rows.AddRange(validated.Rows.Select(row => row with
-                        {
-                            MonitoringStart = extraction.MonitoringStart,
-                            MonitoringEnd = extraction.MonitoringEnd
-                        }));
+                        ValidateReportCoverage(start, end, nowUtc);
+                        pageStart = start;
+                        pageEnd = end;
                     }
-                    else
+                    var validated = ValidateBulkRows(extraction.Rows, allowEmpty: true, skipInvalidRows: true);
+                    if (pageStart.HasValue)
                     {
-                        pages[index] = new(pageNumber, "completed", attempt, 0, null)
-                        {
-                            MonitoringStart = extraction.MonitoringStart, MonitoringEnd = extraction.MonitoringEnd
-                        };
+                        weekStart = pageStart;
+                        weekEnd = pageEnd;
+                        coverageSource = "report";
                     }
+                    pages[index] = new(pageNumber,
+                        validated.Errors.Count > 0 ? "completed_with_errors" : "completed",
+                        attempt, validated.Rows.Count,
+                        validated.Errors.Count > 0 ? $"Skipped {validated.Errors.Count} invalid price row(s)." : null)
+                    {
+                        CellErrors = validated.Errors, DuplicatesIgnored = validated.DuplicatesIgnored,
+                        AggregateRowsIgnored = validated.AggregateRowsIgnored,
+                        MonitoringStart = extraction.MonitoringStart, MonitoringEnd = extraction.MonitoringEnd
+                    };
+                    readPages[index] = extraction;
+                    rows.AddRange(validated.Rows.Select(row => row with
+                    {
+                        MonitoringStart = extraction.MonitoringStart,
+                        MonitoringEnd = extraction.MonitoringEnd
+                    }));
                     if (extraction.PrintedColumnHeaders.Count > 0)
                         columnHeaders = extraction.PrintedColumnHeaders.ToArray();
                     if (fromCache)
@@ -1069,14 +1073,33 @@ public sealed partial class DoeFuelPriceImporter(
                     _benchmarkLocalPages?.Remove(pageNumber);
                     var error = ex switch
                     {
+                        DoeExtractionRequestException failure => failure.Message,
                         TaskCanceledException => "The page extraction request timed out.",
-                        HttpRequestException => "The page extraction service was unavailable.",
+                        HttpRequestException => "The page extraction request failed due to a connection error.",
                         JsonException => "The page extractor returned malformed JSON.",
                         _ => ex.Message
                     };
-                    pages[index] = new(pageNumber, attempt == 2 ? "failed" : "retrying",
-                        attempt, 0, error);
+                    var retry = attempt < 2 && ex switch
+                    {
+                        DoeExtractionRequestException failure => failure.IsTransient &&
+                            failure.RetryAfter <= TimeSpan.FromMinutes(1),
+                        HttpRequestException connectionFailure => connectionFailure.StatusCode is null,
+                        _ => true // Preserve the existing single retry for invalid extractor output.
+                    };
+                    pages[index] = new(pageNumber, retry ? "retrying" : "failed", attempt, 0, error)
+                    {
+                        HttpStatus = ex is HttpRequestException http ? (int?)http.StatusCode : null,
+                        ErrorCode = (ex as DoeExtractionRequestException)?.ErrorCode,
+                        RequestId = (ex as DoeExtractionRequestException)?.RequestId
+                    };
                     await PublishAsync(pageNumber);
+                    if (!retry) break;
+                    if (ex is HttpRequestException or TaskCanceledException)
+                    {
+                        var delay = (ex as DoeExtractionRequestException)?.RetryAfter ?? TimeSpan.Zero;
+                        delay = delay > TimeSpan.Zero ? delay : TimeSpan.FromSeconds(1 + Random.Shared.NextDouble());
+                        await Task.Delay(delay, cancellationToken);
+                    }
                 }
             }
             // A failed page may have started a new table whose headers we could not verify.
@@ -1086,8 +1109,48 @@ public sealed partial class DoeFuelPriceImporter(
         if (ExtractionProgress!.PagesFailed > 0)
             throw new InvalidDataException(
                 $"DOE report has {ExtractionProgress.PagesFailed} failed page(s) out of {document.Count}; no report prices were saved.");
-        return new DoeBulkExtraction(weekStart?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
-            weekEnd?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "", rows);
+        if (!weekStart.HasValue)
+        {
+            // Only a clearly report-wide, unambiguous monitoring period can supply fallback coverage.
+            var monitoringPeriods = readPages.Where(page => page?.MonitoringStart is not null)
+                .Select(page => (Start: page!.MonitoringStart!.Value, End: page.MonitoringEnd!.Value))
+                .Distinct().ToArray();
+            try
+            {
+                if (monitoringPeriods.Length != 1 ||
+                    !readPages.Any(page => page is { MonitoringAppliesToReport: true, MonitoringStart: not null }))
+                    throw new InvalidDataException(monitoringPeriods.Length > 1
+                        ? "DOE report has conflicting monitoring periods and no explicit report coverage; no report prices were saved."
+                        : "DOE report coverage dates are missing and no unambiguous report-wide monitoring period was found; no report prices were saved.");
+                ValidateReportCoverage(monitoringPeriods[0].Start, monitoringPeriods[0].End, nowUtc);
+                weekStart = monitoringPeriods[0].Start;
+                weekEnd = monitoringPeriods[0].End;
+                coverageSource = "monitoring";
+            }
+            catch (InvalidDataException ex)
+            {
+                coverageError = ex.Message;
+                await PublishAsync(null);
+                // A missed date/footer must not become a permanently cached report failure.
+                if (cacheDb is not null)
+                    await cacheDb.DoePageCaches.Where(page => page.ContentHash == contentHash &&
+                        page.ExtractorVersion == extractorVersion).ExecuteDeleteAsync(cancellationToken);
+                throw;
+            }
+        }
+        await PublishAsync(null);
+        return new DoeBulkExtraction(weekStart.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            weekEnd!.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), rows)
+        {
+            CoverageSource = coverageSource!
+        };
+    }
+
+    private static void ValidateReportCoverage(DateOnly start, DateOnly end, DateTime nowUtc)
+    {
+        if (start > PhilippineDate(nowUtc).AddDays(1) || end < start || end > start.AddDays(7))
+            throw new InvalidDataException(FormattableString.Invariant(
+                $"Invalid extracted page coverage: {start:yyyy-MM-dd} through {end:yyyy-MM-dd}; the start must not be more than one day in the future and the end must be within seven days of the start."));
     }
 
     private static void ValidateMonitoringDates(DateOnly? start, DateOnly? end, DateTime nowUtc)
@@ -1124,7 +1187,7 @@ public sealed partial class DoeFuelPriceImporter(
         _benchmarkAiRequests++;
         using var response = await _openAiClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException("DOE price extraction failed.", null, response.StatusCode);
+            throw await DoeExtractionRequestException.FromResponseAsync(response, cancellationToken);
         await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(body, cancellationToken: cancellationToken);
         var billedModel = document.RootElement.TryGetProperty("model", out var returnedModel) &&

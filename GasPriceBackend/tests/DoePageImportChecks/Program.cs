@@ -125,6 +125,29 @@ Check(feedJson.GetProperty("prices")[0].GetProperty("monitoringEnd").GetString()
     "Price feeds must expose monitoring dates separately from unchanged report coverage fields.");
 Console.WriteLine("PASS: Bicol continuation inherits October 27–November 2 coverage and preserves October 27–29 monitoring only on page 2");
 
+foreach (var scenario in new[] { "visayas", "monitoring_first", "late_coverage" })
+{
+    var resolved = await RunAsync(scenario);
+    var expectedSource = scenario == "late_coverage" ? "report" : "monitoring";
+    Check(resolved.Result!.WeekStart == "2026-09-29" && resolved.Result.WeekEnd == "2026-10-05" &&
+        resolved.Result.CoverageSource == expectedSource && resolved.Handler.Pages.Count == pageCount &&
+        resolved.Importer.ExtractionProgress!.CoverageSource == expectedSource,
+        "Dates on any page must resolve the whole report without re-extracting undated pages.");
+    var datePage = scenario == "monitoring_first" ? "City 1" : scenario == "late_coverage" ? "City 2" : "City 4";
+    Check(resolved.Result.Rows.Where(row => row.City != datePage).All(row => row.MonitoringStart is null),
+        "Using monitoring as coverage must not copy monitoring metadata to other pages.");
+    Console.WriteLine($"PASS: {scenario} resolves report-wide dates and records their source");
+}
+foreach (var scenario in new[] { "all_undated", "monitoring_conflict", "monitoring_local", "monitoring_too_long" })
+{
+    var unresolved = await RunAsync(scenario, expectFailure: true);
+    Check(unresolved.Importer.ExtractionProgress!.PagesFailed == 0 &&
+        unresolved.Importer.ExtractionProgress.CoverageError is not null &&
+        unresolved.Handler.Pages.Count == pageCount,
+        "Ambiguous or missing report dates must fail report resolution after reading every page.");
+    Console.WriteLine($"PASS: {scenario} fails report date resolution without retrying readable pages");
+}
+
 var retry = await RunAsync("retry");
 Check(retry.Handler.Pages.Count(number => number == 4) == 2 && retry.Handler.Pages.Count == pageCount + 1,
     "Retry only the failed page, never earlier successful pages.");
@@ -194,6 +217,8 @@ try
 catch (OperationCanceledException) { }
 Check(canceledHandler.Pages.Count <= 3, "Cancellation must not retry or start another page request.");
 Console.WriteLine("PASS: cancellation interrupts without retrying");
+
+await DoeExtractionFailureChecks.RunAsync(pdf, source, now, contentRoot);
 
 if (int.TryParse(Environment.GetEnvironmentVariable("DOE_TEST_PGPORT"), out var testPort))
     await DoePageJobIntegration.RunAsync(contentRoot, pdf, pageCount, testPort);
@@ -332,6 +357,24 @@ sealed class FakeExtractor(string scenario) : HttpMessageHandler
                 WeekEnd = number == 2 ? "" : "2026-11-02",
                 MonitoringStart = number == 2 ? new DateOnly(2026, 10, 27) : null,
                 MonitoringEnd = number == 2 ? MonitoringEndOverride ?? new DateOnly(2026, 10, 29) : null
+            };
+        }
+        if (Scenario is "visayas" or "monitoring_first" or "late_coverage" or "all_undated" or
+            "monitoring_conflict" or "monitoring_local" or "monitoring_too_long")
+        {
+            var monitoringPage = Scenario == "monitoring_first" ? 1 : Scenario == "late_coverage" ? 2 : 4;
+            var hasMonitoring = Scenario != "all_undated" &&
+                (number == monitoringPage || Scenario == "monitoring_conflict" && number == 2);
+            extraction = extraction with
+            {
+                WeekStart = Scenario == "late_coverage" && number == 4 ? "2026-09-29" : "",
+                WeekEnd = Scenario == "late_coverage" && number == 4 ? "2026-10-05" : "",
+                MonitoringStart = hasMonitoring ? new DateOnly(2026, 9, 29) : null,
+                MonitoringEnd = hasMonitoring
+                    ? Scenario == "monitoring_too_long" ? new DateOnly(2026, 10, 7)
+                        : Scenario == "late_coverage" || number == 2 && Scenario == "monitoring_conflict"
+                            ? new DateOnly(2026, 10, 1) : new DateOnly(2026, 10, 5) : null,
+                MonitoringAppliesToReport = hasMonitoring && Scenario != "monitoring_local"
             };
         }
         var extractionJson = JsonSerializer.Serialize(extraction);

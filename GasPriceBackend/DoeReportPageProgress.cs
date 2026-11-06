@@ -7,6 +7,9 @@ public sealed record DoeImportPageStatus(int PageNumber, string Status,
     public bool Cached { get; init; }
     public DateOnly? MonitoringStart { get; init; }
     public DateOnly? MonitoringEnd { get; init; }
+    public int? HttpStatus { get; init; }
+    public string? ErrorCode { get; init; }
+    public string? RequestId { get; init; }
 }
 
 public sealed record DoePriceRowError(int RowNumber, string? City, string? Province,
@@ -15,6 +18,10 @@ public sealed record DoePriceRowError(int RowNumber, string? City, string? Provi
 public sealed record DoeReportPageProgress(int PagesTotal, int PagesCompleted,
     int? CurrentPage, IReadOnlyList<DoeImportPageStatus> Pages)
 {
+    public DateOnly? WeekStart { get; init; }
+    public DateOnly? WeekEnd { get; init; }
+    public string? CoverageSource { get; init; }
+    public string? CoverageError { get; init; }
     public int PagesFailed => Pages.Count(page => page.Status == "failed");
     public int RowsSkipped => Pages.Sum(page => page.CellErrors.Count);
     public int PagesCached => Pages.Count(page => page.Cached);

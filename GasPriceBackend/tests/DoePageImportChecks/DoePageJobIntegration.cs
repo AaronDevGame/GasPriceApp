@@ -78,6 +78,29 @@ static class DoePageJobIntegration
             Check(city.Updated == 1 &&
                 (await db.DoeFuelPrices.AsNoTracking().SingleAsync(price => price.City == "City 2")).MonitoringEnd == new DateOnly(2026, 10, 29),
                 "City-only imports must also validate and persist monitoring metadata.");
+            monitoringExtractor.Scenario = "visayas";
+            var fallbackSource = monitoringSource with { WeekStart = new DateOnly(2026, 9, 29) };
+            var fallback = await importer.ImportReportAsync(db, fallbackSource, monitoringNow, null, null, CancellationToken.None);
+            Check(fallback.CoverageSource == "monitoring" &&
+                (await db.DoePumpPriceReports.AsNoTracking().SingleAsync(report => report.WeekStart == fallbackSource.WeekStart))
+                    .CoverageSource == "monitoring" &&
+                await db.DoeFuelPrices.CountAsync(price => price.WeekStart == fallbackSource.WeekStart) == pageCount - 1,
+                "Monitoring fallback must persist its provenance and all earlier undated pages' prices.");
+            var fallbackCached = await importer.ImportReportAsync(db, fallbackSource, monitoringNow, null, null, CancellationToken.None);
+            Check(fallbackCached.Status == "already_imported" && fallbackCached.CoverageSource == "monitoring" &&
+                fallbackCached.PageProgress!.PagesCached == pageCount && fallbackCached.Updated == 0,
+                "Cached raw pages must resolve fallback dates and preserve provenance without new extraction.");
+            await db.DoePageCaches.ExecuteDeleteAsync();
+            monitoringExtractor.Scenario = "all_undated";
+            try
+            {
+                await importer.ImportReportAsync(db, fallbackSource, monitoringNow, null, null, CancellationToken.None);
+                throw new Exception("A report without dates must not import.");
+            }
+            catch (InvalidDataException) { }
+            Check(await db.DoePageCaches.CountAsync() == 0 &&
+                await db.DoeFuelPrices.CountAsync(price => price.WeekStart == fallbackSource.WeekStart) == pageCount - 1,
+                "Unresolved report dates must invalidate caches for retry and preserve previously saved prices.");
             await db.DoeFuelPrices.ExecuteDeleteAsync();
             await db.DoePumpPriceReports.ExecuteDeleteAsync();
             await db.DoePageCaches.ExecuteDeleteAsync();
