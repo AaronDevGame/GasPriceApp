@@ -104,7 +104,8 @@ export default {
         body: mutation ? request.body : undefined,
         redirect: "manual",
         cache: "no-store",
-        cf: { cacheEverything: false, cacheTtl: 0 },
+        // Cloudflare requires -1 (not 0) when combined with cache: "no-store".
+        cf: { cacheEverything: false, cacheTtl: -1 },
       });
     } catch { return error(502, "origin_unavailable"); }
     // APIs return JSON. Never expose redirects to another host or forward credentials there.

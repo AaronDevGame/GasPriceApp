@@ -93,7 +93,9 @@ Data Protection keys so existing antiforgery cookies survive restarts.
   supplies authenticated Cloudflare client-IP metadata for backend rate limits.
 - All upstream Set-Cookie headers, including deletion, retain their flags and paths.
   No cookie domain rewriting or credentialed CORS is enabled.
-- API responses/errors are not cached. Upstream redirects are rejected. Worker
+- API responses/errors are not cached. The upstream `cache: "no-store"` option
+  uses `cf.cacheTtl: -1`; Cloudflare rejects it with `cacheTtl: 0` before contacting
+  Render. Upstream redirects are rejected. Worker
   observability is disabled; do not add logging of cookies, auth/CSRF headers or secrets.
 
 The local unit tests use mocked assets/upstream responses and test-only secrets.

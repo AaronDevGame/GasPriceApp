@@ -82,6 +82,7 @@ test("forwards login body/cookies/CSRF, replaces spoofed IP metadata and retains
     assert.equal(init.redirect, "manual");
     assert.equal(init.cache, "no-store");
     assert.equal(init.cf.cacheEverything, false);
+    assert.equal(init.cf.cacheTtl, -1, "Cloudflare rejects no-store with any TTL other than -1");
     const headers = new Headers({ "Cache-Control": "public, max-age=3600", Age: "30", "Access-Control-Allow-Origin": "*" });
     headers.append("Set-Cookie", "__Host-gasprice_access=access; Path=/; Secure; HttpOnly; SameSite=Strict");
     headers.append("Set-Cookie", "__Secure-gasprice_guest=guest; Path=/auth/browser; Secure; HttpOnly; SameSite=Strict");
