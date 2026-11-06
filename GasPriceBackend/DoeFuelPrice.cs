@@ -4,6 +4,8 @@ public sealed class DoeFuelPrice
     public long? ReportId { get; set; }
     public DateOnly WeekStart { get; set; }
     public DateOnly WeekEnd { get; set; }
+    public DateOnly? MonitoringStart { get; set; }
+    public DateOnly? MonitoringEnd { get; set; }
     public string City { get; set; } = "";
     public string CityKey { get; set; } = "";
     public string Province { get; set; } = "";

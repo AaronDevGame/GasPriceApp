@@ -13,7 +13,11 @@ using Microsoft.EntityFrameworkCore;
 public sealed record DoeFuelPriceItem(
     string City, string Province, string? Region, string OilCompany, string FuelGrade,
     decimal MinPricePerLiter, decimal MaxPricePerLiter, DateOnly WeekStart,
-    DateOnly WeekEnd, string SourceUrl, DateTime FetchedAtUtc);
+    DateOnly WeekEnd, string SourceUrl, DateTime FetchedAtUtc)
+{
+    public DateOnly? MonitoringStart { get; init; }
+    public DateOnly? MonitoringEnd { get; init; }
+}
 
 public sealed record DoeFuelPriceFeed(
     string? City, string? Province, string? Region, DateOnly? WeekStart,
@@ -32,7 +36,13 @@ public sealed record ExtractedDoeFuelPrice(
     [property: JsonPropertyName("oil_company")] string OilCompany,
     [property: JsonPropertyName("fuel_grade")] string FuelGrade,
     [property: JsonPropertyName("min_price_per_liter")] decimal MinPricePerLiter,
-    [property: JsonPropertyName("max_price_per_liter")] decimal MaxPricePerLiter);
+    [property: JsonPropertyName("max_price_per_liter")] decimal MaxPricePerLiter)
+{
+    [JsonPropertyName("monitoring_start")]
+    public DateOnly? MonitoringStart { get; init; }
+    [JsonPropertyName("monitoring_end")]
+    public DateOnly? MonitoringEnd { get; init; }
+}
 
 public sealed record DoeFuelPriceExtraction(
     [property: JsonPropertyName("week_start")] string WeekStart,
@@ -54,7 +64,14 @@ public sealed record ExtractedDoeBulkPrice(
     [property: JsonPropertyName("o")] string OilCompany,
     [property: JsonPropertyName("g")] string FuelGrade,
     [property: JsonPropertyName("lo")] decimal MinPricePerLiter,
-    [property: JsonPropertyName("hi")] decimal MaxPricePerLiter);
+    [property: JsonPropertyName("hi")] decimal MaxPricePerLiter)
+{
+    // Assigned from the original page after extraction; never inherited across pages.
+    [JsonIgnore]
+    public DateOnly? MonitoringStart { get; init; }
+    [JsonIgnore]
+    public DateOnly? MonitoringEnd { get; init; }
+}
 
 public sealed record DoeBulkExtraction(
     [property: JsonPropertyName("week_start")] string WeekStart,
@@ -69,6 +86,10 @@ public sealed record DoePageExtraction(
 {
     [JsonPropertyName("printed_column_headers")]
     public IReadOnlyList<string> PrintedColumnHeaders { get; init; } = [];
+    [JsonPropertyName("monitoring_start")]
+    public DateOnly? MonitoringStart { get; init; }
+    [JsonPropertyName("monitoring_end")]
+    public DateOnly? MonitoringEnd { get; init; }
 }
 
 public sealed record DoeReportImportResult(string SourceUrl, string Status,
@@ -126,12 +147,14 @@ public sealed partial class DoeFuelPriceImporter(
             rows = new { type = "array", items = new
             {
                 type = "object", additionalProperties = false,
-                required = new[] { "oil_company", "fuel_grade", "min_price_per_liter", "max_price_per_liter" },
+                required = new[] { "oil_company", "fuel_grade", "min_price_per_liter", "max_price_per_liter", "monitoring_start", "monitoring_end" },
                 properties = new
                 {
                     oil_company = new { type = "string" }, fuel_grade = new { type = "string" },
                     min_price_per_liter = new { type = "number" },
-                    max_price_per_liter = new { type = "number" }
+                    max_price_per_liter = new { type = "number" },
+                    monitoring_start = new { type = new[] { "string", "null" } },
+                    monitoring_end = new { type = new[] { "string", "null" } }
                 }
             } }
         }
@@ -168,10 +191,13 @@ public sealed partial class DoeFuelPriceImporter(
             { type = "string", @enum = new[] { "read", "unreadable" } });
         properties["printed_column_headers"] = JsonSerializer.SerializeToElement(new
             { type = "array", items = new { type = "string" } });
+        properties["monitoring_start"] = JsonSerializer.SerializeToElement(new
+            { type = new[] { "string", "null" } });
+        properties["monitoring_end"] = properties["monitoring_start"];
         return JsonSerializer.SerializeToElement(new
         {
             type = "object", additionalProperties = false,
-            required = new[] { "week_start", "week_end", "page_status", "printed_column_headers", "rows" },
+            required = new[] { "week_start", "week_end", "page_status", "printed_column_headers", "monitoring_start", "monitoring_end", "rows" },
             properties
         });
     }
@@ -321,6 +347,7 @@ public sealed partial class DoeFuelPriceImporter(
         var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in extraction.Rows)
         {
+            ValidateMonitoringDates(row.MonitoringStart, row.MonitoringEnd, nowUtc);
             if (string.IsNullOrWhiteSpace(row.OilCompany) || row.OilCompany.Length > 100 ||
                 new[] { "INDEPENDENT", "COMMON", "COMMON PRICE", "OVERALL", "OVERALL RANGE" }
                     .Contains(row.OilCompany.Trim().ToUpperInvariant()) ||
@@ -374,7 +401,8 @@ public sealed partial class DoeFuelPriceImporter(
             }
             else if (match.MinPricePerLiter != row.MinPricePerLiter ||
                 match.MaxPricePerLiter != row.MaxPricePerLiter || match.SourceUrl != url ||
-                match.WeekEnd != end)
+                match.WeekEnd != end || match.MonitoringStart != row.MonitoringStart ||
+                match.MonitoringEnd != row.MonitoringEnd)
                 updated++;
             else
                 continue;
@@ -384,6 +412,8 @@ public sealed partial class DoeFuelPriceImporter(
             match.Province = location.Province;
             match.Region = location.Region;
             match.WeekEnd = end;
+            match.MonitoringStart = row.MonitoringStart;
+            match.MonitoringEnd = row.MonitoringEnd;
             match.MinPricePerLiter = row.MinPricePerLiter;
             match.MaxPricePerLiter = row.MaxPricePerLiter;
             match.SourceUrl = url;
@@ -608,7 +638,8 @@ public sealed partial class DoeFuelPriceImporter(
             }
             if (!isNew && (price.MinPricePerLiter != row.MinPricePerLiter ||
                 price.MaxPricePerLiter != row.MaxPricePerLiter ||
-                price.ReportId != report.Id || price.SourceUrl != source.Url))
+                price.ReportId != report.Id || price.SourceUrl != source.Url || price.WeekEnd != end ||
+                price.MonitoringStart != row.MonitoringStart || price.MonitoringEnd != row.MonitoringEnd))
                 updated++;
             else if (!isNew) continue;
             if (price.ReportId is long oldReportId && oldReportId != report.Id)
@@ -619,6 +650,8 @@ public sealed partial class DoeFuelPriceImporter(
             price.Region = row.Region?.Trim() ??
                 (source.Section == "ncr-pump-prices" ? "National Capital Region" : source.Subdivision);
             price.WeekEnd = end;
+            price.MonitoringStart = row.MonitoringStart;
+            price.MonitoringEnd = row.MonitoringEnd;
             price.MinPricePerLiter = row.MinPricePerLiter;
             price.MaxPricePerLiter = row.MaxPricePerLiter;
             price.SourceUrl = source.Url;
@@ -927,7 +960,7 @@ public sealed partial class DoeFuelPriceImporter(
                           (source.Subdivision is null ? "" : $" ({source.Subdivision})") +
                           $". Its DOE listing labels the start as {source.WeekStart:yyyy-MM-dd}, which may be incorrect; use the PDF's printed coverage dates.";
                     if (weekStart.HasValue)
-                        context += $" Earlier pages printed coverage {weekStart:yyyy-MM-dd} through {weekEnd:yyyy-MM-dd}; use that context only if this page does not print dates.";
+                        context += $" Earlier pages printed report coverage {weekStart:yyyy-MM-dd} through {weekEnd:yyyy-MM-dd}; inherit that coverage unless this page explicitly prints a report coverage period. DATE MONITORING, survey, and collection dates are separate monitoring metadata and do not override report coverage. Never inherit monitoring dates from another page.";
                     if (columnHeaders.Count > 0)
                         context += " The most recent successfully read table's price-column headers, in left-to-right order, are " +
                             JsonSerializer.Serialize(columnHeaders) +
@@ -948,6 +981,16 @@ public sealed partial class DoeFuelPriceImporter(
                     if (extraction.PrintedColumnHeaders is null or { Count: > 40 } ||
                         extraction.PrintedColumnHeaders.Any(header => string.IsNullOrWhiteSpace(header) || header.Length > 100))
                         throw new InvalidDataException("The page extractor returned invalid table-column headers.");
+                    ValidateMonitoringDates(extraction.MonitoringStart, extraction.MonitoringEnd, nowUtc);
+                    // Continuations can omit report coverage even when they print monitoring dates.
+                    if (weekStart is DateOnly inheritedStart && weekEnd is DateOnly inheritedEnd &&
+                        string.IsNullOrWhiteSpace(extraction.WeekStart) &&
+                        string.IsNullOrWhiteSpace(extraction.WeekEnd))
+                        extraction = extraction with
+                        {
+                            WeekStart = inheritedStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                            WeekEnd = inheritedEnd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                        };
                     var undatedEmptyPage = extraction.Rows.Count == 0 &&
                         string.IsNullOrWhiteSpace(extraction.WeekStart) &&
                         string.IsNullOrWhiteSpace(extraction.WeekEnd);
@@ -978,13 +1021,21 @@ public sealed partial class DoeFuelPriceImporter(
                             validated.Errors.Count > 0 ? $"Skipped {validated.Errors.Count} invalid price row(s)." : null)
                         {
                             CellErrors = validated.Errors, DuplicatesIgnored = validated.DuplicatesIgnored,
-                            AggregateRowsIgnored = validated.AggregateRowsIgnored
+                            AggregateRowsIgnored = validated.AggregateRowsIgnored,
+                            MonitoringStart = extraction.MonitoringStart, MonitoringEnd = extraction.MonitoringEnd
                         };
-                        rows.AddRange(validated.Rows);
+                        rows.AddRange(validated.Rows.Select(row => row with
+                        {
+                            MonitoringStart = extraction.MonitoringStart,
+                            MonitoringEnd = extraction.MonitoringEnd
+                        }));
                     }
                     else
                     {
-                        pages[index] = new(pageNumber, "completed", attempt, 0, null);
+                        pages[index] = new(pageNumber, "completed", attempt, 0, null)
+                        {
+                            MonitoringStart = extraction.MonitoringStart, MonitoringEnd = extraction.MonitoringEnd
+                        };
                     }
                     if (extraction.PrintedColumnHeaders.Count > 0)
                         columnHeaders = extraction.PrintedColumnHeaders.ToArray();
@@ -1037,6 +1088,14 @@ public sealed partial class DoeFuelPriceImporter(
                 $"DOE report has {ExtractionProgress.PagesFailed} failed page(s) out of {document.Count}; no report prices were saved.");
         return new DoeBulkExtraction(weekStart?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
             weekEnd?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "", rows);
+    }
+
+    private static void ValidateMonitoringDates(DateOnly? start, DateOnly? end, DateTime nowUtc)
+    {
+        if (start.HasValue != end.HasValue)
+            throw new InvalidDataException("Monitoring dates require both a start and an end, or both null.");
+        if (start.HasValue && (end < start || end > PhilippineDate(nowUtc).AddDays(1)))
+            throw new InvalidDataException("Invalid monitoring dates: the end must be on or after the start and not more than one day in the future.");
     }
 
     private async Task<T> ExtractDocumentAsync<T>(byte[] pdf, string instructions,

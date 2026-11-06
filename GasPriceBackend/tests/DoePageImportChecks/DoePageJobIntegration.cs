@@ -46,6 +46,44 @@ static class DoePageJobIntegration
         app.MapDoeFuelPriceEndpoints(new AuthService(), "test-instance");
         using (var scope = app.Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var monitoringExtractor = new FakeExtractor("bicol_monitoring");
+            var importer = new DoeFuelPriceImporter(new HttpClient(new PdfHandler(pdf)),
+                new ClientFactory(monitoringExtractor), builder.Configuration, builder.Environment,
+                scope.ServiceProvider.GetRequiredService<ILogger<DoeFuelPriceImporter>>());
+            var monitoringSource = new DoeReportSource("mindanao-pump-prices", null,
+                new DateOnly(2026, 10, 27), "https://doe.gov.ph/report.pdf");
+            var monitoringNow = new DateTime(2026, 11, 3, 0, 0, 0, DateTimeKind.Utc);
+            await importer.ImportReportAsync(db, monitoringSource, monitoringNow, null, null, CancellationToken.None);
+            var prices = await db.DoeFuelPrices.AsNoTracking().ToListAsync();
+            Check(prices.Count == pageCount - 1 && prices.All(price => price.WeekEnd == new DateOnly(2026, 11, 2)) &&
+                prices.Single(price => price.City == "City 2").MonitoringEnd == new DateOnly(2026, 10, 29) &&
+                prices.Where(price => price.City != "City 2").All(price => price.MonitoringStart is null && price.MonitoringEnd is null),
+                "Persist monitoring dates only on the original page's prices while preserving report coverage.");
+            var cached = await importer.ImportReportAsync(db, monitoringSource, monitoringNow, null, null, CancellationToken.None);
+            Check(cached.Added == 0 && cached.Updated == 0 && cached.PageProgress!.PagesCached == pageCount &&
+                cached.PageProgress.Pages[1].MonitoringEnd == new DateOnly(2026, 10, 29),
+                "Cached page reimports must preserve monitoring dates and remain unchanged.");
+            await db.DoePageCaches.Where(page => page.PageNumber == 2).ExecuteDeleteAsync();
+            monitoringExtractor.MonitoringEndOverride = new DateOnly(2026, 10, 30);
+            var revised = await importer.ImportReportAsync(db, monitoringSource, monitoringNow, null, null, CancellationToken.None);
+            Check(revised.Added == 0 && revised.Updated == 1 &&
+                (await db.DoeFuelPrices.AsNoTracking().SingleAsync(price => price.City == "City 2")).MonitoringEnd == new DateOnly(2026, 10, 30),
+                "A metadata-only change must update the existing price instead of inserting a duplicate.");
+            monitoringExtractor.MonitoringEndOverride = new DateOnly(2026, 10, 29);
+            var city = await importer.ImportAsync(db, new ResolvedFuelLocation("City 2", "Basilan", "Region IX"),
+                monitoringNow, monitoringSource.Url, CancellationToken.None);
+            Check(city.Updated == 1 &&
+                (await db.DoeFuelPrices.AsNoTracking().SingleAsync(price => price.City == "City 2")).MonitoringEnd == new DateOnly(2026, 10, 29),
+                "City-only imports must also validate and persist monitoring metadata.");
+            await db.DoeFuelPrices.ExecuteDeleteAsync();
+            await db.DoePumpPriceReports.ExecuteDeleteAsync();
+            await db.DoePageCaches.ExecuteDeleteAsync();
+            db.ChangeTracker.Clear();
+            Console.WriteLine("PASS: PostgreSQL monitoring migration, page caches, unchanged reimports, metadata-only updates, and city imports");
+        }
         // Use separate scopes/importers to model a new job after a failed run.
         var resumeSource = new DoeReportSource("mindanao-pump-prices", null,
             new DateOnly(2026, 9, 28), "https://doe.gov.ph/report.pdf");

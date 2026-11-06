@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Keep DOE report coverage separate from DATE MONITORING, survey, and collection periods so continuation pages inherit the report week without a false coverage mismatch. Persist nullable monitoring dates per price row, expose them in price feeds and page progress, and retain rejection of conflicting report coverage or invalid monitoring ranges. Existing rows remain undated until re-imported; revised extraction rules invalidate prior page caches.
+
 ## [1.12.1] - 2026-11-06
 
 ### Changed

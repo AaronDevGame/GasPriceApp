@@ -110,5 +110,8 @@ public static class DoeFuelPriceEndpoints
         rows.FirstOrDefault()?.WeekStart, rows.FirstOrDefault()?.WeekEnd,
         rows.Select(p => new DoeFuelPriceItem(p.City, p.Province, p.Region,
             p.OilCompany, p.FuelGrade, p.MinPricePerLiter, p.MaxPricePerLiter,
-            p.WeekStart, p.WeekEnd, p.SourceUrl, p.FetchedAtUtc)).ToArray());
+            p.WeekStart, p.WeekEnd, p.SourceUrl, p.FetchedAtUtc)
+        {
+            MonitoringStart = p.MonitoringStart, MonitoringEnd = p.MonitoringEnd
+        }).ToArray());
 }

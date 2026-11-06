@@ -46,7 +46,8 @@ async Task<(DoeFuelPriceImporter Importer, FakeExtractor Handler, DoeBulkExtract
         return Task.CompletedTask;
     };
     var task = (Task<DoeBulkExtraction>)method.Invoke(importer,
-        [pdf, reportSource ?? source, now, progress, CancellationToken.None, null])!;
+        [pdf, reportSource ?? source, scenario == "bicol_monitoring"
+            ? now.AddMonths(1) : now, progress, CancellationToken.None, null])!;
     DoeBulkExtraction? result = null;
     try
     {
@@ -94,20 +95,50 @@ Check(listingMismatch.Result.Rows.Count == success.Result.Rows.Count,
     "A listing mismatch must preserve all eligible company prices.");
 Console.WriteLine("PASS: PDF coverage overrides a listing start one day earlier without retries");
 
+var monitoring = await RunAsync("bicol_monitoring");
+Check(monitoring.Result!.WeekStart == "2026-10-27" && monitoring.Result.WeekEnd == "2026-11-02" &&
+    monitoring.Handler.Pages.Count == pageCount, "Monitoring dates must not replace coverage or cause retries.");
+var monitored = monitoring.Result.Rows.Single(row => row.City == "City 2");
+Check(monitored.MonitoringStart == new DateOnly(2026, 10, 27) &&
+    monitored.MonitoringEnd == new DateOnly(2026, 10, 29) &&
+    monitoring.Result.Rows.Where(row => row.City != "City 2").All(row => row.MonitoringStart is null && row.MonitoringEnd is null),
+    "Monitoring dates must stay on their original page's rows.");
+var monitoredPage = monitoring.Importer.ExtractionProgress!.Pages[1];
+Check(monitoredPage.MonitoringStart == monitored.MonitoringStart &&
+    monitoredPage.MonitoringEnd == monitored.MonitoringEnd,
+    "Page progress must retain monitoring dates.");
+var monitoringRoundTrip = JsonSerializer.Deserialize<DoeReportPageProgress>(
+    JsonSerializer.Serialize(monitoring.Importer.ExtractionProgress))!;
+Check(monitoringRoundTrip.Pages[1].MonitoringEnd == monitored.MonitoringEnd,
+    "Persisted job progress must retain monitoring dates.");
+var monitoredFeed = DoeFuelPriceEndpoints.ToFeed(new ResolvedFuelLocation("City 2", "Basilan", "Region IX"),
+    [new DoeFuelPrice
+    {
+        City = monitored.City, Province = monitored.Province, OilCompany = monitored.OilCompany,
+        FuelGrade = monitored.FuelGrade, WeekStart = new DateOnly(2026, 10, 27),
+        WeekEnd = new DateOnly(2026, 11, 2), MonitoringStart = monitored.MonitoringStart,
+        MonitoringEnd = monitored.MonitoringEnd
+    }]);
+var feedJson = JsonSerializer.SerializeToElement(monitoredFeed, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+Check(feedJson.GetProperty("prices")[0].GetProperty("monitoringEnd").GetString() == "2026-10-29" &&
+    feedJson.GetProperty("prices")[0].GetProperty("weekEnd").GetString() == "2026-11-02",
+    "Price feeds must expose monitoring dates separately from unchanged report coverage fields.");
+Console.WriteLine("PASS: Bicol continuation inherits October 27–November 2 coverage and preserves October 27–29 monitoring only on page 2");
+
 var retry = await RunAsync("retry");
 Check(retry.Handler.Pages.Count(number => number == 4) == 2 && retry.Handler.Pages.Count == pageCount + 1,
     "Retry only the failed page, never earlier successful pages.");
 Check(retry.Importer.ExtractionProgress!.PagesFailed == 0, "A recovered retry must not count as failed.");
 Console.WriteLine("PASS: retry only the failed page and include retry billing");
 
-foreach (var scenario in new[] { "failed", "date_conflict", "monitoring_dates", "missing_dates", "malformed_dates", "incomplete" })
+foreach (var scenario in new[] { "failed", "date_conflict", "coverage_end_conflict", "missing_dates", "malformed_dates", "incomplete", "monitoring_missing_end", "monitoring_reversed", "monitoring_future", "monitoring_malformed" })
 {
     var failed = await RunAsync(scenario, expectFailure: true);
     Check(failed.Importer.ExtractionProgress!.PagesFailed == 1, "The failed page must be visible.");
     Check(failed.Importer.ExtractionProgress.PagesCompleted == pageCount - 1,
         "A failed page must not count as completed.");
     var error = failed.Importer.ExtractionProgress.Pages[3].Error!;
-    if (scenario is "date_conflict" or "monitoring_dates")
+    if (scenario is "date_conflict" or "coverage_end_conflict")
         Check(error.Contains("expected 2026-09-29 through 2026-10-05") &&
             error.Contains(scenario == "date_conflict"
                 ? "extracted 2026-09-22 through 2026-09-28"
@@ -215,6 +246,7 @@ sealed class PdfHandler(byte[] pdf) : HttpMessageHandler
 sealed class FakeExtractor(string scenario) : HttpMessageHandler
 {
     public string Scenario { get; set; } = scenario;
+    public DateOnly? MonitoringEndOverride { get; set; }
     public List<int> Pages { get; } = [];
     public TaskCompletionSource PageFourStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public TaskCompletionSource ReleasePageFour { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -229,6 +261,16 @@ sealed class FakeExtractor(string scenario) : HttpMessageHandler
         {
             var cityExtraction = new DoeFuelPriceExtraction("2026-09-29", "2026-10-05",
                 [new ExtractedDoeFuelPrice("PETRON", "RON 91", 90, 90)]);
+            if (Scenario == "bicol_monitoring")
+                cityExtraction = cityExtraction with
+                {
+                    WeekStart = "2026-10-27", WeekEnd = "2026-11-02",
+                    Rows = cityExtraction.Rows.Select(row => row with
+                    {
+                        MonitoringStart = new DateOnly(2026, 10, 27),
+                        MonitoringEnd = MonitoringEndOverride ?? new DateOnly(2026, 10, 29)
+                    }).ToArray()
+                };
             var cityResponse = new
             {
                 model = "gpt-5.6-luna", status = "completed",
@@ -261,7 +303,7 @@ sealed class FakeExtractor(string scenario) : HttpMessageHandler
             bad && Scenario == "missing_dates" ? "" :
                 bad && Scenario == "malformed_dates" ? "2026-09-99" :
                 bad && Scenario == "date_conflict" ? "2026-09-22" : "2026-09-29",
-            bad && Scenario == "monitoring_dates" ? "2026-10-01" :
+            bad && Scenario == "coverage_end_conflict" ? "2026-10-01" :
                 bad && Scenario == "date_conflict" ? "2026-09-28" : "2026-10-05",
             Scenario == "failed" && bad ? "unreadable" : "read",
             [new ExtractedDoeBulkPrice("City " + number, "Basilan", "Region IX",
@@ -269,18 +311,39 @@ sealed class FakeExtractor(string scenario) : HttpMessageHandler
                 Scenario == "bad_price" && bad ? 500 : Scenario == "reversed" && bad ? 77.84m : 90,
                 Scenario == "reversed" && bad ? 77.50m : 90)])
         {
+            MonitoringStart = bad && Scenario.StartsWith("monitoring_") ? new DateOnly(2026, 9, 29) : null,
+            MonitoringEnd = bad && Scenario == "monitoring_reversed" ? new DateOnly(2026, 9, 28)
+                : bad && Scenario == "monitoring_future" ? new DateOnly(2026, 10, 10) : null,
             PrintedColumnHeaders = Scenario == "headers" && number == 1
                 ? ["PETRON", "SHELL", "INDEPENDENT", "OVERALL RANGE", "COMMON PRICE"]
                 : Scenario == "headers" && number == 4
                     ? ["SHELL", "PETRON", "INDEPENDENT", "OVERALL RANGE", "COMMON PRICE"] : []
         };
+        if (Scenario == "bicol_monitoring")
+        {
+            if (number == 2 && (!prompt.Contains("DATE MONITORING") || !prompt.Contains("2026-11-02")))
+                throw new Exception("The continuation prompt must distinguish monitoring dates from known coverage.");
+            var schema = body.RootElement.GetProperty("text").GetProperty("format").GetProperty("schema");
+            if (!schema.GetProperty("properties").TryGetProperty("monitoring_start", out _))
+                throw new Exception("The page schema must request monitoring metadata.");
+            extraction = extraction with
+            {
+                WeekStart = number == 2 ? "" : "2026-10-27",
+                WeekEnd = number == 2 ? "" : "2026-11-02",
+                MonitoringStart = number == 2 ? new DateOnly(2026, 10, 27) : null,
+                MonitoringEnd = number == 2 ? MonitoringEndOverride ?? new DateOnly(2026, 10, 29) : null
+            };
+        }
+        var extractionJson = JsonSerializer.Serialize(extraction);
+        if (bad && Scenario == "monitoring_malformed")
+            extractionJson = extractionJson.Replace("\"monitoring_start\":\"2026-09-29\"", "\"monitoring_start\":\"2026-09-99\"");
         var result = new
         {
             model = "gpt-5.6-luna", status = Scenario == "incomplete" && bad ? "incomplete" : "completed",
             usage = new { input_tokens = 100, output_tokens = 10, total_tokens = 110,
                 input_tokens_details = new { cached_tokens = 0 } },
             output = new[] { new { type = "message", content = new[]
-                { new { type = "output_text", text = JsonSerializer.Serialize(extraction) } } } }
+                { new { type = "output_text", text = extractionJson } } } }
         };
         return new HttpResponseMessage(HttpStatusCode.OK)
             { Content = new StringContent(JsonSerializer.Serialize(result), Encoding.UTF8, "application/json") };

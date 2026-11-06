@@ -7,7 +7,11 @@ using Microsoft.EntityFrameworkCore;
 public sealed record DoePriceHistoryRow(long Id, long? ReportId,
     DateOnly WeekStart, DateOnly WeekEnd, string City, string Province,
     string? Region, string OilCompany, string FuelGrade, decimal MinPricePerLiter,
-    decimal MaxPricePerLiter, string SourceUrl, DateTime FetchedAtUtc);
+    decimal MaxPricePerLiter, string SourceUrl, DateTime FetchedAtUtc)
+{
+    public DateOnly? MonitoringStart { get; init; }
+    public DateOnly? MonitoringEnd { get; init; }
+}
 
 public sealed record DoePriceHistoryPage(IReadOnlyList<DoePriceHistoryRow> Prices,
     string? NextCursor);
@@ -177,7 +181,10 @@ public static class DoeImportEndpoints
                 .ThenByDescending(p => p.Id).Take(limit + 1)
                 .Select(p => new DoePriceHistoryRow(p.Id, p.ReportId, p.WeekStart,
                     p.WeekEnd, p.City, p.Province, p.Region, p.OilCompany, p.FuelGrade,
-                    p.MinPricePerLiter, p.MaxPricePerLiter, p.SourceUrl, p.FetchedAtUtc))
+                    p.MinPricePerLiter, p.MaxPricePerLiter, p.SourceUrl, p.FetchedAtUtc)
+                {
+                    MonitoringStart = p.MonitoringStart, MonitoringEnd = p.MonitoringEnd
+                })
                 .ToListAsync(cancellationToken);
             var hasMore = rows.Count > limit;
             if (hasMore) rows.RemoveAt(rows.Count - 1);

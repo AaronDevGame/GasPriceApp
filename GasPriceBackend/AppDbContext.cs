@@ -227,6 +227,8 @@ public class AppDbContext : DbContext
             e.HasKey(p => p.Id);
             e.Property(p => p.Id).HasColumnName("id");
             e.Property(p => p.ReportId).HasColumnName("report_id");
+            e.Property(p => p.MonitoringStart).HasColumnName("monitoring_start");
+            e.Property(p => p.MonitoringEnd).HasColumnName("monitoring_end");
             e.Property(p => p.WeekStart).HasColumnName("week_start");
             e.Property(p => p.WeekEnd).HasColumnName("week_end");
             e.Property(p => p.City).HasColumnName("city").HasMaxLength(100);

@@ -5,6 +5,8 @@ public sealed record DoeImportPageStatus(int PageNumber, string Status,
     public int DuplicatesIgnored { get; init; }
     public int AggregateRowsIgnored { get; init; }
     public bool Cached { get; init; }
+    public DateOnly? MonitoringStart { get; init; }
+    public DateOnly? MonitoringEnd { get; init; }
 }
 
 public sealed record DoePriceRowError(int RowNumber, string? City, string? Province,
