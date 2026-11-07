@@ -191,6 +191,33 @@ public static class DoeLocationMatcher
 
     public static string CanonicalCity(string city) => CityBase(city);
 
+    public static bool IsProvincePrice(DoeFuelPrice row) =>
+        string.IsNullOrWhiteSpace(row.City) && string.IsNullOrWhiteSpace(row.CityKey);
+
+    public static IReadOnlyList<DoeFuelPrice> MatchLocation(
+        IEnumerable<DoeFuelPrice> rows, string? city, string province, string? region = null)
+    {
+        if (!RegionConsistent(region, province)) return [];
+        var applicable = rows.Where(row => ProvinceEquals(
+            string.IsNullOrWhiteSpace(row.Province) ? row.ProvinceKey : row.Province, province) &&
+            RegionConsistent(row.Region, province)).ToArray();
+        IReadOnlyList<DoeFuelPrice> cityRows = string.IsNullOrWhiteSpace(city)
+            ? [] : MatchCity(applicable, city, province, region);
+        var provinceRows = applicable.Where(IsProvincePrice).ToArray();
+        // Compare coverage before specificity. Never let an older city report hide a
+        // newer provincial report, or mix weeks and neighboring municipalities.
+        var latest = cityRows.Concat(provinceRows).OrderByDescending(row => row.WeekStart)
+            .ThenByDescending(row => row.WeekEnd).FirstOrDefault();
+        if (latest is null) return [];
+        var currentCity = cityRows.Where(row => row.WeekStart == latest.WeekStart &&
+            row.WeekEnd == latest.WeekEnd).ToArray();
+        if (currentCity.Length > 0) return currentCity;
+        return provinceRows.Where(row => row.WeekStart == latest.WeekStart && row.WeekEnd == latest.WeekEnd)
+            .OrderByDescending(row => row.FetchedAtUtc)
+            .GroupBy(row => Normalize(row.OilCompany) + "|" + Normalize(row.FuelGrade))
+            .Select(group => group.First()).OrderBy(row => row.OilCompany).ThenBy(row => row.FuelGrade).ToArray();
+    }
+
     public static IReadOnlyList<DoeFuelPrice> MatchCity(
         IEnumerable<DoeFuelPrice> rows, string city, string province, string? region = null)
     {

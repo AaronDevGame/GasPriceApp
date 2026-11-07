@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging;
 // Offline HTTP/auth/queue checks. No external HTTP clients are registered.
 // Optional real persistence checks use only a disposable localhost database:
 // DOE_TEST_PGPORT=<port> dotnet run --project GasPriceBackend/tests/DoeExtractedImportChecks
+ProvincePriceChecks.Run();
 await CodexAuthChecks.RunAsync();
 var clock = new TestClock();
 var captured = new List<DoeImportJob>();
@@ -84,7 +85,9 @@ foreach (var invalid in new[]
     valid.Replace("\"complete\":true", "\"complete\":null"),
     valid.Replace("\"complete\":true", "\"complete\":true,\"complete\":false"),
     valid.Replace("\"city\":", "\"extra\":true,\"city\":"),
-    valid.Replace("\"city\":\"Quezon City\"", "\"city\":null"),
+    valid.Replace("\"province\":\"Metro Manila\"", "\"province\":null"),
+    valid.Replace("\"province\":\"Metro Manila\"", "\"province\":\"\""),
+    valid.Replace("\"city\":\"Quezon City\"", "\"city\":42"),
     valid.Replace("\"city\":\"Quezon City\"", "\"city\":\"Quezon City\",\"city\":\"Manila\""),
     valid.Replace("\"minPricePerLiter\":60", "\"minPricePerLiter\":\"60\""),
     valid.Replace("\"minPricePerLiter\":60", "\"minPricePerLiter\":0"),
@@ -141,6 +144,21 @@ try
 }
 catch (InvalidDataException) { }
 Console.WriteLine("PASS: duplicate price and monitoring conflicts reject atomically");
+foreach (var cityValue in new[] { "null", "\"\"", "\"  \"", "omit" })
+{
+    var payload = valid.Replace("\"province\":\"Metro Manila\"", "\"province\":\"Marinduque\"")
+        .Replace("\"region\":\"National Capital Region\"", "\"region\":\"Mimaropa\"");
+    payload = cityValue == "omit" ? payload.Replace("\"city\":\"Quezon City\",", "")
+        : payload.Replace("\"city\":\"Quezon City\"", "\"city\":" + cityValue);
+    using var response = await Post(payload);
+    Check(response.StatusCode == HttpStatusCode.Accepted, "A province-level row with optional city must queue.");
+    var submitted = JsonSerializer.Deserialize<DoeExtractedImportRequest>(captured.Last().RequestJson!)!;
+    var normalized = DoeFuelPriceImporter.ValidateSubmittedReport(submitted, clock.GetUtcNow().UtcDateTime);
+    Check(normalized.Rows.Single().City == "" && normalized.Rows.Single().Province == "Marinduque",
+        "Omitted, null and blank cities must have identical provincial storage keys.");
+}
+Console.WriteLine("PASS: HTTP accepts omitted/null/blank city with a required province");
+
 
 if (int.TryParse(Environment.GetEnvironmentVariable("DOE_TEST_PGPORT"), out var port))
 {
@@ -198,6 +216,58 @@ if (int.TryParse(Environment.GetEnvironmentVariable("DOE_TEST_PGPORT"), out var 
     Check(await db.DoeFuelPrices.CountAsync() == 1 && await db.DoePageCaches.CountAsync() == 0,
         "No duplicate prices or fabricated PDF caches.");
     Console.WriteLine("PASS: PostgreSQL queue execution, upserts, corrections, partial reports and cache invalidation without network");
+    var provincial = duplicate with
+    {
+        SourceUrl = "https://doe.gov.ph/mimaropa.pdf",
+        Rows = [duplicate.Rows[0] with { City = null, Province = "Marinduque", Region = "Mimaropa" }]
+    };
+    var taskNow = clock.GetUtcNow().UtcDateTime;
+    db.FuelPriceCaches.AddRange(new[] { "Boac", "Gasan" }.Select(city => new FuelPriceCache
+    {
+        Scope = FuelPriceCacheScopes.City, City = city, CityKey = city.ToUpperInvariant(),
+        Province = "Marinduque", ProvinceKey = "MARINDUQUE", CachedAt = taskNow,
+        RefreshAfter = taskNow.AddDays(1)
+    }));
+    await db.SaveChangesAsync();
+    var provincialJob = await Run(provincial);
+    Check(provincialJob.Status == "completed" && provincialJob.PriceRowsAdded == 1 &&
+        (await db.DoePumpPriceReports.SingleAsync(r => r.SourceUrl == provincial.SourceUrl)).Status == "imported",
+        "Province-only company prices must save and complete the report.");
+    var provincialRow = await db.DoeFuelPrices.AsNoTracking().SingleAsync(p => p.ProvinceKey == "MARINDUQUE");
+    Check(provincialRow.City == "" && provincialRow.CityKey == "" &&
+        await db.FuelPriceCaches.CountAsync(c => c.ProvinceKey == "MARINDUQUE" && c.RefreshAfter == taskNow) == 2,
+        "Persist an empty city key and expire all municipality caches within the province.");
+    var repeatedProvince = await Run(provincial with { Rows = [provincial.Rows[0] with { City = "  " }] });
+    Check(repeatedProvince.PriceRowsAdded == 0 && repeatedProvince.PriceRowsUpdated == 0 &&
+        await db.DoeFuelPrices.CountAsync(p => p.ProvinceKey == "MARINDUQUE") == 1,
+        "Null/blank city reimports must not duplicate province-level rows.");
+    using var scope = provider.CreateScope();
+    var importer = scope.ServiceProvider.GetRequiredService<DoeFuelPriceImporter>();
+    var boac = new ResolvedFuelLocation("Boac", "Marinduque", "Mimaropa");
+    var read = await importer.GetAsync(db, boac, taskNow, CancellationToken.None);
+    Check(read.Count == 1 && DoeLocationMatcher.IsProvincePrice(read[0]),
+        "Boac users must receive the stored Marinduque range without network extraction.");
+    var oldBoac = new DoeFuelPrice
+    {
+        City = "Boac", CityKey = "BOAC", Province = "Marinduque", ProvinceKey = "MARINDUQUE",
+        Region = "Mimaropa", WeekStart = new(2026, 10, 26), WeekEnd = new(2026, 11, 1),
+        OilCompany = "PETRON", FuelGrade = "DIESEL", MinPricePerLiter = 59, MaxPricePerLiter = 60,
+        SourceUrl = "https://doe.gov.ph/older.pdf", FetchedAtUtc = taskNow
+    };
+    db.DoeFuelPrices.Add(oldBoac);
+    await db.SaveChangesAsync();
+    read = await importer.ReadAsync(db, boac, taskNow, CancellationToken.None);
+    Check(read.Count == 1 && DoeLocationMatcher.IsProvincePrice(read[0]),
+        "Older still-fresh Boac coverage must not hide a newer Marinduque range.");
+    var specific = await Run(provincial with { Rows = [provincial.Rows[0] with { City = "Boac" }] });
+    read = await importer.ReadAsync(db, boac, taskNow, CancellationToken.None);
+    Check(specific.PriceRowsAdded == 1 && read.Count == 1 && read[0].City == "Boac" &&
+        await db.DoeFuelPrices.CountAsync(p => p.ProvinceKey == "MARINDUQUE" && p.CityKey == "") == 1,
+        "City data wins for the same week without overwriting the provincial record.");
+    read = await importer.ReadAsync(db, boac, taskNow.AddDays(20), CancellationToken.None);
+    Check(read.Count == 0, "Neither city nor province fallback may return expired reports.");
+    Console.WriteLine("PASS: PostgreSQL provincial completeness, repeat imports, cache expiry, Boac fallback and fresh city preference");
+
 }
 else Console.WriteLine("SKIP: PostgreSQL persistence checks (set DOE_TEST_PGPORT for a disposable local cluster)");
 await app.StopAsync();

@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 
 public sealed record DoeExtractedPriceRow(
-    [property: JsonRequired] string City,
+    string? City,
     [property: JsonRequired] string Province,
     [property: JsonRequired] string OilCompany,
     [property: JsonRequired] string FuelGrade,
@@ -16,7 +16,7 @@ public sealed record DoeExtractedPriceRow(
     public DateOnly? MonitoringStart { get; init; }
     public DateOnly? MonitoringEnd { get; init; }
 
-    public ExtractedDoeBulkPrice ToBulkRow() => new(City, Province, Region, OilCompany,
+    public ExtractedDoeBulkPrice ToBulkRow() => new(City?.Trim() ?? "", Province, Region, OilCompany,
         FuelGrade, MinPricePerLiter, MaxPricePerLiter)
     {
         MonitoringStart = MonitoringStart, MonitoringEnd = MonitoringEnd
@@ -163,6 +163,8 @@ public sealed partial class DoeFuelPriceImporter
             throw new InvalidDataException("Provide between 1 and 4000 price rows.");
         foreach (var row in request.Rows)
         {
+            if (row.City is { Length: > 100 })
+                throw new InvalidDataException("Optional city must be at most 100 characters.");
             ValidateMonitoringDates(row.MonitoringStart, row.MonitoringEnd, nowUtc);
             if (row.MinPricePerLiter > row.MaxPricePerLiter)
                 throw new InvalidDataException("minPricePerLiter must not exceed maxPricePerLiter.");

@@ -15,13 +15,18 @@ public sealed record DoeFuelPriceItem(
     decimal MinPricePerLiter, decimal MaxPricePerLiter, DateOnly WeekStart,
     DateOnly WeekEnd, string SourceUrl, DateTime FetchedAtUtc)
 {
+    public string Scope => string.IsNullOrEmpty(City) ? "province" : "city";
     public DateOnly? MonitoringStart { get; init; }
     public DateOnly? MonitoringEnd { get; init; }
 }
 
 public sealed record DoeFuelPriceFeed(
     string? City, string? Province, string? Region, DateOnly? WeekStart,
-    DateOnly? WeekEnd, IReadOnlyList<DoeFuelPriceItem> Prices);
+    DateOnly? WeekEnd, IReadOnlyList<DoeFuelPriceItem> Prices)
+{
+    // City describes the requested location; scope describes the returned prices.
+    public string? Scope => Prices.FirstOrDefault()?.Scope;
+}
 
 public sealed record DoeFuelPriceImportResult(
     string City, string Province, DateOnly WeekStart, DateOnly WeekEnd,
@@ -241,10 +246,10 @@ public sealed partial class DoeFuelPriceImporter(
         CancellationToken cancellationToken)
     {
         ResetExtractionUsage();
-        if (string.IsNullOrWhiteSpace(location.City) || string.IsNullOrWhiteSpace(location.Province))
+        if (string.IsNullOrWhiteSpace(location.Province))
             return [];
         var cached = await ReadAsync(db, location, nowUtc, cancellationToken);
-        var key = Normalize(location.City) + "|" + Normalize(location.Province);
+        var key = Normalize(location.City ?? "") + "|" + Normalize(location.Province);
         TrimAttempts(nowUtc);
         var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc),
             TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila"));
@@ -254,7 +259,7 @@ public sealed partial class DoeFuelPriceImporter(
             (cached[0].WeekStart >= currentTuesday ||
              localNow < currentTuesday.ToDateTime(new TimeOnly(6, 0))))
             return cached;
-        if (!IsConfigured ||
+        if (string.IsNullOrWhiteSpace(location.City) || !IsConfigured ||
             (FailedAttempts.TryGetValue(key, out var last) && last > nowUtc.AddMinutes(-15)) ||
             (cached.Count > 0 && ListingChecks.TryGetValue(key, out var checkedAt) &&
              checkedAt > nowUtc.AddMinutes(-15)))
@@ -286,7 +291,7 @@ public sealed partial class DoeFuelPriceImporter(
         AppDbContext db, ResolvedFuelLocation location, DateTime nowUtc,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(location.City) || string.IsNullOrWhiteSpace(location.Province))
+        if (string.IsNullOrWhiteSpace(location.Province))
             return [];
         if (!DoeLocationMatcher.RegionConsistent(location.Region, location.Province))
             return [];
@@ -298,10 +303,7 @@ public sealed partial class DoeFuelPriceImporter(
                 p.WeekEnd >= earliest && p.WeekStart <= today)
             .OrderByDescending(p => p.WeekStart).ThenBy(p => p.OilCompany)
             .ThenBy(p => p.FuelGrade).ToListAsync(cancellationToken);
-        var matched = DoeLocationMatcher.MatchCity(rows, location.City,
-            location.Province, location.Region);
-        var latest = matched.FirstOrDefault()?.WeekStart;
-        return latest is null ? [] : matched.Where(p => p.WeekStart == latest).ToArray();
+        return DoeLocationMatcher.MatchLocation(rows, location.City, location.Province, location.Region);
     }
 
     public async Task<DoeFuelPriceImportResult> ImportAsync(
@@ -697,8 +699,11 @@ public sealed partial class DoeFuelPriceImporter(
             var cityKeys = validated.Rows.SelectMany(r => CityKeyCandidates(r.City)).Distinct().ToArray();
             var provinceKeys = validated.Rows.SelectMany(r =>
                 DoeLocationMatcher.ProvinceKeyCandidates(r.Province)).Distinct().ToArray();
+            var provinceWideKeys = validated.Rows.Where(r => r.City.Length == 0)
+                .SelectMany(r => DoeLocationMatcher.ProvinceKeyCandidates(r.Province)).Distinct().ToArray();
             await db.FuelPriceCaches.Where(c => c.RefreshAfter > nowUtc &&
-                ((c.Scope == FuelPriceCacheScopes.City && cityKeys.Contains(c.CityKey) &&
+                ((c.Scope == FuelPriceCacheScopes.City &&
+                  (cityKeys.Contains(c.CityKey) || provinceWideKeys.Contains(c.ProvinceKey)) &&
                   provinceKeys.Contains(c.ProvinceKey)) ||
                  (c.Scope == FuelPriceCacheScopes.Province && provinceKeys.Contains(c.ProvinceKey)) ||
                  c.Scope == FuelPriceCacheScopes.Region))
@@ -741,7 +746,8 @@ public sealed partial class DoeFuelPriceImporter(
         var aggregatesIgnored = 0;
         for (var index = 0; index < rows.Count; index++)
         {
-            var row = rows[index];
+            // Empty city has one storage/key representation; never manufacture a locality.
+            var row = rows[index] with { City = rows[index].City?.Trim() ?? "" };
             if (string.IsNullOrWhiteSpace(row.OilCompany))
                 throw new InvalidDataException($"DOE report has no oil company at extracted row {index + 1}.");
             var company = Normalize(row.OilCompany);
@@ -751,8 +757,10 @@ public sealed partial class DoeFuelPriceImporter(
                 aggregatesIgnored++;
                 continue;
             }
-            if (string.IsNullOrWhiteSpace(row.City) || row.City.Length > 100 ||
+            if (rows[index].City is { Length: > 100 } ||
+                (row.City.Length > 0 && DoeLocationMatcher.CanonicalCity(row.City).Length == 0) ||
                 string.IsNullOrWhiteSpace(row.Province) || row.Province.Length > 100 ||
+                DoeLocationMatcher.Province(row.Province).Length == 0 ||
                 row.Region is { Length: > 100 } || row.OilCompany.Length > 100)
                 throw new InvalidDataException(
                     $"DOE report has an invalid locality or company at extracted row {index + 1}.");
@@ -833,8 +841,8 @@ public sealed partial class DoeFuelPriceImporter(
     private static DoePriceRowError RowError(int index, ExtractedDoeBulkPrice row, string error) =>
         new(index + 1, row.City, row.Province, row.OilCompany, row.FuelGrade, error);
 
-    private static string BulkRowKey(string city, string province, string company, string grade) =>
-        DoeLocationMatcher.CanonicalCity(city) + "|" + DoeLocationMatcher.Province(province) +
+    private static string BulkRowKey(string? city, string province, string company, string grade) =>
+        DoeLocationMatcher.CanonicalCity(city ?? "") + "|" + DoeLocationMatcher.Province(province) +
         "|" + Normalize(company) + "|" + grade.Trim().ToUpperInvariant();
 
     private async Task<(string Url, DateOnly? ListedWeekStart)> FindLatestPdfAsync(ResolvedFuelLocation location, DateTime nowUtc,
@@ -1256,6 +1264,7 @@ public sealed partial class DoeFuelPriceImporter(
 
     private static string[] CityKeyCandidates(string city)
     {
+        if (string.IsNullOrWhiteSpace(city)) return [];
         var exact = Normalize(city);
         var withoutMarks = new StringBuilder();
         foreach (var character in exact.Normalize(NormalizationForm.FormD))

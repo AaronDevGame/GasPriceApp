@@ -108,7 +108,8 @@ public static class DoeFuelPriceEndpoints
         IReadOnlyList<DoeFuelPrice> rows) => new(
         location.City, location.Province, location.Region,
         rows.FirstOrDefault()?.WeekStart, rows.FirstOrDefault()?.WeekEnd,
-        rows.Select(p => new DoeFuelPriceItem(p.City, p.Province, p.Region,
+        rows.Select(p => new DoeFuelPriceItem(string.IsNullOrWhiteSpace(p.City) ? p.CityKey : p.City,
+            p.Province, p.Region,
             p.OilCompany, p.FuelGrade, p.MinPricePerLiter, p.MaxPricePerLiter,
             p.WeekStart, p.WeekEnd, p.SourceUrl, p.FetchedAtUtc)
         {
