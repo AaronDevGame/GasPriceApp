@@ -25,7 +25,8 @@ public sealed record DoeImportJobStatus(Guid JobId, string Mode, DateOnly? From,
     int ReportsSkipped, int ReportsFailed, int PriceRowsAdded, int PriceRowsUpdated,
     IReadOnlyList<DoeImportReportStatus> Reports, string? Error)
 {
-    public string StatusUrl => (Mode == "benchmark" ? ApiRoutes.AdminDoeFuelPricesBenchmarkJob :
+    public string StatusUrl => (Mode == "extracted" ? ApiRoutes.AdminDoeExtractedJob :
+        Mode == "benchmark" ? ApiRoutes.AdminDoeFuelPricesBenchmarkJob :
         ApiRoutes.AdminDoeFuelPricesImportJob).Replace("{jobId}", JobId.ToString());
     public DoeSingleImportRequest? Request { get; init; }
     public JsonElement? Result { get; init; }

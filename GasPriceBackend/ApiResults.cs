@@ -126,6 +126,7 @@ public static class AuthErrors
     public const string InvalidAppInstanceId = "invalid_app_instance_id";
     public const string InvalidAdminKey = "invalid_admin_key";
     public const string InvalidNewsKey = "invalid_news_key";
+    public const string InvalidCodexKey = "invalid_codex_key";
     public const string InvalidPlayerToken = "invalid_player_token";
     public const string InvalidPlayerCredentials = "invalid_player_credentials";
     public const string PlayerNotLoggedIn = "player_not_logged_in";

@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Add Codex-scoped DOE report lookup and extracted-job polling, a separate scheduled-task environment template, a credential-safe HTTP helper and a daily import runbook.
+
+### Changed
+- Require `CODEX_ADMIN_API_KEY` instead of `ADMIN_API_KEY` for externally extracted DOE imports. Return a polling URL under the same credential scope; leave other admin and news credentials separate. Configure matching Render/task secrets before enabling scheduled imports.
+
 ## [1.13.0] - 2026-11-07
 
 ### Added

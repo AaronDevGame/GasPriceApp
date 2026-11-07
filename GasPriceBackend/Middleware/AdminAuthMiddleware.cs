@@ -5,6 +5,7 @@ public class AdminAuthMiddleware
     private readonly RequestDelegate _next;
     private readonly string _adminApiKey;
     private readonly string? _newsApiKey;
+    private readonly string? _codexApiKey;
     private readonly string _instanceId;
 
     public AdminAuthMiddleware(RequestDelegate next, IConfiguration config)
@@ -14,6 +15,7 @@ public class AdminAuthMiddleware
         _adminApiKey = config["ADMIN_API_KEY"]
             ?? throw new InvalidOperationException("ADMIN_API_KEY is not configured");
         _newsApiKey = config["NEWS_API_KEY"];
+        _codexApiKey = config["CODEX_ADMIN_API_KEY"];
 
         _instanceId = config["INSTANCE_ID"] ?? "unknown";
     }
@@ -26,8 +28,11 @@ public class AdminAuthMiddleware
         {
             // News credentials never authorize other admin routes, and news has no admin-key fallback.
             var isNews = path.StartsWithSegments(ApiRoutes.AdminFuelNews);
-            if (!IsAuthorized(context.Request, isNews ? _newsApiKey : _adminApiKey,
-                isNews ? AuthErrors.InvalidNewsKey : AuthErrors.InvalidAdminKey, out var authError))
+            // This credential authorizes only externally extracted DOE data and its scoped reads.
+            var isCodex = path.StartsWithSegments(ApiRoutes.AdminDoeFuelPricesImportExtracted);
+            if (!IsAuthorized(context.Request, isNews ? _newsApiKey : isCodex ? _codexApiKey : _adminApiKey,
+                isNews ? AuthErrors.InvalidNewsKey : isCodex ? AuthErrors.InvalidCodexKey : AuthErrors.InvalidAdminKey,
+                out var authError))
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
 

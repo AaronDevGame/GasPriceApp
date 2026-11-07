@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging;
 // Offline HTTP/auth/queue checks. No external HTTP clients are registered.
 // Optional real persistence checks use only a disposable localhost database:
 // DOE_TEST_PGPORT=<port> dotnet run --project GasPriceBackend/tests/DoeExtractedImportChecks
+await CodexAuthChecks.RunAsync();
 var clock = new TestClock();
 var captured = new List<DoeImportJob>();
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -22,7 +23,7 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 builder.Logging.ClearProviders();
 builder.WebHost.UseUrls("http://127.0.0.1:0");
 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-    { ["ADMIN_API_KEY"] = "test-admin", ["NEWS_API_KEY"] = "test-news", ["OPENAI_API_KEY"] = null });
+    { ["ADMIN_API_KEY"] = "test-admin", ["NEWS_API_KEY"] = "test-news", ["CODEX_ADMIN_API_KEY"] = "test-codex", ["OPENAI_API_KEY"] = null });
 builder.Services.AddSingleton<TimeProvider>(clock);
 builder.Services.AddSingleton<DoeImportWorker>();
 var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(
@@ -41,13 +42,14 @@ const string valid = """
  "complete":true,"rows":[{"city":"Quezon City","province":"Metro Manila","region":"National Capital Region",
  "oilCompany":"PETRON","fuelGrade":"DIESEL","minPricePerLiter":60,"maxPricePerLiter":65}]}
 """;
-async Task<HttpResponseMessage> Post(string body, string? key = "test-admin", string type = "application/json", bool advance = true)
+async Task<HttpResponseMessage> Post(string body, string? key = "test-codex", string type = "application/json", bool advance = true)
 {
     if (advance) clock.Advance();
     using var message = new HttpRequestMessage(HttpMethod.Post, ApiRoutes.AdminDoeFuelPricesImportExtracted)
         { Content = new StringContent(body, Encoding.UTF8, type) };
     // Oversized bodies can be rejected before upload completes; isolate each test's connection.
     message.Headers.ConnectionClose = true;
+    message.Headers.ExpectContinue = true;
     if (key is not null) message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
     return await client.SendAsync(message);
 }
@@ -55,10 +57,24 @@ static void Check(bool condition, string message)
 {
     if (!condition) throw new Exception(message);
 }
-foreach (var key in new string?[] { null, "wrong", "test-news" })
+foreach (var path in new[] {
+    ApiRoutes.AdminDoeExtractedReports,
+    ApiRoutes.AdminDoeExtractedReports + "?sourceUrl=https://example.com/test.pdf",
+    ApiRoutes.AdminDoeExtractedReports + "?sourceUrl=https://doe.gov.ph/test.pdf&extra=1",
+    ApiRoutes.AdminDoeExtractedReports + "?sourceUrl=https://doe.gov.ph/test.pdf&sourceUrl=https://doe.gov.ph/test.pdf",
+    ApiRoutes.AdminDoeExtractedJob.Replace("{jobId}", "invalid") })
+{
+    clock.Advance();
+    using var message = new HttpRequestMessage(HttpMethod.Get, path);
+    message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-codex");
+    using var response = await client.SendAsync(message);
+    Check(response.StatusCode == HttpStatusCode.BadRequest, "Invalid read parameters must fail before database access.");
+}
+Console.WriteLine("PASS: report lookup and job polling reject invalid parameters before database access");
+foreach (var key in new string?[] { null, "wrong", "test-news", "test-admin" })
 {
     using var response = await Post(valid, key);
-    Check(response.StatusCode == HttpStatusCode.Unauthorized, "Only admin credentials may submit prices.");
+    Check(response.StatusCode == HttpStatusCode.Unauthorized, "Only the dedicated Codex credential may submit prices.");
 }
 using (var response = await Post(valid, type: "text/plain"))
     Check(response.StatusCode == HttpStatusCode.BadRequest, "Reject non-JSON bodies.");
@@ -98,7 +114,7 @@ using (var response = await Post(valid))
     var status = json.RootElement.GetProperty("data");
     Check(job.Mode == "extracted" && status.GetProperty("mode").GetString() == "extracted" &&
         status.GetProperty("status").GetString() == "queued" && response.Headers.Location?.ToString() ==
-        ApiRoutes.AdminDoeFuelPricesImportJob.Replace("{jobId}", job.Id.ToString()), "Return the existing polling route.");
+        ApiRoutes.AdminDoeExtractedJob.Replace("{jobId}", job.Id.ToString()), "Return the Codex-scoped polling route.");
     var payload = JsonSerializer.Deserialize<DoeExtractedImportRequest>(job.RequestJson!)!;
     Check(payload.Rows.Count == 1 && payload.Complete &&
         DoeImportWorker.ToStatus(job).Request?.SourceUrl == payload.SourceUrl, "Persist rows but return only request summary.");

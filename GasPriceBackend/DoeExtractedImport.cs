@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.EntityFrameworkCore;
 
 public sealed record DoeExtractedPriceRow(
     [property: JsonRequired] string City,
@@ -44,6 +45,39 @@ public static class DoeExtractedImportEndpoints
 
     public static void MapDoeExtractedImportEndpoints(this WebApplication app, string instanceId)
     {
+        app.MapGet(ApiRoutes.AdminDoeExtractedReports, async (
+            HttpRequest request, AppDbContext db, CancellationToken cancellationToken) =>
+        {
+            if (request.Query.Count != 1 || !request.Query.TryGetValue("sourceUrl", out var values) ||
+                values.Count != 1 || values[0] is not { Length: > 0 and <= 2048 } sourceUrl)
+                return ApiResults.BadRequest("Provide sourceUrl once, as a DOE PDF URL.", instanceId);
+            try { sourceUrl = FuelAdjustmentImporter.ValidatePdfUrl(sourceUrl); }
+            catch (ArgumentException)
+            { return ApiResults.BadRequest("sourceUrl must be a DOE PDF URL.", instanceId); }
+            // Return exact coverage instead of assuming listing dates equal printed PDF dates.
+            var reports = await db.DoePumpPriceReports.AsNoTracking()
+                .Where(r => r.SourceUrl == sourceUrl)
+                .OrderByDescending(r => r.WeekStart)
+                .Select(r => new { r.Id, r.WeekStart, r.WeekEnd, r.CoverageSource,
+                    r.Section, r.Subdivision, r.Status, r.PriceRows, r.ImportedAtUtc })
+                .ToArrayAsync(cancellationToken);
+            return ApiResults.Ok(new { SourceUrl = sourceUrl, Reports = reports },
+                "doe_extracted_reports", instanceId);
+        });
+
+        app.MapGet(ApiRoutes.AdminDoeExtractedJob, async (
+            string jobId, AppDbContext db, CancellationToken cancellationToken) =>
+        {
+            if (!Guid.TryParse(jobId, out var id))
+                return ApiResults.BadRequest("jobId must be a UUID.", instanceId);
+            var job = await db.DoeImportJobs.AsNoTracking()
+                .FirstOrDefaultAsync(j => j.Id == id && j.Mode == "extracted", cancellationToken);
+            if (job is null)
+                return ApiResults.NotFound("Extracted DOE import job was not found.", instanceId,
+                    ApiRoutes.AdminDoeExtractedJob);
+            return ApiResults.Ok(DoeImportWorker.ToStatus(job), "doe_import_job", instanceId);
+        });
+
         app.MapPost(ApiRoutes.AdminDoeFuelPricesImportExtracted, async (
             HttpRequest request, AppDbContext db, DoeImportWorker worker,
             TimeProvider timeProvider, CancellationToken cancellationToken) =>
