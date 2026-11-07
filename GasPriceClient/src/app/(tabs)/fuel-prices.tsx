@@ -6,7 +6,7 @@ import { useAuth } from '@/auth/auth-provider';
 import { errorMessage } from '@/auth/http';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { getDoePriceBrowse, type DoeFuelPrice, type DoePriceBrowseFeed, type DoePriceLocation } from '@/fuel/api';
+import { doeCoverageLabel, doeLocationLabel, getDoePriceBrowse, type DoeFuelPrice, type DoePriceBrowseFeed, type DoePriceLocation } from '@/fuel/api';
 import { useTheme } from '@/hooks/use-theme';
 
 const grades = [
@@ -91,7 +91,7 @@ export default function FuelPricesScreen() {
           <View style={styles.header}>
             <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>
             <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>
-            <ThemedText themeColor="textSecondary">Compare recent DOE company prices by city and fuel grade.</ThemedText>
+            <ThemedText themeColor="textSecondary">Compare recent DOE company prices by city, province and fuel grade.</ThemedText>
           </View>
           {!authenticated && !authLoading && <ThemedText accessibilityRole="alert">{authError ?? 'You are signed out. Reopen the Overview tab to reconnect.'}</ThemedText>}
           {(authLoading || loading) && <View style={styles.loading}><ActivityIndicator /><ThemedText>Loading DOE prices…</ThemedText></View>}
@@ -103,10 +103,10 @@ export default function FuelPricesScreen() {
             </ThemedView>}
           {!!feed?.locations.length && <>
             <ThemedView type="backgroundElement" style={styles.card}>
-              <ThemedText type="smallBold">City or municipality</ThemedText>
-              <Pressable accessibilityRole="button" accessibilityLabel="Choose city" onPress={() => setShowCities(value => !value)}
+              <ThemedText type="smallBold">City, municipality or province</ThemedText>
+              <Pressable accessibilityRole="button" accessibilityLabel="Choose city or province" onPress={() => setShowCities(value => !value)}
                 style={[styles.selector, { borderColor: theme.backgroundSelected, backgroundColor: theme.background }]}>
-                <ThemedText>{selected ? `${selected.city}, ${selected.province}` : 'Choose a city'}</ThemedText>
+                <ThemedText>{selected ? doeLocationLabel(selected) : 'Choose a city or province'}</ThemedText>
                 <ThemedText themeColor="textSecondary">{showCities ? '▲' : '▼'}</ThemedText>
               </Pressable>
               {showCities && <View style={styles.cityList}>
@@ -116,16 +116,16 @@ export default function FuelPricesScreen() {
                 {locations.slice(0, 30).map(location => <Pressable key={`${location.city}|${location.province}`}
                   accessibilityRole="button" onPress={() => { setShowCities(false); setSearch(''); void load(location); }}
                   style={styles.cityOption}>
-                  <ThemedText>{location.city}</ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">{location.province}</ThemedText>
+                  <ThemedText>{location.city || location.province}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">{location.city ? location.province : 'Province-level DOE range'}</ThemedText>
                 </Pressable>)}
                 {locations.length > 30 && <ThemedText type="small" themeColor="textSecondary">Showing the first 30 matches. Type to narrow the list.</ThemedText>}
-                {locations.length === 0 && <ThemedText type="small" themeColor="textSecondary">No matching city.</ThemedText>}
+                {locations.length === 0 && <ThemedText type="small" themeColor="textSecondary">No matching location.</ThemedText>}
               </View>}
             </ThemedView>
             {report && <>
               <View style={styles.reportHeading}>
-                <ThemedText style={styles.sectionTitle}>{report.city}, {report.province}</ThemedText>
+                <ThemedText style={styles.sectionTitle}>{doeCoverageLabel(report)}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">DOE report week · {report.weekStart} to {report.weekEnd}</ThemedText>
               </View>
               <View style={styles.controls}>
@@ -150,7 +150,7 @@ export default function FuelPricesScreen() {
               {!!report.prices.length && <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(report.prices[0].sourceUrl)}>
                 <ThemedText type="smallBold" style={styles.accent}>View DOE report ↗</ThemedText>
               </Pressable>}
-              <ThemedText type="small" themeColor="textSecondary">DOE reports city-level prices by oil company. Individual station locations and availability are not included.</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">DOE reports {report.scope === 'province' ? 'province' : 'city'}-level prices by oil company. Individual station locations and availability are not included.</ThemedText>
             </>}
           </>}
         </View>

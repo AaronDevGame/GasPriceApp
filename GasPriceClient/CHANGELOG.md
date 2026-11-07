@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Show province-level DOE ranges in local company comparisons and the Fuel Prices selector, with explicit coverage labels instead of presenting provincial prices as city-specific.
+
 ## [1.0.5] - 2026-11-06
 
 ### Added

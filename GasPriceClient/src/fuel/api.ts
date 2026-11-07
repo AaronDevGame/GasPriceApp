@@ -16,20 +16,32 @@ export type FeaturedFuelPriceFeed = { groups: FeaturedFuelPriceGroup[] };
 export type Coordinates = { latitude: number; longitude: number };
 export type DoeFuelPrice = {
   city: string; province: string; region: string | null; oilCompany: string;
+  scope?: 'city' | 'province';
   fuelGrade: string; minPricePerLiter: number; maxPricePerLiter: number;
   weekStart: string; weekEnd: string; sourceUrl: string; fetchedAtUtc: string;
 };
 export type DoeFuelPriceFeed = {
+  scope?: 'city' | 'province' | null;
   city: string | null; province: string | null; region: string | null;
   weekStart: string | null; weekEnd: string | null; prices: DoeFuelPrice[];
 };
-export type DoePriceLocation = { city: string; province: string };
+export type DoePriceLocation = { city: string; province: string; scope?: 'city' | 'province' };
+
+export function doeLocationLabel(location: DoePriceLocation): string {
+  return location.city ? `${location.city}, ${location.province}` : `${location.province} (province-level)`;
+}
+
+export function doeCoverageLabel(feed: DoeFuelPriceFeed): string {
+  return feed.scope === 'province' || !feed.city
+    ? `${feed.province ?? ''} province-level DOE range`
+    : `${feed.city}, ${feed.province ?? ''}`;
+}
 export type DoePriceBrowseFeed = {
   locations: DoePriceLocation[]; selected: DoeFuelPriceFeed | null;
 };
 
 export function getDoePriceBrowse(location?: DoePriceLocation) {
-  const query = location ? `?${new URLSearchParams(location)}` : '';
+  const query = location ? `?${new URLSearchParams({ city: location.city, province: location.province })}` : '';
   return authClient.request<DoePriceBrowseFeed>(`/fuel-prices/doe/browse${query}`);
 }
 

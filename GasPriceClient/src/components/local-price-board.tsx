@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { cheapestDoePrices, formatPrice, type DoeFuelPriceFeed, type FeedItem } from '@/fuel/api';
+import { cheapestDoePrices, doeCoverageLabel, formatPrice, type DoeFuelPriceFeed, type FeedItem } from '@/fuel/api';
 
 const fuels = [
   { key: 'diesel', doeGrade: 'DIESEL', label: 'Diesel' },
@@ -77,7 +77,7 @@ export function LocalPriceBoard({ item, doePrices }: { item: FeedItem; doePrices
         </ThemedText>
       </View>
       <ThemedText type="small" themeColor="textSecondary">
-        {doePrices.city || item.area.name} · Week {doePrices.weekStart} to {doePrices.weekEnd}
+        {doeCoverageLabel(doePrices)} · Week {doePrices.weekStart} to {doePrices.weekEnd}
       </ThemedText>
       <View style={styles.gradeTabs}>
         {availableFuels.map(fuel => <Pressable key={fuel.key} accessibilityRole="button"
@@ -101,7 +101,7 @@ export function LocalPriceBoard({ item, doePrices }: { item: FeedItem; doePrices
         </ThemedText>
       </Pressable>}
       <ThemedText type="small" themeColor="textSecondary" style={styles.doeNote}>
-        Ranked by the low end of each reported range. DOE lists city-level company prices, not individual stations or nearby availability.
+        Ranked by the low end of each reported range. DOE lists {doePrices.scope === 'province' ? 'province' : 'city'}-level company prices, not individual stations or nearby availability.
       </ThemedText>
       <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(cheapest[0].sourceUrl)}>
         <ThemedText type="smallBold" style={styles.sourceLink}>View DOE report ↗</ThemedText>

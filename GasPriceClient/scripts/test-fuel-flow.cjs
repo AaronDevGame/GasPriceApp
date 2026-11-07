@@ -186,6 +186,14 @@ async function settle(h) {
   }
   console.log('PASS empty, partial and full featured responses');
   const api = granted.load('fuel/api');
+  assert.equal(api.doeCoverageLabel({ scope: 'province', city: 'Boac', province: 'Marinduque' }),
+    'Marinduque province-level DOE range');
+  assert.equal(api.doeCoverageLabel({ scope: 'city', city: 'Boac', province: 'Marinduque' }), 'Boac, Marinduque');
+  assert.equal(api.doeLocationLabel({ city: '', province: 'Marinduque' }), 'Marinduque (province-level)');
+  await api.getDoePriceBrowse({ city: '', province: 'Marinduque', scope: 'province' });
+  assert.equal(granted.calls.at(-1).url, '/fuel-prices/doe/browse?city=&province=Marinduque');
+  console.log('PASS provincial coverage labels and province browse requests without extra scope parameters');
+
   const doeRow = (oilCompany, fuelGrade, minPricePerLiter, maxPricePerLiter = minPricePerLiter) =>
     ({ oilCompany, fuelGrade, minPricePerLiter, maxPricePerLiter });
   const cheapest = api.cheapestDoePrices({ prices: [
