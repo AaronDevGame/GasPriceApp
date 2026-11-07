@@ -6,9 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-11-07
+
 ### Added
 - Add admin-only `POST /admin/fuel-prices/doe/import/extracted` for externally extracted DOE company prices, with strict request validation, durable job polling, transactional upserts/cache expiration and explicit complete/partial report status. Require no OpenAI key or API calls; document the payload and future scheduled-chat workflow.
 - Add indexed source URL, section, subdivision, and listing-week metadata to DOE page caches for manual database inspection without changing cache identity or AI usage. Existing entries are labeled when reused; direct PDF imports have no listing metadata.
+
+### Changed
+- Bump project and API version to `1.13.0`.
 
 ### Fixed
 - Allow OAuth resource metadata discovery bursts up to 60 requests per minute per IP, independently of authenticated MCP traffic, so scheduled news connections can initialize without hitting a one-second cooldown. Preserve bounded rate limits and Retry-After responses.
