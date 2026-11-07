@@ -21,9 +21,9 @@ public class RateLimitMiddleware
         [ApiRoutes.AiFuelPrices] = TimeSpan.FromSeconds(5),
         [ApiRoutes.FuelPrices] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelNews] = TimeSpan.FromSeconds(1),
-        // MCP initialization and discovery arrive in bursts; use a bounded minute window below.
+        // MCP initialization and OAuth discovery arrive in bursts; use separate bounded minute windows below.
         [ApiRoutes.Mcp] = TimeSpan.Zero,
-        [ApiRoutes.McpMetadata] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.McpMetadata] = TimeSpan.Zero,
         [ApiRoutes.FuelNewsLatest] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelNewsDetail] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelNewsSubscription] = TimeSpan.FromSeconds(1),
@@ -173,10 +173,11 @@ public class RateLimitMiddleware
                     attempts.Enqueue(now);
             }
 
-            if (path == ApiRoutes.Mcp)
+            if (path == ApiRoutes.Mcp || path == ApiRoutes.McpMetadata)
             {
-                if (!_mcpAttempts.TryGetValue(ip, out var attempts))
-                    _mcpAttempts[ip] = attempts = new Queue<DateTimeOffset>();
+                // Keep discovery independent of authenticated MCP traffic, per IP and route.
+                if (!_mcpAttempts.TryGetValue(key, out var attempts))
+                    _mcpAttempts[key] = attempts = new Queue<DateTimeOffset>();
                 while (attempts.TryPeek(out var oldest) && oldest <= now.AddMinutes(-1)) attempts.Dequeue();
                 if (attempts.Count >= 60)
                 {

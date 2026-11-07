@@ -46,7 +46,8 @@ internal static class McpChecks
             });
             builder.Services.AddDbContext<AppDbContext>(o => o.UseNpgsql(
                 "Host=127.0.0.1;Port=1;Database=unused;Username=unused;Password=unused;Timeout=1"));
-            builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+            var clock = new TestClock(DateTime.UtcNow);
+            builder.Services.AddSingleton<TimeProvider>(clock);
             builder.Services.AddScoped<FuelNewsService>();
             builder.Services.AddFuelNewsMcp(builder.Configuration);
             // In-memory issuer configuration: no live OAuth account, production key or database.
@@ -81,6 +82,22 @@ internal static class McpChecks
                     Check(metadataResponse.IsSuccessStatusCode && metadata.Contains(Resource) && metadata.Contains(Issuer), "OAuth resource discovery failed.");
                     Check(!metadata.Contains("news-fixture") && !metadata.Contains("admin-fixture"), "Discovery exposed a key.");
                 }
+                // Discovery may be requested concurrently by multiple MCP startup clients.
+                await Task.WhenAll(Enumerable.Range(1, 59).Select(async i =>
+                {
+                    using var response = await http.GetAsync(i % 2 == 0
+                        ? ApiRoutes.McpMetadata.ToUpperInvariant() + "/" : ApiRoutes.McpMetadata);
+                    Check(response.StatusCode == HttpStatusCode.OK, "OAuth discovery startup burst was blocked.");
+                }));
+                await ExpectDiscoveryLimit(60);
+                using (var independent = await Send("{}", null))
+                    Check(independent.StatusCode == HttpStatusCode.Unauthorized,
+                        "A full discovery bucket blocked the independent MCP route or bypassed authentication.");
+                clock.Now = clock.Now.AddSeconds(59);
+                await ExpectDiscoveryLimit(1);
+                clock.Now = clock.Now.AddSeconds(1);
+                using (var recovered = await http.GetAsync(ApiRoutes.McpMetadata))
+                    Check(recovered.StatusCode == HttpStatusCode.OK, "OAuth discovery did not recover after Retry-After.");
                 foreach (var invalid in new string?[] { null, "news-fixture", "admin-fixture", "guest-fixture",
                     Token("owner", FuelNewsMcp.ReadScope, audience: "wrong-resource"),
                     Token("owner", FuelNewsMcp.ReadScope, issuer: "https://wrong-issuer.test/"),
@@ -163,6 +180,14 @@ internal static class McpChecks
                     if (token is not null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
                     if (origin is not null) request.Headers.Add("Origin", origin);
                     return await http.SendAsync(request);
+                }
+                async Task ExpectDiscoveryLimit(int seconds)
+                {
+                    using var response = await http.GetAsync(ApiRoutes.McpMetadata);
+                    Check(response.StatusCode == HttpStatusCode.TooManyRequests, "OAuth discovery rate limit was bypassed.");
+                    Check(response.Headers.RetryAfter?.Delta == TimeSpan.FromSeconds(seconds), "OAuth discovery Retry-After is incorrect.");
+                    var error = await response.Content.ReadAsStringAsync();
+                    Check(error.Contains("too_many_requests"), "OAuth discovery limit lost the shared API error envelope.");
                 }
                 async Task<JsonElement> Rpc(string method, object parameters, string? token = null)
                 {
