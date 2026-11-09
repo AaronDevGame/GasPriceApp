@@ -6,7 +6,7 @@ export class ApiError extends Error {
   }
 }
 
-function apiBase() {
+export function apiBase() {
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' &&
         ['localhost', '127.0.0.1'].includes(window.location.hostname) && window.location.port === '8081') {

@@ -25,6 +25,7 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-gesture-handler": "~2.32.0",
+    "react-native-maps": "1.27.2",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
@@ -32,6 +33,7 @@
     "react-native-worklets": "0.10.1"
   },
   "devDependencies": {
+    "@types/google.maps": "^3.66.10",
     "@types/react": "~19.2.2",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.2",
@@ -48,7 +50,8 @@
     "typecheck": "tsc --noEmit",
     "test:auth": "node scripts/test-auth.cjs",
     "test:fuel": "node scripts/test-fuel-flow.cjs",
-    "test:advice": "node scripts/test-fuel-advice.cjs"
+    "test:advice": "node scripts/test-fuel-advice.cjs",
+    "test:map": "node scripts/test-map.cjs"
   },
   "private": true
 }

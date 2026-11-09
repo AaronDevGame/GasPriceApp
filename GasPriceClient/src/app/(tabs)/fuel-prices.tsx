@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { doeCoverageLabel, doeLocationLabel, getDoePriceBrowse, type DoeFuelPrice, type DoePriceBrowseFeed, type DoePriceLocation } from '@/fuel/api';
 import { useTheme } from '@/hooks/use-theme';
+import FuelMap from '@/map/fuel-map';
 
 const grades = [
   { value: 'DIESEL', label: 'Diesel' },
@@ -22,6 +23,26 @@ function priceLabel(row: DoeFuelPrice) {
 }
 
 export default function FuelPricesScreen() {
+  const [mode, setMode] = useState<'map' | 'list'>('map');
+  return mode === 'list' ? <FuelPriceList switchView={<ViewSwitch mode={mode} setMode={setMode} />} /> :
+    <ThemedView style={styles.page}><SafeAreaView style={styles.page}>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.content}>
+          <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>
+          <ViewSwitch mode={mode} setMode={setMode} />
+          <FuelMap />
+        </View>
+      </ScrollView>
+    </SafeAreaView></ThemedView>;
+}
+function ViewSwitch({ mode, setMode }: { mode: 'map' | 'list'; setMode(mode: 'map' | 'list'): void }) {
+  return <View style={styles.controls}>{(['map', 'list'] as const).map(value =>
+    <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: mode === value }}
+      onPress={() => setMode(value)} style={[styles.chip, { borderColor: mode === value ? '#76B4FF' : '#495569' }]}>
+      <ThemedText type="smallBold">{value === 'map' ? 'Map' : 'Company list'}</ThemedText>
+    </Pressable>)}</View>;
+}
+function FuelPriceList({ switchView }: { switchView: React.ReactNode }) {
   const { session, loading: authLoading, error: authError } = useAuth();
   const theme = useTheme();
   const [feed, setFeed] = useState<DoePriceBrowseFeed | null>(null);
@@ -93,6 +114,7 @@ export default function FuelPricesScreen() {
             <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>
             <ThemedText themeColor="textSecondary">Compare recent DOE company prices by city, province and fuel grade.</ThemedText>
           </View>
+          {switchView}
           {!authenticated && !authLoading && <ThemedText accessibilityRole="alert">{authError ?? 'You are signed out. Reopen the Overview tab to reconnect.'}</ThemedText>}
           {(authLoading || loading) && <View style={styles.loading}><ActivityIndicator /><ThemedText>Loading DOE prices…</ThemedText></View>}
           {error && <ThemedText accessibilityRole="alert">{error} {Platform.OS === 'web' ? 'Reload to retry.' : 'Pull down to retry.'}</ThemedText>}

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Add a Philippines-only Fuel Prices map with Google Maps adapters for Android, iOS and web, a City of Manila default, constrained camera and overview zoom, selectable city polygons and collision-aware RON 91 gasoline/diesel range labels. Batch visible-city prices after 750 ms, reuse session boundary/price caches across panning and selection, handle expiry and stale requests, preserve attribution and retain the company list behind a Map/List switch. Configure platform-restricted keys through ignored environment files.
 - Add a theme-aware “Should I gas up?” Overview card backed by `/fuel-advice`, with fuel/company selection, green/amber/gray recommendations, API explanations, confirmed 40-liter impact examples, Philippine effective times and source links. Refresh at validity boundaries, on foreground, and with dashboard refresh; keep forecast and default-time labels explicit.
 - Show province-level DOE ranges in local company comparisons and the Fuel Prices selector, with explicit coverage labels instead of presenting provincial prices as city-specific.
 

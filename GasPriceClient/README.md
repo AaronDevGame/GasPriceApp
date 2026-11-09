@@ -137,3 +137,7 @@ are preserved and reported rather than silently replacing the guest identity.
 Verification: `npm run lint`, `npm run typecheck`, `npm run test:auth`, `npm run test:fuel`, and
 `npx expo export --platform web`.
 Backend integration instructions are in `GasPriceBackend/tests/guest_auth_smoke.py`.
+
+## Fuel price map
+
+See [map setup, backend dependencies, caching and platform verification](docs/fuel-map.md). Map keys belong in ignored local environment files or build-service settings; no live keys are included.
