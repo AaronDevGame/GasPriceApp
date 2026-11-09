@@ -49,6 +49,9 @@ def run_checks(base):
         raise AssertionError("Rate limit did not clear")
 
     assert call("/fuel-news/latest") is None
+    assert call("/fuel-advice?fuelType=gasoline")["status"] == "unknown"
+    call("/fuel-advice", expected=400)
+    call("/fuel-advice?fuelType=gasoline&fuelType=diesel", expected=400)
     assert call("/fuel-news")["items"] == []
     call("/fuel-news?unknown=1", expected=400)
     call("/fuel-news?limit=0", expected=400)
@@ -91,6 +94,9 @@ def run_checks(base):
     first = call("/admin/fuel-news/import", "POST", payload, admin=True)
     assert first["status"] == "imported"
     news_id = first["item"]["id"]
+    advice = call("/fuel-advice?fuelType=gasoline")
+    assert advice["status"] == "unknown" and advice["reason"] == "forecast_only"
+    assert advice["forecast"]["newsId"] == news_id
     retry = call("/admin/fuel-news/import", "POST", payload, admin=True)
     assert retry["status"] == "already_imported" and retry["item"]["updatedAtUtc"] == first["item"]["updatedAtUtc"]
     revised = copy.deepcopy(payload)
@@ -105,6 +111,10 @@ def run_checks(base):
     confirmed["article"].update(importKey="http-fixture-confirmed", status="confirmed", title="Isolated fixture confirmed adjustment")
     confirmed["article"]["adjustments"][0].update(minChangePerLiter=2, status="confirmed")
     saved = call("/admin/fuel-news/import", "POST", confirmed, admin=True)
+    advice = call("/fuel-advice?fuelType=gasoline")
+    assert advice["status"] == "gas_now" and advice["reason"] == "increase_upcoming"
+    assert advice["evidence"][0]["newsId"] == saved["item"]["id"] and advice["forecast"] is None
+    assert call("/fuel-advice?fuelType=diesel")["status"] == "unknown"
     assert call("/fuel-news/latest")["id"] == saved["item"]["id"]
     assert call(f"/fuel-news/{news_id}")["supersededById"] == saved["item"]["id"]
     future_forecast = copy.deepcopy(payload)
@@ -114,6 +124,16 @@ def run_checks(base):
     assert len(page["items"]) == 1 and page["nextCursor"]
     next_page = call("/fuel-news?limit=1&cursor=" + urllib.parse.quote(page["nextCursor"], safe=""))
     assert next_page["items"][0]["id"] != page["items"][0]["id"] and next_page["nextCursor"] is None
+    past = copy.deepcopy(confirmed)
+    past_at = now - dt.timedelta(hours=1)
+    past["article"].update(importKey="http-fixture-diesel-rollback", topicKey="http-fixture-diesel-topic",
+        effectiveDatePhilippines=(past_at + dt.timedelta(hours=8)).date().isoformat(),
+        effectiveAtUtc=past_at.isoformat().replace("+00:00", "Z"))
+    past["article"]["adjustments"] = [{"fuel": "diesel", "oilCompany": "Fixture Company",
+        "minChangePerLiter": -2, "maxChangePerLiter": -2, "status": "confirmed"}]
+    call("/admin/fuel-news/import", "POST", past, admin=True)
+    assert call("/fuel-advice?fuelType=diesel")["status"] == "unknown"
+    assert call("/fuel-advice?fuelType=diesel&oilCompany=fixture%20company")["status"] == "gas_now"
     call("/fuel-news/subscription", expected=401)
     app_id = str(uuid.uuid4())
     login = call("/auth/guest/login", "POST", {}, headers={"X-App-Instance-Id": app_id})

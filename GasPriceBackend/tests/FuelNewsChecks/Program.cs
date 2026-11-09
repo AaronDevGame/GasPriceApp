@@ -12,6 +12,9 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
+FuelAdviceChecks.Run();
+await FuelAdviceChecks.RunHttpValidationAsync();
+if (args.Contains("--advice-only")) return;
 if (args.Contains("--mcp-only")) { await McpChecks.RunAsync(); return; }
 await NewsAuthChecks.RunAsync();
 if (args.Contains("--auth-only")) return;

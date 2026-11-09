@@ -13,6 +13,7 @@ builder.Services.AddBrowserAuthentication();
 builder.Services.AddFuelNewsMcp(builder.Configuration);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddScoped<FuelNewsService>();
+builder.Services.AddScoped<FuelAdviceService>();
 builder.Services.AddHostedService<FuelNewsNotificationWorker>();
 builder.Services.AddHttpClient("fuel-news-push", client =>
 {
@@ -181,6 +182,7 @@ app.MapFuelPriceReadEndpoints(auth, InstanceId);
 app.MapFeaturedFuelPriceEndpoints(auth, InstanceId);
 app.MapFuelAdjustmentEndpoints(auth, InstanceId);
 app.MapFuelNewsEndpoints(auth, InstanceId);
+app.MapFuelAdviceEndpoints(InstanceId);
 app.MapFuelNewsMcp(InstanceId);
 app.MapDoeFuelPriceEndpoints(auth, InstanceId);
 app.MapDoePriceBrowseEndpoints(auth, InstanceId);

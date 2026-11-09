@@ -21,6 +21,7 @@ public class RateLimitMiddleware
         [ApiRoutes.AiFuelPrices] = TimeSpan.FromSeconds(5),
         [ApiRoutes.FuelPrices] = TimeSpan.FromSeconds(1),
         [ApiRoutes.FuelNews] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.FuelAdvice] = TimeSpan.FromSeconds(1),
         // MCP initialization and OAuth discovery arrive in bursts; use separate bounded minute windows below.
         [ApiRoutes.Mcp] = TimeSpan.Zero,
         [ApiRoutes.McpMetadata] = TimeSpan.Zero,
