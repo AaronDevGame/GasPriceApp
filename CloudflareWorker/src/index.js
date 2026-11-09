@@ -20,6 +20,7 @@ const ALLOWED_ROUTES = new Map([
   ["/fuel-prices/history", new Set(["GET"])],
   ["/fuel-prices/adjustments", new Set(["GET"])],
   ["/fuel-prices/doe", new Set(["GET"])],
+  ["/fuel-prices/doe/browse", new Set(["GET"])],
 ]);
 
 const UNTRUSTED_FORWARDING_HEADERS = [

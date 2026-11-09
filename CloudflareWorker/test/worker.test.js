@@ -189,3 +189,29 @@ test("forwards news and subscription methods while rejecting arbitrary nested pa
     assert.equal(forwarded.length, count);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test("forwards exact DOE browse GETs and rejects other methods and nested paths", async () => {
+  const originalFetch = globalThis.fetch;
+  const forwarded = [];
+  globalThis.fetch = async (url, init) => {
+    forwarded.push({ url: url.toString(), method: init.method });
+    return Response.json({ data: { locations: [], selected: null } });
+  };
+  const browse = (path, method = "GET") => worker.fetch(new Request(
+    "https://proxy.example" + path,
+    { method, headers: { "CF-Connecting-IP": "203.0.113.10", Accept: "application/json" } },
+  ), env);
+  try {
+    for (const query of ["", "?city=Baler&province=Aurora", "?city=&province=Marinduque"]) {
+      const path = "/fuel-prices/doe/browse" + query;
+      const response = await browse(path);
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { data: { locations: [], selected: null } });
+      assert.deepEqual(forwarded.at(-1), { url: env.ORIGIN_URL + path, method: "GET" });
+    }
+    const count = forwarded.length;
+    assert.equal((await browse("/fuel-prices/doe/browse", "POST")).status, 405);
+    assert.equal((await browse("/fuel-prices/doe/browse/nested")).status, 404);
+    assert.equal(forwarded.length, count);
+  } finally { globalThis.fetch = originalFetch; }
+});

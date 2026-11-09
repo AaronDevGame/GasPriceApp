@@ -10,6 +10,7 @@ const ROUTES = new Map([
   ["/fuel-prices/history", ["GET"]],
   ["/fuel-prices/adjustments", ["GET"]],
   ["/fuel-prices/doe", ["GET"]],
+  ["/fuel-prices/doe/browse", ["GET"]],
   ["/fuel-news", ["GET"]],
   ["/fuel-news/latest", ["GET"]],
   ["/fuel-news/subscription", ["GET", "PUT", "DELETE"]],
