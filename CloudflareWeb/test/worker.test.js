@@ -185,3 +185,44 @@ test("forwards exact DOE browse GETs and rejects other methods and nested paths"
     assert.equal(forwarded.length, count);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+
+test("forwards map batch reads and preserves only public geography caching and 304", async () => {
+  const originalFetch = globalThis.fetch;
+  let upstreamStatus = 200;
+  globalThis.fetch = async (url, init) => {
+    assert.equal(new URL(url).origin, "https://gaspricebackend.onrender.com");
+    return new Response(upstreamStatus === 304 ? null : JSON.stringify({ data: {} }), {
+      status: upstreamStatus,
+      headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=31536000, immutable", ETag: '"fixture"', Vary: "Accept-Encoding" },
+    });
+  };
+  try {
+    const base = "https://map.example";
+    const make = (path, method = "GET") => new Request(base + path, { method,
+      headers: { "CF-Connecting-IP": "203.0.113.10", Origin: base, "Sec-Fetch-Site": "same-origin" },
+      ... (method === "POST" ? { body: "{}" } : {}),
+    });
+    for (const path of ["/fuel-prices/map/geography/index", "/fuel-prices/map/geography/ph-2026q3-v1/1303900000-01"]) {
+      for (const status of [200, 304]) {
+        upstreamStatus = status;
+        const response = await worker.fetch(make(path), env);
+        assert.equal(response.status, status);
+        assert.equal(response.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+        assert.equal(response.headers.get("ETag"), '"fixture"');
+      }
+    }
+    upstreamStatus = 200;
+    const prices = await worker.fetch(make("/fuel-prices/map/prices", "POST"), env);
+    assert.equal(prices.status, 200);
+    assert.equal(prices.headers.get("Cache-Control"), "no-store, private, max-age=0");
+    for (const path of ["/fuel-prices/map/geography/old/1303900000-01", "/fuel-prices/map/geography/ph-2026q3-v1/arbitrary", "/fuel-prices/map/unknown"]) {
+      assert.equal((await worker.fetch(make(path), env)).status, 404);
+    }
+    assert.equal((await worker.fetch(make("/fuel-prices/map/prices"), env)).status, 405);
+    upstreamStatus = 404;
+    const missing = await worker.fetch(make("/fuel-prices/map/geography/ph-2026q3-v1/9999999999-01"), env);
+    assert.equal(missing.status, 404);
+    assert.equal(missing.headers.get("Cache-Control"), "no-store, private, max-age=0");
+  } finally { globalThis.fetch = originalFetch; }
+});

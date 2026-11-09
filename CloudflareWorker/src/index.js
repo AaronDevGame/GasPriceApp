@@ -22,6 +22,8 @@ const ALLOWED_ROUTES = new Map([
   ["/fuel-prices/adjustments", new Set(["GET"])],
   ["/fuel-prices/doe", new Set(["GET"])],
   ["/fuel-prices/doe/browse", new Set(["GET"])],
+  ["/fuel-prices/map/prices", new Set(["POST"])],
+  ["/fuel-prices/map/geography/index", new Set(["GET"])],
 ]);
 
 const UNTRUSTED_FORWARDING_HEADERS = [
@@ -65,7 +67,12 @@ function isAllowed(pathname, method) {
   return allowedMethods(pathname)?.has(method) ?? false;
 }
 
+function isGeography(pathname) {
+  return /^\/fuel-prices\/map\/geography\/(?:index|ph-2026q3-v1\/[0-9]{10}-[0-9]{2})$/.test(pathname);
+}
+
 function allowedMethods(pathname) {
+  if (isGeography(pathname)) return new Set(["GET"]);
   if (/^\/fuel-news\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pathname)) {
     return new Set(["GET"]);
   }
@@ -134,10 +141,12 @@ export default {
     }
 
     const responseHeaders = new Headers(originResponse.headers);
-    responseHeaders.set("Cache-Control", "no-store, private, max-age=0");
-    responseHeaders.set("Pragma", "no-cache");
-    responseHeaders.set("Expires", "0");
-    responseHeaders.delete("Age");
+    if (!(isGeography(incomingUrl.pathname) && (originResponse.status === 200 || originResponse.status === 304))) {
+      responseHeaders.set("Cache-Control", "no-store, private, max-age=0");
+      responseHeaders.set("Pragma", "no-cache");
+      responseHeaders.set("Expires", "0");
+      responseHeaders.delete("Age");
+    }
 
     return new Response(originResponse.body, {
       status: originResponse.status,

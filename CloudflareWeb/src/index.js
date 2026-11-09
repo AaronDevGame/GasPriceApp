@@ -11,6 +11,8 @@ const ROUTES = new Map([
   ["/fuel-prices/adjustments", ["GET"]],
   ["/fuel-prices/doe", ["GET"]],
   ["/fuel-prices/doe/browse", ["GET"]],
+  ["/fuel-prices/map/prices", ["POST"]],
+  ["/fuel-prices/map/geography/index", ["GET"]],
   ["/fuel-news", ["GET"]],
   ["/fuel-advice", ["GET"]],
   ["/fuel-news/latest", ["GET"]],
@@ -53,7 +55,8 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
-    const methods = ROUTES.get(path) ??
+    const geography = /^\/fuel-prices\/map\/geography\/(?:index|ph-2026q3-v1\/[0-9]{10}-[0-9]{2})$/.test(path);
+    const methods = ROUTES.get(path) ?? (geography ? ["GET"] : undefined) ??
       (/^\/fuel-news\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(path)
         ? ["GET"] : undefined);
     if (!methods) {
@@ -111,14 +114,16 @@ export default {
       });
     } catch { return error(502, "origin_unavailable"); }
     // APIs return JSON. Never expose redirects to another host or forward credentials there.
-    if (upstream.status >= 300 && upstream.status < 400) return error(502, "unexpected_origin_redirect");
+    if (upstream.status >= 300 && upstream.status < 400 && !(geography && upstream.status === 304)) return error(502, "unexpected_origin_redirect");
 
     // Copy Headers directly to retain every Set-Cookie separately (including logout).
     const responseHeaders = new Headers(upstream.headers);
-    responseHeaders.set("Cache-Control", "no-store, private, max-age=0");
-    responseHeaders.set("Pragma", "no-cache");
-    responseHeaders.set("Expires", "0");
-    responseHeaders.delete("Age");
+    if (!(geography && (upstream.status === 200 || upstream.status === 304))) {
+      responseHeaders.set("Cache-Control", "no-store, private, max-age=0");
+      responseHeaders.set("Pragma", "no-cache");
+      responseHeaders.set("Expires", "0");
+      responseHeaders.delete("Age");
+    }
     for (const name of [...responseHeaders.keys()]) {
       if (name.startsWith("access-control-")) responseHeaders.delete(name);
     }
