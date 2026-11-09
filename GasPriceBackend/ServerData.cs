@@ -135,6 +135,7 @@ public static class ApiRoutes
     public const string AdminRoutes = "/admin/routes";
     public const string AdminChangelog = "/admin/changelog";
     public const string AdminFuelPriceAdjustmentsImport = "/admin/fuel-prices/adjustments/import";
+    public const string AdminFuelPriceAdjustmentsImportExtracted = AdminFuelPriceAdjustmentsImport + "/extracted";
     public const string AdminFuelPriceAdjustmentsImportJob = "/admin/fuel-prices/adjustments/import/jobs/{jobId}";
     public const string AdminDoeFuelPricesBenchmark = "/admin/fuel-prices/doe/benchmark";
     public const string AdminDoeFuelPricesBenchmarkJob = "/admin/fuel-prices/doe/benchmark/jobs/{jobId}";
@@ -193,6 +194,7 @@ public static class RouteRegistry
         new(ApiRoutes.AdminFuelNewsRevisions, "GET"),
         new(ApiRoutes.AdminChangelog, "GET"),
         new(ApiRoutes.AdminFuelPriceAdjustmentsImport, "POST"),
+        new(ApiRoutes.AdminFuelPriceAdjustmentsImportExtracted, "POST"),
         new(ApiRoutes.AdminFuelPriceAdjustmentsImportJob, "GET"),
         new(ApiRoutes.AdminDoeFuelPricesBenchmark, "POST"),
         new(ApiRoutes.AdminDoeFuelPricesBenchmarkJob, "GET"),

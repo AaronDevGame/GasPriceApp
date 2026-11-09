@@ -17,6 +17,7 @@ using Microsoft.Extensions.Logging;
 // DOE_TEST_PGPORT=<port> dotnet run --project GasPriceBackend/tests/DoeExtractedImportChecks
 ProvincePriceChecks.Run();
 await CodexAuthChecks.RunAsync();
+await FuelAdjustmentChecks.RunAsync();
 var clock = new TestClock();
 var captured = new List<DoeImportJob>();
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions

@@ -29,7 +29,8 @@ public class AdminAuthMiddleware
             // News credentials never authorize other admin routes, and news has no admin-key fallback.
             var isNews = path.StartsWithSegments(ApiRoutes.AdminFuelNews);
             // This credential authorizes only externally extracted DOE data and its scoped reads.
-            var isCodex = path.StartsWithSegments(ApiRoutes.AdminDoeFuelPricesImportExtracted);
+            var isCodex = path.StartsWithSegments(ApiRoutes.AdminDoeFuelPricesImportExtracted) ||
+                path.StartsWithSegments(ApiRoutes.AdminFuelPriceAdjustmentsImportExtracted);
             if (!IsAuthorized(context.Request, isNews ? _newsApiKey : isCodex ? _codexApiKey : _adminApiKey,
                 isNews ? AuthErrors.InvalidNewsKey : isCodex ? AuthErrors.InvalidCodexKey : AuthErrors.InvalidAdminKey,
                 out var authError))

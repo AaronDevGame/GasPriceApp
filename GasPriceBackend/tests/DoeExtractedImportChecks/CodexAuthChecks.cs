@@ -23,10 +23,12 @@ internal static class CodexAuthChecks
             await using var app = builder.Build();
             app.UseMiddleware<AdminAuthMiddleware>();
             app.MapPost(ApiRoutes.AdminDoeFuelPricesImportExtracted, () => "ok");
+            app.MapPost(ApiRoutes.AdminFuelPriceAdjustmentsImportExtracted, () => "ok");
             app.MapGet(ApiRoutes.AdminDoeExtractedReports, () => "ok");
             app.MapGet(ApiRoutes.AdminDoeExtractedJob, (string jobId) => "ok");
             app.MapGet(ApiRoutes.AdminRoutes, () => "ok");
             app.MapGet(ApiRoutes.AdminDoeFuelPricesImportJob, (string jobId) => "ok");
+            app.MapPost(ApiRoutes.AdminFuelPriceAdjustmentsImport, () => "ok");
             app.MapGet(ApiRoutes.AdminDoeFuelPricesImportExtracted + "-other", () => "ok");
             app.MapPost(ApiRoutes.AdminFuelNewsImport, () => "ok");
             await app.StartAsync();
@@ -34,6 +36,8 @@ internal static class CodexAuthChecks
                 .Features.Get<IServerAddressesFeature>()!.Addresses.Single()) };
             foreach (var (method, path) in new[] {
                 (HttpMethod.Post, ApiRoutes.AdminDoeFuelPricesImportExtracted),
+                (HttpMethod.Post, ApiRoutes.AdminFuelPriceAdjustmentsImportExtracted),
+                (HttpMethod.Post, ApiRoutes.AdminFuelPriceAdjustmentsImportExtracted.ToUpperInvariant() + "/"),
                 (HttpMethod.Get, ApiRoutes.AdminDoeExtractedReports),
                 (HttpMethod.Get, ApiRoutes.AdminDoeExtractedJob.Replace("{jobId}", Guid.Empty.ToString())),
                 (HttpMethod.Get, ApiRoutes.AdminDoeExtractedReports.ToUpperInvariant() + "/") })
@@ -51,6 +55,8 @@ internal static class CodexAuthChecks
                 await Check(HttpMethod.Get, path, "admin-fixture", true);
             }
             await Check(HttpMethod.Post, ApiRoutes.AdminFuelNewsImport, "codex-fixture", false);
+            await Check(HttpMethod.Post, ApiRoutes.AdminFuelPriceAdjustmentsImport, "codex-fixture", false);
+            await Check(HttpMethod.Post, ApiRoutes.AdminFuelPriceAdjustmentsImport, "admin-fixture", true);
             await app.StopAsync();
 
             async Task Check(HttpMethod method, string path, string? key, bool allowed, string scheme = "Bearer")

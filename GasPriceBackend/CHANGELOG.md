@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Add Codex-scoped `POST /admin/fuel-prices/adjustments/import/extracted` to validate externally extracted DOE notice JSON and synchronously upsert company adjustments without PDF downloads or OpenAI calls.
 - Support province-level DOE company ranges with a required province and optional city, repeat-safe storage, newest-coverage city/province lookup, scoped browse/results and province-wide cache expiration. Preserve empty/no-price sections without completeness gaps.
 - Add Codex-scoped DOE report lookup and extracted-job polling, a separate scheduled-task environment template, a credential-safe HTTP helper and a daily import runbook.
 

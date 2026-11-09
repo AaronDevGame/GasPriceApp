@@ -42,6 +42,8 @@ public static class FuelAdjustmentEndpoints
         AuthService authService,
         string instanceId)
     {
+        app.MapFuelAdjustmentExtractedImportEndpoints(instanceId);
+
         app.MapGet(ApiRoutes.FuelPriceAdjustments, async (
             HttpRequest request,
             AppDbContext db,
@@ -172,6 +174,13 @@ public static class FuelAdjustmentEndpoints
         string? sourceUrl, DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
     {
         var (url, extraction) = await importer.ImportAsync(sourceUrl, cancellationToken);
+        return await ImportExtractionAsync(db, timeProvider, url, extraction, from, to, cancellationToken);
+    }
+
+    internal static async Task<FuelAdjustmentImportResult?> ImportExtractionAsync(
+        AppDbContext db, TimeProvider timeProvider, string url, FuelAdjustmentExtraction extraction,
+        DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
+    {
         if (!TryValidate(extraction, out var weekStart, out var weekEnd,
             out var rows, out var error))
             throw new FuelAdjustmentExtractionException(error);
@@ -269,7 +278,7 @@ public static class FuelAdjustmentEndpoints
             !DateOnly.TryParseExact(extraction.WeekEnd, "yyyy-MM-dd",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out weekEnd) ||
             weekStart.DayOfWeek != DayOfWeek.Tuesday ||
-            weekEnd != weekStart.AddDays(6))
+            weekEnd.DayNumber - weekStart.DayNumber != 6)
             return false;
 
         if (extraction.Rows is null or { Count: < 1 or > 100 })
@@ -281,6 +290,8 @@ public static class FuelAdjustmentEndpoints
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in extraction.Rows)
         {
+            if (row is null)
+                return false;
             var company = row.OilCompany?.Trim();
             if (string.IsNullOrWhiteSpace(company) || company.Length > 100 ||
                 !DateOnly.TryParseExact(row.EffectiveDatePhilippines, "yyyy-MM-dd",
