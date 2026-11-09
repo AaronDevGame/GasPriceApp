@@ -85,11 +85,30 @@ internal static class FuelAdviceChecks
         var dateOnly = rollback with { EffectiveAtUtc = null };
         var start = FuelAdviceCalculator.StartUtc(date);
         Check(Advice(start.AddTicks(-1), dateOnly).Status == FuelAdviceStatus.Wait, "Date-only before PH midnight");
-        Check(Advice(start.AddTicks(-1), dateOnly).ValidUntilUtc == start, "Date-only pre-day advice ends at midnight");
-        Check(Advice(start, dateOnly).Reason == "effective_time_unknown", "Date-only at PH midnight");
-        Check(Advice(start.AddDays(1).AddTicks(-1), dateOnly).Status == FuelAdviceStatus.Unknown, "Date-only during PH date");
+        Check(Advice(start.AddTicks(-1), dateOnly).ValidUntilUtc == effective, "Date-only advice ends at default 6 AM PH");
+        Check(Advice(start, dateOnly).Status == FuelAdviceStatus.Wait, "Date-only at PH midnight is still upcoming");
+        Check(Advice(effective.AddTicks(-1), dateOnly).Status == FuelAdviceStatus.Wait, "Default rollback before 6 AM PH");
+        var defaultApplied = Advice(effective, dateOnly);
+        Check(defaultApplied.Status == FuelAdviceStatus.GasNow && defaultApplied.Evidence[0].EffectiveAtUtc == effective &&
+            defaultApplied.Evidence[0].IsEffectiveTimeDefaulted, "Default rollback at 6 AM PH with provenance");
+        Check(defaultApplied.ValidUntilUtc == effective.AddDays(7), "Default time also controls expiration");
         Check(Advice(start.AddDays(1), dateOnly).Status == FuelAdviceStatus.GasNow, "Date-only after PH date");
-        Check(Advice(effective, rollback, dateOnly).Status == FuelAdviceStatus.Unknown, "Missing timing is not guessed");
+        Check(Advice(effective, rollback, dateOnly).Status == FuelAdviceStatus.GasNow, "Matching explicit and fallback times agree");
+        var evening = rollback with { EffectiveAtUtc = start.AddHours(20) };
+        var explicitAdvice = Advice(effective, evening, dateOnly);
+        Check(explicitAdvice.Status == FuelAdviceStatus.Wait && explicitAdvice.Evidence.All(e =>
+            e.EffectiveAtUtc == evening.EffectiveAtUtc && !e.IsEffectiveTimeDefaulted), "Explicit 8 PM overrides default 6 AM");
+        Check(Advice(start.AddHours(20), evening, dateOnly).Status == FuelAdviceStatus.GasNow, "Explicit 8 PM exact boundary");
+        var dateOnlyIncrease = increase with { EffectiveAtUtc = null };
+        Check(Advice(effective.AddTicks(-1), dateOnlyIncrease).Status == FuelAdviceStatus.GasNow &&
+            Advice(effective, dateOnlyIncrease).Status == FuelAdviceStatus.Neutral, "Default increase boundary");
+        var wednesday = dateOnly with { EffectiveDatePhilippines = date.AddDays(1) };
+        Check(Advice(effective.AddDays(1), wednesday).Status == FuelAdviceStatus.GasNow &&
+            Advice(effective.AddDays(1), wednesday).Evidence[0].EffectiveDatePhilippines == date.AddDays(1),
+            "Preserve non-Tuesday announcement date");
+        Check(!applied.Evidence[0].IsEffectiveTimeDefaulted, "Explicit time is not marked defaulted");
+        Check(Advice(effective, forecast with { EffectiveAtUtc = null }).Status == FuelAdviceStatus.Unknown,
+            "Default time does not confirm a forecast");
         var next = increase with { EffectiveDatePhilippines = date.AddDays(2), EffectiveAtUtc = effective.AddDays(2) };
         Check(Advice(effective, rollback, next).Reason == "increase_upcoming", "Upcoming event replaces prior event");
         var later = next with { EffectiveDatePhilippines = date.AddDays(3), EffectiveAtUtc = effective.AddDays(3),

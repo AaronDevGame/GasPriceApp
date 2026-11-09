@@ -37,14 +37,14 @@ shown alongside advice backed by a separate confirmed adjustment.
 Evaluate at the server's current UTC time using `TimeProvider`. Philippine dates
 use UTC+08:00. Consider adjustments from the previous seven Philippine dates
 through the next seven dates, and reject future events beyond seven days from now.
-An adjustment expires seven days after its effective timestamp, or seven days
-after the start of its Philippine date when no exact time is supplied. Earlier
-news expiry still wins. Forecast context also expires at its effective timestamp
+Confirmed adjustments expire seven days after their resolved effective timestamp,
+including the default time described below. Earlier news expiry still wins.
+Forecast context expires at its effective timestamp
 or the end of its Philippine date.
 
 The nearest upcoming confirmed date controls the advice. If none is upcoming,
-use the latest applied confirmed date. A date-only announcement stays pending
-through its Philippine date. New confirmed events replace the previous event's
+use the latest applied confirmed date. A date-only confirmed announcement stays
+pending until 06:00 Philippine time on its stated date. New confirmed events replace the previous event's
 advice even when the previous event was a rollback.
 An expired newer event blocks reviving an older recommendation. Recent expired
 news is read only to detect this condition; it cannot itself produce advice.
@@ -55,10 +55,19 @@ news is read only to detect this condition; it cannot itself produce advice.
 | Positive | `gas_now` | `neutral` |
 | Zero | `neutral` | `neutral` |
 
-For date-only notices, before the Philippine date use the upcoming rule. During
-that date return `unknown` with `effective_time_unknown`; after the date ends use
-the applied rule. Never invent a 06:00 effective time. Conflicting amounts or
-different exact times for the selected date return `unknown` with
+For confirmed notices with no time, use a product default of 06:00 Philippine
+time on the announcement's effective date. For example, November 10 at 06:00 PH
+is `2026-11-09T22:00:00Z`. The response evidence includes that resolved
+`effectiveAtUtc` and `isEffectiveTimeDefaulted: true`. The stored source data is
+not rewritten. Never default the date to Tuesday: preserve the actual announced
+date, including holidays or off-cycle adjustments.
+
+An explicit time takes precedence. When applicable confirmed sources for the
+same date contain one agreed explicit time, date-only evidence uses that time
+and `isEffectiveTimeDefaulted` is false. Thus an explicit 20:00 PH announcement
+does not take effect at 06:00. Forecasts remain unconfirmed and do not receive
+this default. `effective_time_unknown` is no longer returned for confirmed
+date-only notices. Conflicting amounts or different explicit times return `unknown` with
 `conflicting_adjustments`. All applicable sources for that date are included so
 the caller can inspect the disagreement. Forecast-only and absent/stale data
 return `unknown`, with `forecast_only` or `no_confirmed_adjustment` respectively.
@@ -87,7 +96,8 @@ Example fixture: a confirmed gasoline rollback effective at November 10, 2026,
     "newsId": "11111111-1111-1111-1111-111111111111",
     "adjustmentId": null,
     "sourceUrls": ["https://example.com/fixture"],
-    "validUntilUtc": "2026-11-16T22:00:00Z"
+    "validUntilUtc": "2026-11-16T22:00:00Z",
+    "isEffectiveTimeDefaulted": false
   }],
   "forecast": null
 }

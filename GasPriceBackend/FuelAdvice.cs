@@ -14,7 +14,10 @@ public enum FuelAdviceStatus
 public sealed record FuelAdviceEvidence(
     string ConfirmationStatus, DateOnly EffectiveDatePhilippines, DateTime? EffectiveAtUtc,
     decimal MinChangePerLiter, decimal MaxChangePerLiter, string? OilCompany,
-    Guid? NewsId, long? AdjustmentId, IReadOnlyList<string> SourceUrls, DateTime ValidUntilUtc);
+    Guid? NewsId, long? AdjustmentId, IReadOnlyList<string> SourceUrls, DateTime ValidUntilUtc)
+{
+    public bool IsEffectiveTimeDefaulted { get; init; }
+}
 
 public sealed record FuelAdviceResponse(
     string FuelType, string? OilCompany, FuelAdviceStatus Status, string Reason,
@@ -83,8 +86,24 @@ public static class FuelAdviceCalculator
     public static FuelAdviceResponse Calculate(string fuelType, string? oilCompany, DateTime now,
         IEnumerable<FuelAdviceEvidence> evidence)
     {
+        var supplied = evidence.ToArray();
+        // An explicit time for the applicable confirmed event takes precedence over the fallback.
+        var announcedTimes = supplied.Where(e => e.ConfirmationStatus == "confirmed" &&
+                e.EffectiveAtUtc.HasValue && e.ValidUntilUtc > now)
+            .GroupBy(e => e.EffectiveDatePhilippines)
+            .ToDictionary(g => g.Key, g => g.Select(e => e.EffectiveAtUtc!.Value).Distinct().ToArray());
+        var resolved = supplied.Select(e =>
+        {
+            if (e.ConfirmationStatus != "confirmed" || e.EffectiveAtUtc.HasValue) return e;
+            var hasAnnouncedTime = announcedTimes.TryGetValue(e.EffectiveDatePhilippines, out var times) && times.Length == 1;
+            return e with
+            {
+                EffectiveAtUtc = hasAnnouncedTime ? times![0] : StartUtc(e.EffectiveDatePhilippines).AddHours(6),
+                IsEffectiveTimeDefaulted = !hasAnnouncedTime
+            };
+        });
         // Hard expiration applies even if an article has a longer editorial lifetime.
-        var bounded = evidence.Select(e => e with
+        var bounded = resolved.Select(e => e with
             { ValidUntilUtc = Min(e.ValidUntilUtc, (e.EffectiveAtUtc ?? StartUtc(e.EffectiveDatePhilippines)).AddDays(7)) })
             .Where(e => StartUtc(e.EffectiveDatePhilippines) >= StartUtc(DateOnly.FromDateTime(now.AddHours(8)).AddDays(-7)) &&
                         StartUtc(e.EffectiveDatePhilippines) <= now.AddDays(7))
@@ -100,7 +119,6 @@ public static class FuelAdviceCalculator
         var groups = bounded.Where(e => e.ConfirmationStatus == "confirmed")
             .GroupBy(e => e.EffectiveDatePhilippines).OrderBy(g => g.Key).ToArray();
         // The nearest upcoming change controls buying advice; otherwise use the latest applied change.
-        // A date-only change is pending until the entire Philippine date has elapsed.
         var selected = groups.FirstOrDefault(g => g.Any(e =>
                 (e.EffectiveAtUtc ?? StartUtc(e.EffectiveDatePhilippines).AddDays(1)) > now))
             ?? groups.LastOrDefault();
@@ -121,15 +139,9 @@ public static class FuelAdviceCalculator
             return Result(FuelAdviceStatus.Unknown, "conflicting_adjustments",
                 "Confirmed sources disagree on the amount or effective time. Check the announcements.");
 
-        var dateStart = StartUtc(rows[0].EffectiveDatePhilippines);
-        var hasUnknownTime = rows.Any(e => e.EffectiveAtUtc is null);
-        if (hasUnknownTime && now >= dateStart && now < dateStart.AddDays(1))
-            return Result(FuelAdviceStatus.Unknown, "effective_time_unknown",
-                "The adjustment is scheduled for today, but its effective time is unconfirmed.",
-                Min(expiry!.Value, dateStart.AddDays(1)));
-        var effective = hasUnknownTime ? dateStart.AddDays(1) : rows[0].EffectiveAtUtc!.Value;
+        var effective = rows[0].EffectiveAtUtc!.Value;
         var upcoming = now < effective;
-        var until = upcoming ? Min(expiry!.Value, hasUnknownTime ? dateStart : effective) : expiry!.Value;
+        var until = upcoming ? Min(expiry!.Value, effective) : expiry!.Value;
         var amount = rows[0].MinChangePerLiter;
         if (amount < 0)
             return upcoming
