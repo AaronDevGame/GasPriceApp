@@ -96,6 +96,12 @@ const player = { playerName: 'Guest fixture', playerId: 123456789012345 };
   }) }));
   await assert.rejects(() => timeout.client.restore(), error => error.code === 'request_timeout');
   assert.equal(timeout.timeouts[0], 60000);
+  const adviceTransport = harness('web');
+  adviceTransport.respond(() => response({ status: 'unknown' }));
+  assert.equal((await adviceTransport.http.send('/fuel-advice?fuelType=gasoline')).status, 'unknown');
+  assert.equal(adviceTransport.timeouts[0], 60000);
+  assert.equal(adviceTransport.calls[0].headers.Authorization, undefined);
+  await assert.rejects(() => adviceTransport.http.send('/fuel-advice/nested'), e => e.code === 'invalid_api_path');
   console.log('PASS web: direct Metro origin, HTML responses, invalid envelopes, proxy failures and timeout messages');
 
   const fresh = harness('ios');

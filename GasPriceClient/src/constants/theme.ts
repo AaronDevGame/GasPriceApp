@@ -11,6 +11,8 @@ const palette = {
   backgroundElement: '#1A2029',
   backgroundSelected: '#2B3441',
   textSecondary: '#A4AFBF',
+  advicePositive: '#75D9A2',
+  adviceWait: '#F1C46C',
 } as const;
 
 export const Colors = { light: palette, dark: palette } as const;

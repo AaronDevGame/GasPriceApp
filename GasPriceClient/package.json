@@ -47,7 +47,8 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test:auth": "node scripts/test-auth.cjs",
-    "test:fuel": "node scripts/test-fuel-flow.cjs"
+    "test:fuel": "node scripts/test-fuel-flow.cjs",
+    "test:advice": "node scripts/test-fuel-advice.cjs"
   },
   "private": true
 }
