@@ -21,6 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Geography/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Exclude="Geography/**/*.json" />
+    <Content Update="Geography/**/*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Compile Remove="tests/**/*.cs" />
     <Content Remove="tests/**" />
     <None Remove="tests/**" />

@@ -127,6 +127,10 @@ public static class ApiRoutes
     public const string FuelPriceHistory = "/fuel-prices/history";
     public const string FuelPriceAdjustments = "/fuel-prices/adjustments";
     public const string DoeFuelPrices = "/fuel-prices/doe";
+    public const string FuelMapGeographyPrefix = "/fuel-prices/map/geography";
+    public const string FuelMapIndex = FuelMapGeographyPrefix + "/index";
+    public const string FuelMapBoundary = FuelMapGeographyPrefix + "/{version}/{fileId}";
+    public const string FuelMapPrices = "/fuel-prices/map/prices";
     public const string DoeFuelPricesBrowse = "/fuel-prices/doe/browse";
 
     public const string AdminServerStatus = "/admin/server/status";
@@ -187,6 +191,9 @@ public static class RouteRegistry
         new(ApiRoutes.FuelPriceAdjustments, "GET"),
         new(ApiRoutes.DoeFuelPrices, "GET"),
         new(ApiRoutes.DoeFuelPricesBrowse, "GET"),
+        new(ApiRoutes.FuelMapIndex, "GET"),
+        new(ApiRoutes.FuelMapBoundary, "GET"),
+        new(ApiRoutes.FuelMapPrices, "POST"),
     };
 
     public static readonly RouteInfo[] Admin =

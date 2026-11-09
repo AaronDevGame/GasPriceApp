@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Add versioned, attributed Philippine city/municipality GeoJSON and geographic index, plus authenticated batch map-price reads using confirmed RON 91 gasoline and ordinary diesel. Match PSGC boundaries to stored DOE cities without province/region fallback, external AI or geocoding; include explicit missing coverage, bounded requests, rate limits, cache metadata and a documented freshness policy.
 - Add public `GET /fuel-advice?fuelType=gasoline` with optional company selection and `gas_now`, `wait`, `neutral`, or `unknown` advice from structured confirmed news and existing DOE adjustments. Include source evidence, forecast context, UTC timing and bounded validity; handle date-only notices and conflicting sources conservatively.
 - Add Codex-scoped `POST /admin/fuel-prices/adjustments/import/extracted` to validate externally extracted DOE notice JSON and synchronously upsert company adjustments without PDF downloads or OpenAI calls.
 - Support province-level DOE company ranges with a required province and optional city, repeat-safe storage, newest-coverage city/province lookup, scoped browse/results and province-wide cache expiration. Preserve empty/no-price sections without completeness gaps.

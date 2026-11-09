@@ -13,6 +13,8 @@ builder.Services.AddBrowserAuthentication();
 builder.Services.AddFuelNewsMcp(builder.Configuration);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddScoped<FuelNewsService>();
+builder.Services.AddSingleton<FuelMapGeography>();
+builder.Services.AddScoped<FuelMapPriceService>();
 builder.Services.AddScoped<FuelAdviceService>();
 builder.Services.AddHostedService<FuelNewsNotificationWorker>();
 builder.Services.AddHttpClient("fuel-news-push", client =>
@@ -71,6 +73,8 @@ builder.Services.AddHttpClient<GeoapifyReverseGeocodingClient>(client =>
 Console.Error.WriteLine("startup: building app");
 var app = builder.Build();
 Console.Error.WriteLine("startup: app built");
+// Fail startup on missing/corrupt packaged map data instead of failing the first map request.
+_ = app.Services.GetRequiredService<FuelMapGeography>();
 
 // Apply pending EF Core migrations before accepting requests.
 Console.Error.WriteLine("startup: migrating database");
@@ -186,6 +190,7 @@ app.MapFuelAdviceEndpoints(InstanceId);
 app.MapFuelNewsMcp(InstanceId);
 app.MapDoeFuelPriceEndpoints(auth, InstanceId);
 app.MapDoePriceBrowseEndpoints(auth, InstanceId);
+app.MapFuelMapEndpoints(auth, InstanceId);
 app.MapDoeImportEndpoints(InstanceId);
 app.MapDoeExtractedImportEndpoints(InstanceId);
 app.MapDoeBenchmarkEndpoints(InstanceId);

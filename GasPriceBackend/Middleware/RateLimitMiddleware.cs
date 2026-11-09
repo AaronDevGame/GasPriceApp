@@ -33,6 +33,10 @@ public class RateLimitMiddleware
         [ApiRoutes.FuelPriceAdjustments] = TimeSpan.FromSeconds(1),
         [ApiRoutes.DoeFuelPrices] = TimeSpan.FromSeconds(5),
         [ApiRoutes.DoeFuelPricesBrowse] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.FuelMapIndex] = TimeSpan.FromSeconds(1),
+        [ApiRoutes.FuelMapPrices] = TimeSpan.FromMilliseconds(750),
+        // Boundary chunks load concurrently; bounded minute window instead of a cooldown.
+        [ApiRoutes.FuelMapBoundary] = TimeSpan.Zero,
     };
 
     // Key = ip + "|" + route
@@ -65,6 +69,9 @@ public class RateLimitMiddleware
         if (path.StartsWithSegments(ApiRoutes.FuelNews, out var newsPath) &&
             newsPath.HasValue && newsPath != "/latest" && newsPath != "/subscription")
             path = new PathString(ApiRoutes.FuelNewsDetail);
+        if (path.StartsWithSegments(ApiRoutes.FuelMapGeographyPrefix, out var geographyPath) &&
+            geographyPath.HasValue && geographyPath != "/index")
+            path = new PathString(ApiRoutes.FuelMapBoundary);
         var isGuestLogin = path == ApiRoutes.AuthGuestLogin || path == ApiRoutes.BrowserGuestLogin;
 
         // 1) Decide cooldown
@@ -174,13 +181,13 @@ public class RateLimitMiddleware
                     attempts.Enqueue(now);
             }
 
-            if (path == ApiRoutes.Mcp || path == ApiRoutes.McpMetadata)
+            if (path == ApiRoutes.Mcp || path == ApiRoutes.McpMetadata || path == ApiRoutes.FuelMapBoundary)
             {
-                // Keep discovery independent of authenticated MCP traffic, per IP and route.
+                // Separate bounded burst windows for MCP and concurrent geography chunks.
                 if (!_mcpAttempts.TryGetValue(key, out var attempts))
                     _mcpAttempts[key] = attempts = new Queue<DateTimeOffset>();
                 while (attempts.TryPeek(out var oldest) && oldest <= now.AddMinutes(-1)) attempts.Dequeue();
-                if (attempts.Count >= 60)
+                if (attempts.Count >= (path == ApiRoutes.FuelMapBoundary ? 120 : 60))
                 {
                     blocked = true;
                     retryAfterSeconds = Math.Max(retryAfterSeconds, RetryAfter(attempts.Peek().AddMinutes(1), now));
