@@ -171,6 +171,7 @@ test("forwards news and subscription methods while rejecting arbitrary nested pa
   try {
     for (const [path, method] of [
       ["/fuel-news?limit=20", "GET"], ["/fuel-news/latest", "GET"],
+      ["/fuel-advice?fuelType=diesel&oilCompany=Fixture", "GET"],
       ["/fuel-news/12345678-1234-1234-1234-123456789abc", "GET"],
       ["/fuel-news/subscription", "GET"], ["/fuel-news/subscription", "PUT"], ["/fuel-news/subscription", "DELETE"],
     ]) {
@@ -182,10 +183,11 @@ test("forwards news and subscription methods while rejecting arbitrary nested pa
       assert.equal(forwarded.at(-1).method, method);
     }
     const count = forwarded.length;
-    for (const path of ["/admin/fuel-news/import", "/fuel-news/arbitrary", "/fuel-news/latest/nested"]) {
+    for (const path of ["/admin/fuel-news/import", "/fuel-news/arbitrary", "/fuel-news/latest/nested", "/fuel-advice/nested"]) {
       assert.equal((await worker.fetch(new Request(`https://proxy.example${path}`), env)).status, 404);
     }
     assert.equal((await worker.fetch(new Request("https://proxy.example/fuel-news/latest", { method: "POST" }), env)).status, 405);
+    assert.equal((await worker.fetch(new Request("https://proxy.example/fuel-advice", { method: "POST" }), env)).status, 405);
     assert.equal(forwarded.length, count);
   } finally { globalThis.fetch = originalFetch; }
 });

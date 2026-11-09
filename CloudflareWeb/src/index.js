@@ -12,6 +12,7 @@ const ROUTES = new Map([
   ["/fuel-prices/doe", ["GET"]],
   ["/fuel-prices/doe/browse", ["GET"]],
   ["/fuel-news", ["GET"]],
+  ["/fuel-advice", ["GET"]],
   ["/fuel-news/latest", ["GET"]],
   ["/fuel-news/subscription", ["GET", "PUT", "DELETE"]],
   ["/ai/chat", ["POST"]],
@@ -57,7 +58,7 @@ export default {
         ? ["GET"] : undefined);
     if (!methods) {
       // Reserved API families must never fall back to the HTML app shell.
-      if (/^\/(auth|player|fuel-prices|fuel-news|ai|mcp|\.well-known)(\/|$)/i.test(path)) {
+      if (/^\/(auth|player|fuel-prices|fuel-news|fuel-advice|ai|mcp|\.well-known)(\/|$)/i.test(path)) {
         return error(404, "route_not_available");
       }
       if (!["GET", "HEAD"].includes(request.method)) return error(405, "method_not_allowed");
