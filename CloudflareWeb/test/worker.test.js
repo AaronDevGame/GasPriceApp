@@ -43,10 +43,11 @@ test("blocks admin, native auth, MCP, unknown API and ambiguous paths before any
   const blockedEnv = { ...env, ASSETS: { fetch: () => assert.fail("must not serve app shell") } };
   for (const path of ["/admin", "/ADMIN/fuel-news/import", "/auth/guest/login", "/auth/status",
     "/mcp", "/.well-known/oauth-authorization-server", "/player/data", "/ai/unknown",
-    "/fuel-news/latest/nested", "/fuel-prices/unknown", "/%61dmin/routes"]) {
+    "/fuel-news/latest/nested", "/fuel-prices/unknown", "/fuel-advice/nested", "/%61dmin/routes"]) {
     assert.equal((await worker.fetch(request(path), blockedEnv)).status, 404, path);
   }
   assert.equal((await worker.fetch(request("/auth/browser/status", "POST"), env)).status, 405);
+  assert.equal((await worker.fetch(request("/fuel-advice", "POST"), env)).status, 405);
   assert.equal((await worker.fetch(request("/news", "POST"), env)).status, 405);
 });
 
@@ -119,6 +120,7 @@ test("forwards all web API route methods and query strings", async () => {
       ["/fuel-prices?province=Cebu", "GET"], ["/fuel-prices/featured", "GET"],
       ["/fuel-prices/history", "GET"], ["/fuel-prices/adjustments", "GET"], ["/fuel-prices/doe", "GET"],
       ["/fuel-news?limit=20", "GET"], ["/fuel-news/latest", "GET"],
+      ["/fuel-advice?fuelType=diesel&oilCompany=Fixture", "GET"],
       ["/fuel-news/12345678-1234-1234-1234-123456789abc", "GET"],
       ["/fuel-news/subscription", "GET"], ["/fuel-news/subscription", "PUT"], ["/fuel-news/subscription", "DELETE"],
     ]) {
