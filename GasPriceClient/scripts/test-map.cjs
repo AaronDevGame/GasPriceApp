@@ -176,7 +176,27 @@ function harness(overrides = {}) {
     cities: [city, { ...city, id: 'b' }], features: [{ ...feature, id: 'a' }, { ...feature, id: 'b' }],
     prices: new Map([['a', price], ['b', { ...price, cityId: 'b' }]]) };
   const labels = placeLabels(snap, 'b');
-  assert.equal(labels.length, 1); assert.equal(labels[0].id, 'b', 'Selection has collision priority');
+  assert.equal(labels[0].id, 'b', 'Selection has collision priority');
+  assert.equal(labels.length, 2, 'Move the second box when another position fits');
+  assert(Math.abs(labels[0].x - labels[1].x) >= (labels[0].width + labels[1].width) / 2 + 8 ||
+    Math.abs(labels[0].y - labels[1].y) >= geometry.LABEL_HEIGHT + 8);
+  const clipped = { bounds: [120.925, 14.36, 120.97, 14.393], width: 480, height: 500, zoom: 14 };
+  assert(geometry.project(imus.labelPoint, clipped)[1] < 0, 'Original Imus label is offscreen after panning');
+  const imusFeature = h.cache.feature(imus.id);
+  const imusSnapshot = { detail: true, viewport: clipped, cities: [imus], features: [imusFeature],
+    prices: new Map([[imus.id, h.feed([imus.id]).items[0]]]) };
+  const [relocated] = placeLabels(imusSnapshot, null);
+  assert(relocated, 'A visible part of Imus still has room for both price ranges');
+  const [x, y] = geometry.project(relocated.anchor, clipped);
+  const sw = geometry.pointAtPixel([x - relocated.width / 2, y + geometry.LABEL_HEIGHT / 2], clipped);
+  const ne = geometry.pointAtPixel([x + relocated.width / 2, y - geometry.LABEL_HEIGHT / 2], clipped);
+  assert(geometry.rectangleInside(imusFeature, [...sw, ...ne]));
+  assert(x >= relocated.width / 2 + 7.99 && y >= geometry.LABEL_HEIGHT / 2 + 7.99);
+  const tight = { ...snap, viewport: { ...snap.viewport, width: 155, height: 100 },
+    prices: new Map([['a', { ...price, status: 'unavailable', gasoline: null, diesel: null }], ['b', price]]) };
+  const crowded = placeLabels(tight, null);
+  assert.deepEqual(Array.from(crowded, label => label.id), ['b'], 'Actual prices take the only available space');
+
   assert.equal(placeLabels({ ...snap, detail: false }, null).length, 0);
   console.log('PASS rectangle intersections, holes, camera zoom, exact price text and label collision/zoom policies');
 })().catch(error => { console.error(error); process.exitCode = 1; });

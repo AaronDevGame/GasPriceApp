@@ -3,7 +3,6 @@ import type { Bounds, Feature, Point, PolygonGeometry, Viewport } from './types'
 export const DETAIL_ZOOM = 9;
 export const MAX_DETAIL_CITIES = 160;
 export const MAX_ZOOM = 18;
-export const LABEL_WIDTH = 152;
 export const LABEL_HEIGHT = 46;
 export const intersects = (a: Bounds, b: Bounds) => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 const inBox = ([x, y]: Point, b: Bounds) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];

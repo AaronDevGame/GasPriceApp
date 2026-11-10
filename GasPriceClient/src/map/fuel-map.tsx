@@ -35,8 +35,8 @@ export default function FuelMap() {
   const onIdle = useCallback((viewport: Viewport) => { lastViewport.current = viewport; controller.current?.idle(viewport); }, []);
   const onMove = useCallback(() => controller.current?.move(), []);
   const onSelect = useCallback((id: string) => { setSelected(id); controller.current?.select(id); }, []);
-  const noPrices = snapshot.detail && !snapshot.loading && snapshot.cities.length > 0 &&
-    ![...snapshot.prices.values()].some(price => price.gasoline || price.diesel);
+  const noPrices = authenticated && snapshot.detail && !snapshot.loading && !snapshot.error && snapshot.cities.length > 0 &&
+    snapshot.cities.every(city => snapshot.prices.get(city.id)?.status === 'unavailable');
   return <View style={styles.wrapper}>
     <View style={styles.canvas}>
       {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :

@@ -17,7 +17,7 @@ function createLabels(onSelect: (id: string) => void) {
           const projection = this.getProjection();
           if (!projection) return;
           this.root.replaceChildren(...this.labels.map(label => {
-            const point = projection.fromLatLngToDivPixel(new google.maps.LatLng(label.city.labelPoint[1], label.city.labelPoint[0]));
+            const point = projection.fromLatLngToDivPixel(new google.maps.LatLng(label.anchor[1], label.anchor[0]));
             const button = document.createElement('button');
             button.type = 'button';
             button.setAttribute('aria-label', `${label.city.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}`);

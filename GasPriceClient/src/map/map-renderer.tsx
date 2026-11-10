@@ -99,7 +99,7 @@ function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: Ma
         tappable onPress={() => onSelect(shape.id)} strokeWidth={shape.id === selected ? 2.5 : 1}
         strokeColor={shape.id === selected ? '#0466CB' : '#3F83BE'} fillColor={shape.id === selected ? '#348EF055' : '#348EF020'} />)}
       {labels.map(label => <Marker key={`${label.id}:${rangeText(label.price.gasoline)}:${rangeText(label.price.diesel)}`}
-        coordinate={coordinate(label.city.labelPoint)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}
+        coordinate={coordinate(label.anchor)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}
         onPress={() => onSelect(label.id)} accessibilityLabel={`${label.city.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}`}>
         <View style={[styles.label, { width: label.width }]}>
           <Text allowFontScaling={false} style={styles.price}>{rangeText(label.price.gasoline)}</Text>
