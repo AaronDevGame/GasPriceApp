@@ -140,7 +140,7 @@ public sealed class FuelAdjustmentImporter
             rightUri.Query.Replace("%2F", "/", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsAllowedPdfUrl(Uri uri)
+    internal static bool IsAllowedPdfUrl(Uri uri)
     {
         if (uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length != 0 || uri.Port != 443)
             return false;

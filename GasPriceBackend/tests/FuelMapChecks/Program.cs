@@ -44,6 +44,17 @@ DoeFuelPrice Row(string city = "Manila", string province = "Metro Manila", strin
 var sample = new[] { Row(), Row(grade: "DIESEL", min: 50, max: 55),
     Row(grade: "RON 95", min: 1, max: 99), Row(grade: "DIESEL PLUS", min: 1, max: 99),
     Row(city: "", min: 1, max: 99), Row(city: "Quezon City", min: 70, max: 80) };
+var imusId = geo.Cities.Values.Single(city => city.Name == "City of Imus" && city.GroupName == "Cavite").Id;
+var imusRows = new[] { Row("Imus City", "Cavite"), Row("Imus City", "Cavite", "DIESEL") };
+foreach (var row in imusRows)
+{
+    row.Region = "Region IV-A";
+    row.SourceUrl = "https://d24qbtp4vooyzi.cloudfront.net/api/media/file/CALABARZON.pdf?prefix=dev%2Fmedia";
+}
+var untrusted = Row("Imus City", "Cavite");
+untrusted.SourceUrl = "https://another-distribution.cloudfront.net/report.pdf";
+Check(FuelMapPriceService.BuildFeed([imusId], [untrusted], geo, now).Items[0].Status == "unavailable",
+    "Unrelated CDN distributions cannot supply city prices");
 var feed = FuelMapPriceService.BuildFeed(["1380600000", "1380200000"], sample, geo, now);
 Check(feed.Items[0].Gasoline?.MinPrice == 58 && feed.Items[0].Diesel?.MinPrice == 50 &&
     feed.Items[0].Status == "available" && feed.Items[1].Status == "unavailable" &&
@@ -78,6 +89,7 @@ using (var scope = app.Services.CreateScope())
     db.Guests.Add(new Guest { AppInstanceId = installation, PlayerId = 123456789012345, PlayerName = "Map fixture", IsLoggedIn = true,
         CreatedAt = now, LastLoginAt = now, AccessTokenHash = auth.HashSecret(token), AccessTokenExpiresAt = now.AddHours(1) });
     db.DoeFuelPrices.AddRange(sample);
+    db.DoeFuelPrices.AddRange(imusRows);
     await db.SaveChangesAsync();
 }
 await app.StartAsync();
@@ -121,12 +133,16 @@ try
         if (instance) req.Headers.TryAddWithoutValidation("X-App-Instance-Id", installation);
         return await http.SendAsync(req);
     }
-    using var result = await Post(Body("1380600000", "1380200000", "1380600000"));
+    using var result = await Post(Body("1380600000", "1380200000", "1380600000", imusId));
     Check(result.StatusCode == HttpStatusCode.OK && result.Headers.CacheControl?.NoStore == true, "Authenticated batch read");
     using var prices = JsonDocument.Parse(await result.Content.ReadAsStringAsync());
     var items = prices.RootElement.GetProperty("data").GetProperty("items");
-    Check(items.GetArrayLength() == 2 && items[0].GetProperty("gasoline").GetProperty("minPrice").GetDecimal() == 58 &&
+    Check(items.GetArrayLength() == 3 && items[0].GetProperty("gasoline").GetProperty("minPrice").GetDecimal() == 58 &&
         items[1].GetProperty("status").GetString() == "unavailable", "Batch query, ordering, deduplication and missing data");
+    Check(items[2].GetProperty("cityId").GetString() == imusId &&
+        items[2].GetProperty("status").GetString() == "available" &&
+        items[2].GetProperty("diesel").GetProperty("minPrice").GetDecimal() == 58,
+        "Map batch accepts Imus DOE reports served by the importer's approved CDN");
     foreach (var body in new[] { "{", "[]", "{}", Body(), Body("9999999999"), Body("138060000"),
         Body(Enumerable.Repeat("1380600000", 2001).ToArray()), new string(' ', 32769),
         Body("1380600000").Replace("\"cityIds\":", "\"extra\":0,\"cityIds\":"),

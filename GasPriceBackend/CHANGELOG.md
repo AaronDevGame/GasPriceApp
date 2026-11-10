@@ -17,6 +17,9 @@ All notable changes to this project will be documented in this file.
 - Default missing confirmed fuel-advice effective times to 06:00 Philippine time on the announced date, returned in UTC with `isEffectiveTimeDefaulted`. Prefer explicit announcement times and preserve the stated date; forecasts remain unconfirmed.
 - Require `CODEX_ADMIN_API_KEY` instead of `ADMIN_API_KEY` for externally extracted DOE imports. Return a polling URL under the same credential scope; leave other admin and news credentials separate. Configure matching Render/task secrets before enabling scheduled imports.
 
+### Fixed
+- Include eligible city prices from DOE reports hosted on the approved CloudFront distribution in map batch results.
+
 ## [1.13.0] - 2026-11-07
 
 ### Added

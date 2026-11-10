@@ -43,8 +43,7 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
                 row.FetchedAtUtc <= now && row.MinPricePerLiter > 0 && row.MaxPricePerLiter >= row.MinPricePerLiter &&
                 row.MaxPricePerLiter <= 999999.99m &&
                 row.FuelGrade is GasolineGrade or DieselGrade && !string.IsNullOrWhiteSpace(row.OilCompany) &&
-                Uri.TryCreate(row.SourceUrl, UriKind.Absolute, out var uri) && uri.Scheme == "https" &&
-                uri.UserInfo.Length == 0 && (uri.Host == "doe.gov.ph" || uri.Host.EndsWith(".doe.gov.ph", StringComparison.OrdinalIgnoreCase)))
+                Uri.TryCreate(row.SourceUrl, UriKind.Absolute, out var uri) && FuelAdjustmentImporter.IsAllowedPdfUrl(uri))
             .Select(row => (Row: row, City: geography.Resolve(row)))
             .Where(item => item.City is not null && wanted.Contains(item.City.Id))
             .GroupBy(item => item.City!.Id).ToDictionary(group => group.Key, group => group.Select(item => item.Row).ToArray());
