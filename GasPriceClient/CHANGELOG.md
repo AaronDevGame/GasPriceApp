@@ -7,6 +7,9 @@
 - Add a theme-aware “Should I gas up?” Overview card backed by `/fuel-advice`, with fuel/company selection, green/amber/gray recommendations, API explanations, confirmed 40-liter impact examples, Philippine effective times and source links. Refresh at validity boundaries, on foreground, and with dashboard refresh; keep forecast and default-time labels explicit.
 - Show province-level DOE ranges in local company comparisons and the Fuel Prices selector, with explicit coverage labels instead of presenting provincial prices as city-specific.
 
+### Fixed
+- Hydrate map controllers from an already cached geographic index on focus, authentication changes and Map/List remounts. Publish the loaded index explicitly so successful cached reads cannot leave the screen stuck before MapRenderer mounts.
+
 ## [1.0.5] - 2026-11-06
 
 ### Added

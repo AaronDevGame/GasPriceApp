@@ -49,6 +49,52 @@ function harness(overrides = {}) {
   return { cache, calls, feed, Controller, load, flush, advance };
 }
 (async () => {
+  // No viewport exists before MapRenderer mounts: start must publish a warm index
+  // without relying on a network/cache mutation notification to bootstrap the view.
+  const warm = harness();
+  await warm.cache.loadIndex();
+  const warmController = new warm.Controller(warm.cache);
+  const warmSnapshots = [];
+  warmController.subscribe(() => warmSnapshots.push(warmController.getSnapshot()));
+  await warmController.start();
+  assert.equal(warm.calls.index, 1, 'Warm startup must reuse the public index');
+  assert.equal(warmController.snapshot.index?.countryCode, 'PH', 'Warm startup must mount MapRenderer without a viewport');
+  assert.equal(warmController.snapshot.loading, false);
+  assert(warmSnapshots.some(snapshot => snapshot.index?.cities.length === 1642));
+  warmController.dispose();
+  // Mirrors useFocusEffect cleanup/recreation after auth changes or tab refocus,
+  // including Strict Mode cleanup before a shared cold request completes.
+  for (const authenticated of [false, true, false, true]) {
+    const focused = new warm.Controller(warm.cache);
+    focused.setAuthenticated(authenticated);
+    const observed = [];
+    const unsubscribe = focused.subscribe(() => observed.push(focused.getSnapshot()));
+    const started = focused.start();
+    assert.equal(focused.snapshot.index?.countryCode, 'PH', 'Focus startup hydrates synchronously');
+    await started;
+    assert.equal(focused.snapshot.index?.cities.length, 1642);
+    assert.equal(focused.snapshot.viewport, null, 'Renderer bootstrap must not need a camera event');
+    assert.equal(focused.snapshot.loading, false);
+    const count = observed.length;
+    unsubscribe(); focused.dispose();
+    await focused.start();
+    assert.equal(observed.length, count, 'Disposed focus controllers cannot notify the screen');
+  }
+  assert.equal(warm.calls.index, 1, 'Auth/refocus lifecycle must reuse the same index');
+  const shared = harness();
+  const abandoned = new shared.Controller(shared.cache);
+  const replacement = new shared.Controller(shared.cache);
+  const abandonedSnapshots = [];
+  abandoned.subscribe(() => abandonedSnapshots.push(abandoned.getSnapshot()));
+  const abandonedStart = abandoned.start();
+  abandoned.dispose();
+  const stoppedCount = abandonedSnapshots.length;
+  await Promise.all([abandonedStart, replacement.start()]);
+  assert.equal(shared.calls.index, 1, 'Concurrent focus controllers share one cold request');
+  assert.equal(replacement.snapshot.index?.countryCode, 'PH');
+  assert.equal(abandonedSnapshots.length, stoppedCount);
+  replacement.dispose();
+  console.log('PASS cold/shared/warm index bootstrap, subscription delivery, auth/refocus/remount lifecycle and disposal');
   const h = harness();
   await Promise.all([h.cache.loadIndex(), h.cache.loadIndex()]);
   assert.equal(h.calls.index, 1);

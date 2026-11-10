@@ -20,8 +20,11 @@ export class MapController {
     if (this.snapshot.viewport) this.idle(this.snapshot.viewport, true);
   }
   async start() {
+    // Focus/auth changes and Map/List remounts create a controller over a warm cache.
+    // Cache hits do not emit: hydrate before waiting and explicitly publish the result.
+    this.publish();
     this.update({ loading: true, error: null });
-    try { await this.cache.loadIndex(); this.update({ loading: false }); }
+    try { const index = await this.cache.loadIndex(); this.update({ index, loading: false }); }
     catch { this.update({ loading: false, error: 'Map boundaries are unavailable. Check your connection and retry.' }); }
   }
   move = () => { ++this.generation; clearTimeout(this.timer); };
