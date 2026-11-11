@@ -8,14 +8,16 @@ import { adviceHeadline, adviceImpact, adviceTime, type AdviceFuel, type FuelAdv
 import { changeLabel, newsDate, newsIdPattern } from '@/news/api';
 
 export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFuelChange, oilCompany,
-  onCompanyChange, companies }: {
+  onCompanyChange, companies, initiallyShowDetails = false, onNavigate }: {
   advice: FuelAdvice | null; loading: boolean; error: boolean; reload: () => Promise<void>;
   fuelType: AdviceFuel; onFuelChange: (fuel: AdviceFuel) => void; oilCompany: string | null;
   onCompanyChange: (company: string | null) => void; companies: string[];
+  initiallyShowDetails?: boolean;
+  onNavigate?: () => void;
 }) {
   const theme = useTheme();
   const [showCompanies, setShowCompanies] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(initiallyShowDetails);
   const status = advice?.status ?? 'unknown';
   const accent = status === 'gas_now' ? theme.advicePositive : status === 'wait' ? theme.adviceWait : theme.textSecondary;
   const impact = advice ? adviceImpact(advice) : null;
@@ -83,19 +85,19 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
         <ThemedText type="small" themeColor="textSecondary">{oilCompany ? `${oilCompany} announcements and nationwide updates.` : 'Nationwide announcements. Individual companies may differ.'} Keep enough fuel for your trip.</ThemedText>
       </View>
       <View style={styles.actions}>
-        <Link href="/fuel-prices" asChild><Pressable accessibilityRole="link" style={StyleSheet.flatten([styles.primaryAction, { backgroundColor: theme.backgroundSelected, borderColor: accent }])}>
+        <Link href="/fuel-prices" onPress={onNavigate} asChild><Pressable accessibilityRole="link" style={StyleSheet.flatten([styles.primaryAction, { backgroundColor: theme.backgroundSelected, borderColor: accent }])}>
           <ThemedText type="smallBold" style={{ color: accent }}>Compare fuel prices →</ThemedText>
         </Pressable></Link>
         {(advice?.evidence.length ?? 0) > 0 && <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }}
           onPress={() => setShowDetails(value => !value)} style={styles.textButton}>
           <ThemedText type="smallBold">{showDetails ? 'Hide sources ↑' : status === 'wait' ? 'Why wait? ↓' : 'Why this advice? ↓'}</ThemedText>
         </Pressable>}
-        {status === 'wait' && Platform.OS !== 'web' && <Link href="/news" style={styles.textButton}><ThemedText type="smallBold">Fuel news & alerts →</ThemedText></Link>}
+        {status === 'wait' && Platform.OS !== 'web' && <Link href="/news" onPress={onNavigate} style={styles.textButton}><ThemedText type="smallBold">Fuel news & alerts →</ThemedText></Link>}
       </View>
     </View>
     {showDetails && advice && <View style={[styles.details, { borderTopColor: theme.backgroundSelected }]}>
       <ThemedText type="smallBold">Source announcements</ThemedText>
-      {newsId && <Link href={{ pathname: '/news-detail', params: { id: newsId } }} asChild><Pressable accessibilityRole="link" style={styles.textButton}>
+      {newsId && <Link href={{ pathname: '/news-detail', params: { id: newsId } }} onPress={onNavigate} asChild><Pressable accessibilityRole="link" style={styles.textButton}>
         <ThemedText type="smallBold" style={{ color: accent }}>Read the full fuel update →</ThemedText>
       </Pressable></Link>}
       {sources.map((url, index) => <Pressable key={url} accessibilityRole="link" accessibilityLabel={`Open source ${index + 1}: ${new URL(url).hostname}`}

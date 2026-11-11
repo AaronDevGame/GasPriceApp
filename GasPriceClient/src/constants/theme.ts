@@ -13,6 +13,7 @@ const palette = {
   textSecondary: '#A4AFBF',
   advicePositive: '#75D9A2',
   adviceWait: '#F1C46C',
+  priceIncrease: '#FF9292',
 } as const;
 
 export const Colors = { light: palette, dark: palette } as const;

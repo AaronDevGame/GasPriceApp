@@ -76,6 +76,26 @@ const settle = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(
   assert.match(api.adviceHeadline(fixture({ status: 'unknown', reason: 'forecast_only' })), /Awaiting/);
   assert.equal(api.adviceIsCurrent(fixture(), Date.parse(effective)), false);
   assert.match(api.adviceTime(fixture().evidence[0]), /6:00.*PHT/);
+  const decrease = api.adviceSummary(fixture(), false, false);
+  assert.equal(decrease.direction, 'down');
+  assert.equal(decrease.action, 'Wait if you can');
+  assert.equal(decrease.amount, '₱2.00/L');
+  const increase = api.adviceSummary(fixture({ status: 'gas_now', reason: 'increase_upcoming',
+    evidence: [{ ...fixture().evidence[0], minChangePerLiter: 1.2, maxChangePerLiter: 1.2 }] }), false, false);
+  assert.equal(increase.direction, 'up');
+  assert.equal(increase.action, 'Gas up now');
+  assert.equal(increase.amount, '₱1.20/L');
+  const conflict = api.adviceSummary(fixture({ status: 'unknown', reason: 'conflicting_adjustments' }), false, false);
+  assert.equal(conflict.amount, '—');
+  assert.equal(conflict.action, 'Check sources');
+  const forecast = api.adviceSummary(fixture({ status: 'unknown', reason: 'forecast_only', evidence: [],
+    forecast: { ...fixture().evidence[0], confirmationStatus: 'forecast', minChangePerLiter: -2, maxChangePerLiter: -1 } }), false, false);
+  assert.equal(forecast.amount, '₱1.00–2.00/L');
+  assert.match(forecast.timing, /^Estimated/);
+  assert.equal(forecast.action, 'Await confirmation');
+  assert.equal(api.adviceSummary(null, false, true).action, 'Temporarily unavailable');
+  assert.equal(api.adviceSummary(null, true, false).amount, '—');
+  console.log('PASS summary price direction independent of action, forecast ranges, conflicting sources and unavailable states');
   console.log('PASS advice query encoding, response validation, headlines, confirmed impact and Philippine time');
 
   const flow = harness();

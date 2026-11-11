@@ -40,6 +40,37 @@ export function adviceIsCurrent(advice: FuelAdvice, now: number) {
   return advice.validUntilUtc === null || Date.parse(advice.validUntilUtc) > now;
 }
 
+// Keep price direction independent from the recommendation to buy or wait.
+export function adviceSummary(advice: FuelAdvice | null, loading: boolean, error: boolean) {
+  const action = !advice ? (loading ? 'Checking…' : error ? 'Temporarily unavailable' : 'No confirmed update')
+    : advice.status === 'gas_now' ? 'Gas up now'
+    : advice.status === 'wait' ? 'Wait if you can'
+    : advice.reason === 'conflicting_adjustments' ? 'Check sources'
+    : advice.reason === 'forecast_only' ? 'Await confirmation'
+    : advice.reason === 'no_price_change' ? 'No price change' : 'No clear advantage';
+  const confirmed = advice?.reason !== 'conflicting_adjustments' && advice?.evidence.length
+    && advice.evidence.every(e => e.confirmationStatus === 'confirmed'
+      && e.minChangePerLiter === advice.evidence[0].minChangePerLiter
+      && e.maxChangePerLiter === advice.evidence[0].maxChangePerLiter
+      && e.effectiveAtUtc === advice.evidence[0].effectiveAtUtc);
+  const evidence = confirmed ? advice.evidence[0] : advice?.evidence.length ? null : advice?.forecast;
+  if (!evidence || !Number.isFinite(evidence.minChangePerLiter) || !Number.isFinite(evidence.maxChangePerLiter))
+    return { action, direction: 'none', amount: '—', timing: advice?.reason === 'conflicting_adjustments'
+      ? 'Sources disagree' : 'Nationwide · No current adjustment' };
+  const min = evidence.minChangePerLiter, max = evidence.maxChangePerLiter;
+  const direction = max < 0 ? 'down' : min > 0 ? 'up' : min === 0 && max === 0 ? 'flat' : 'mixed';
+  const amount = min === max ? `₱${Math.abs(min).toFixed(2)}/L`
+    : direction === 'mixed' ? `${min > 0 ? '+' : ''}${min.toFixed(2)} to ${max > 0 ? '+' : ''}${max.toFixed(2)} ₱/L`
+    : `₱${Math.min(Math.abs(min), Math.abs(max)).toFixed(2)}–${Math.max(Math.abs(min), Math.abs(max)).toFixed(2)}/L`;
+  const date = new Date(evidence.effectiveAtUtc ?? `${evidence.effectiveDatePhilippines}T12:00:00+08:00`);
+  const when = date.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' });
+  const time = evidence.effectiveAtUtc ? date.toLocaleTimeString('en-PH', {
+    timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit',
+  }) + ' PHT' : 'time unannounced';
+  const state = !confirmed ? 'Estimated' : Date.parse(evidence.effectiveAtUtc ?? '') <= Date.now() ? 'Now effective' : 'Confirmed';
+  return { action, direction, amount, timing: `${state} · ${when}, ${time}${evidence.isEffectiveTimeDefaulted ? ' (default)' : ''}` };
+}
+
 // Only calculate the example from agreed confirmed amounts; forecasts stay separate.
 export function adviceImpact(advice: FuelAdvice) {
   if (advice.status === 'unknown' || !advice.evidence.length) return null;
