@@ -14,6 +14,9 @@
 - Add a theme-aware “Should I gas up?” Overview card backed by `/fuel-advice`, with fuel/company selection, green/amber/gray recommendations, API explanations, confirmed 40-liter impact examples, Philippine effective times and source links. Refresh at validity boundaries, on foreground, and with dashboard refresh; keep forecast and default-time labels explicit.
 - Show province-level DOE ranges in local company comparisons and the Fuel Prices selector, with explicit coverage labels instead of presenting provincial prices as city-specific.
 
+### Changed
+- Move detailed refueling advice from Overview into a dismissible panel opened by the shared Gasoline and Diesel header notices, with the clicked fuel selected. Remove the dashboard introduction and keep mobile access above the tabs.
+
 ### Fixed
 - Share fuel advice across the header, dashboard and detail views; deduplicate and pace requests to respect the API cooldown, reuse valid results across tab changes and responsive remounts, and retain unexpired advice when background refreshes fail.
 - Place price boxes within the visible part of a city after panning, size boxes to their contents and prioritize reported ranges over unavailable placeholders. Show the no-prices message only after all visible cities report unavailable.

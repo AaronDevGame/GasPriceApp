@@ -13,10 +13,13 @@ import { FuelNewsHeadline } from '@/components/fuel-news-headline';
 import { DashboardAction } from '@/components/dashboard-action';
 import { AppIcon } from '@/components/app-icon';
 import { useLatestNews } from '@/news/use-latest-news';
+<<<<<<< HEAD
 import { FuelAdviceCard } from '@/components/fuel-advice-card';
 import { FuelAdviceSummary } from '@/components/fuel-advice-summary';
 import { useFuelAdvice } from '@/fuel/use-fuel-advice';
 import type { AdviceFuel } from '@/fuel/advice';
+=======
+>>>>>>> 729c0fe (feat: open refueling advice from header notices)
 
 function asOf(value: string) {
   return new Date(value).toLocaleDateString('en-PH', {
@@ -52,13 +55,6 @@ function FeaturedPriceCard({ item }: { item: FeaturedFuelPrice }) {
 export default function HomeScreen() {
   const fuel = useFuelPrices();
   const news = useLatestNews();
-  const [adviceFuel, setAdviceFuel] = useState<AdviceFuel>('gasoline');
-  const [adviceCompany, setAdviceCompany] = useState<string | null>(null);
-  const advice = useFuelAdvice(adviceFuel, adviceCompany);
-  const adviceCompanies = [...new Set([
-    ...(fuel.doePrices?.prices.map(price => price.oilCompany) ?? []),
-    ...(news.item?.article.adjustments.flatMap(change => change.oilCompany ? [change.oilCompany] : []) ?? []),
-  ])];
   const { width } = useWindowDimensions();
   const wide = width >= 1000;
   const theme = useTheme();
@@ -67,7 +63,7 @@ export default function HomeScreen() {
   const pullToRefresh = async () => {
     if (fuel.busy || refreshing) return;
     setRefreshing(true);
-    try { await Promise.allSettled([fuel.refresh(), news.reload(), advice.reload()]); } finally { setRefreshing(false); }
+    try { await Promise.allSettled([fuel.refresh(), news.reload()]); } finally { setRefreshing(false); }
   };
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.safe}>
@@ -91,15 +87,6 @@ export default function HomeScreen() {
             <DashboardAction title="Retry news" onPress={() => void news.reload()} disabled={news.loading} />
           </View>}
           {!news.item && !news.loading && !news.error && <ThemedText type="small" themeColor="textSecondary">No fuel news has been published yet.</ThemedText>}
-          <View style={styles.header}>
-            <View style={styles.brand}>
-              <ThemedText accessibilityRole="header" style={styles.title}>Your fuel price dashboard</ThemedText>
-              <ThemedText themeColor="textSecondary">Compare fuel prices before your next fill-up.</ThemedText>
-            </View>
-            <Link href="/weekly-changes" style={styles.quickLink}>Weekly adjustments ↗</Link>
-          </View>
-          <FuelAdviceCard {...advice} fuelType={adviceFuel} onFuelChange={setAdviceFuel}
-            oilCompany={adviceCompany} onCompanyChange={setAdviceCompany} companies={adviceCompanies} />
           <ThemedView type="backgroundElement" style={styles.locationCard}>
             <View style={styles.locationText}>
               <ThemedText type="smallBold">{fuel.localItem ? `Your area · ${fuel.localItem.area.name}` : 'Where are you filling up?'}</ThemedText>
@@ -144,9 +131,7 @@ const styles = StyleSheet.create({
   page: { flex: 1 }, safe: { flex: 1 }, scroll: { padding: 20, alignItems: 'center' },
   content: { width: '100%', maxWidth: 1160, gap: 20, paddingVertical: 8, paddingBottom: 24 },
   mobileBrand: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 4 },
-  header: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 16, marginTop: 12 },
-  brand: { flex: 1, minWidth: 240, gap: 6 }, title: { fontSize: 28, lineHeight: 36, fontWeight: '600', letterSpacing: -0.6 },
-  accent: { color: '#76B4FF' }, quickLink: { color: '#76B4FF', fontSize: 14, fontWeight: '600', paddingVertical: 12 },
+  accent: { color: '#76B4FF' },
   loading: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center' },
   locationCard: { borderRadius: 14, padding: 20, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 16 },
   locationText: { flexGrow: 1, flexShrink: 1, flexBasis: 250, gap: 4 },
