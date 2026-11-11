@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +8,11 @@ import { ThemedText } from '@/components/themed-text';
 import { adviceSummary, type AdviceFuel } from '@/fuel/advice';
 import { useFuelAdvice } from '@/fuel/use-fuel-advice';
 import { useTheme } from '@/hooks/use-theme';
+
+const fuelNozzles = {
+  gasoline: require('@/assets/images/fuel-nozzles/gasoline-green.png'),
+  diesel: require('@/assets/images/fuel-nozzles/diesel-yellow.png'),
+};
 
 function AdviceDetails({ fuel, onFuelChange, onClose }: {
   fuel: AdviceFuel; onFuelChange: (fuel: AdviceFuel) => void; onClose: () => void;
@@ -39,7 +45,10 @@ export function FuelAdviceSummary({ inHeader = false }: { inHeader?: boolean }) 
           inHeader && styles.headerFuel,
           (hovered || pressed) && { borderColor: accent, backgroundColor: theme.backgroundSelected }]}>
         <View style={styles.row}>
-          <ThemedText style={styles.name}>{name}</ThemedText>
+          <View style={styles.fuelLabel}>
+            <Image source={fuelNozzles[fuel]} style={styles.nozzle} contentFit="contain" accessible={false} />
+            <ThemedText style={styles.name}>{name}</ThemedText>
+          </View>
           <ThemedText style={[styles.amount, { color: directionColor }]}>{arrow} {summary.amount}</ThemedText>
           <ThemedText themeColor="textSecondary" style={styles.chevron}>›</ThemedText>
         </View>
@@ -74,6 +83,8 @@ const styles = StyleSheet.create({
   headerFuel: { flexBasis: 140, paddingVertical: 6 },
   fuel: { flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0, borderWidth: 1, borderRadius: 12, padding: 10, gap: 4 },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  fuelLabel: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  nozzle: { width: 24, height: 24 },
   name: { fontSize: 13, lineHeight: 18, fontWeight: '700' },
   amount: { fontSize: 14, lineHeight: 20, fontWeight: '700', fontVariant: ['tabular-nums'] },
   chevron: { marginLeft: 'auto', fontSize: 20, lineHeight: 20 },
