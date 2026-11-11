@@ -188,16 +188,14 @@ function harness(overrides = {}) {
   const [relocated] = placeLabels(imusSnapshot, null);
   assert(relocated, 'A visible part of Imus still has room for both price ranges');
   const [x, y] = geometry.project(relocated.anchor, clipped);
-  const sw = geometry.pointAtPixel([x - relocated.width / 2, y + geometry.LABEL_HEIGHT / 2], clipped);
-  const ne = geometry.pointAtPixel([x + relocated.width / 2, y - geometry.LABEL_HEIGHT / 2], clipped);
-  assert(geometry.rectangleInside(imusFeature, [...sw, ...ne]));
-  assert(x >= relocated.width / 2 + 7.99 && y >= geometry.LABEL_HEIGHT / 2 + 7.99);
-  const tight = { ...snap, viewport: { ...snap.viewport, width: 155, height: 100 },
-    prices: new Map([['a', { ...price, status: 'unavailable', gasoline: null, diesel: null }], ['b', price]]) };
-  const crowded = placeLabels(tight, null);
-  assert.deepEqual(Array.from(crowded, label => label.id), ['b'], 'Actual prices take the only available space');
-
-  assert.equal(placeLabels({ ...snap, detail: false }, null).length, 0);
+  assert(x >= relocated.width / 2 + 7.99 && y >= relocated.height / 2 + 7.99);
+  assert.equal(placeLabels({ ...snap, detail: false, features: [], viewport: { ...snap.viewport, zoom: 6 } }, null).length, 2,
+    'Overview labels do not require detailed boundaries');
+  const tiny = { ...city, bbox: [4.999, 4.999, 5.001, 5.001] };
+  assert.equal(placeLabels({ ...snap, cities: [tiny], features: [] }, null).length, 1,
+    'Small cities still display prices');
+  const fallback = placeLabels({ ...snap, cities: [{ ...city, name: '', groupName: 'Cavite' }] }, null);
+  assert.equal(fallback[0].name, 'Cavite');
   console.log('PASS rectangle intersections, holes, camera zoom, exact price text and label collision/zoom policies');
 })().catch(error => { console.error(error); process.exitCode = 1; });
 

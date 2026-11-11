@@ -16,13 +16,13 @@ function createLabels(onSelect: (id: string) => void) {
         draw() {
           const projection = this.getProjection();
           if (!projection) return;
-          this.root.replaceChildren(...this.labels.map(label => {
+          this.root.replaceChildren(...this.labels.map((label, priority) => {
             const point = projection.fromLatLngToDivPixel(new google.maps.LatLng(label.anchor[1], label.anchor[0]));
             const button = document.createElement('button');
             button.type = 'button';
-            button.setAttribute('aria-label', `${label.city.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}`);
-            button.style.cssText = `position:absolute;left:${point?.x ?? 0}px;top:${point?.y ?? 0}px;transform:translate(-50%,-50%);width:${label.width}px;height:46px;background:#172332;color:white;border:1px solid #6CB4F8;border-radius:7px;font:600 11px/17px system-ui;white-space:pre;text-align:center;cursor:pointer;pointer-events:auto;font-variant-numeric:tabular-nums;`;
-            button.textContent = `${rangeText(label.price.gasoline)}\n${rangeText(label.price.diesel)}`;
+            button.setAttribute('aria-label', `${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}`);
+            button.style.cssText = `position:absolute;z-index:${this.labels.length - priority};left:${point?.x ?? 0}px;top:${point?.y ?? 0}px;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;background:#172332;color:white;border:1px solid #6CB4F8;border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;cursor:pointer;pointer-events:auto;font-variant-numeric:tabular-nums;`;
+            button.textContent = `${label.name}\n${rangeText(label.price.gasoline)}\n${rangeText(label.price.diesel)}`;
             button.onclick = () => onSelect(label.id);
             google.maps.OverlayView.preventMapHitsAndGesturesFrom(button);
             return button;

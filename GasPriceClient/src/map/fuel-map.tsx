@@ -35,7 +35,7 @@ export default function FuelMap() {
   const onIdle = useCallback((viewport: Viewport) => { lastViewport.current = viewport; controller.current?.idle(viewport); }, []);
   const onMove = useCallback(() => controller.current?.move(), []);
   const onSelect = useCallback((id: string) => { setSelected(id); controller.current?.select(id); }, []);
-  const noPrices = authenticated && snapshot.detail && !snapshot.loading && !snapshot.error && snapshot.cities.length > 0 &&
+  const noPrices = authenticated && !snapshot.loading && !snapshot.error && snapshot.cities.length > 0 &&
     snapshot.cities.every(city => snapshot.prices.get(city.id)?.status === 'unavailable');
   return <View style={styles.wrapper}>
     <View style={styles.canvas}>
@@ -45,11 +45,10 @@ export default function FuelMap() {
     <View style={styles.status}>
       {snapshot.loading && <View style={styles.loading}><ActivityIndicator size="small" /><ThemedText type="small">Updating map…</ThemedText></View>}
       {!authenticated && !authLoading && <ThemedText type="small">Reconnect from Overview to load city prices.</ThemedText>}
-      {snapshot.index && !snapshot.detail && <ThemedText type="small">Zoom in to see city price ranges.</ThemedText>}
       {noPrices && <ThemedText type="small">No current city prices are available in this view.</ThemedText>}
       {snapshot.error && <View style={styles.error}><ThemedText type="small" accessibilityRole="alert">{snapshot.error}</ThemedText>
         <Pressable accessibilityRole="button" onPress={() => controller.current?.retry()} style={styles.retry}><ThemedText type="smallBold">Retry</ThemedText></Pressable></View>}
-      {/* Fuel descriptions belong outside the map; polygon overlays contain only the two ranges. */}
+      {/* Fuel descriptions belong outside the map; overlays show the location above the two ranges. */}
       <ThemedText type="small" themeColor="textSecondary">Top: gasoline RON 91 · Bottom: diesel · PHP per liter · — unavailable</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">City report ranges; individual station prices vary.</ThemedText>
       <Pressable accessibilityRole="link" accessibilityLabel="Boundary source and license" onPress={() => void Linking.openURL('https://github.com/faeldon/philippines-json-maps')}>

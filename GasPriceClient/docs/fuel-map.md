@@ -38,7 +38,7 @@ Google Cloud requires billing enabled. Native maps without map IDs use the Maps 
 - Web uses Google camera restriction with a separately calculated overview minimum zoom.
 - Native requests Google bounds but also clamps camera centers during movement and verifies center/zoom at idle. Inspection of the pinned library found its legacy `setMapBoundaries` command is not forwarded on the Fabric path, so correctness does not depend on that command. Native enforcement can correct the camera during/after gestures and must be device-tested for smoothness.
 - Restriction applies to camera centers. Visible corners at overview can include surrounding sea/neighboring basemap land. We load only Philippine administrative polygons and Philippine city prices; we do not claim the basemap itself contains only Philippine tiles.
-- City detail starts at zoom 9 with no more than 160 bounding-box candidate cities. At wider scales, hide detailed polygons and labels. Clicking/tapping the basemap at overview zooms toward the point, then starts normal viewport loading automatically.
+- City detail starts at zoom 9 with no more than 160 bounding-box candidate cities. At wider scales, hide detailed polygons but keep price labels. Clicking/tapping the basemap at overview zooms toward the point, then starts normal viewport loading automatically.
 - MultiPolygons and holes are rendered without inventing coordinates. Exact rectangle/polygon intersection refines bounding-box candidates once geometry is available.
 - Polygon taps highlight their city; no tap is required to fetch visible prices. Existing provider attribution remains unobscured. NAMRIA/PSA/OCHA, CC BY 3.0 IGO, James Faeldon/MIT and modification notices are displayed below the map with source/license links.
 
@@ -56,9 +56,9 @@ Moving invalidates pending debounce work and the view generation. Shared in-flig
 
 ## Price labels
 
-Each label contains exactly two lines: gasoline **RON 91** above ordinary **DIESEL**, e.g. `₱58.20–₱62.40/L`. Missing grades use `—` in their fixed position. No city names or fuel names are added to the map overlay. Screen-reader descriptions identify the city/fuels without adding visible text. A short legend outside the canvas explains the ordering and city-level scope.
+Each card shows the city name (province/group name if the city name is missing), then gasoline **RON 91** and ordinary **DIESEL** ranges. Missing grades use `—`. Price scope remains city-level; province prices are not substituted for missing city reports.
 
-Labels prefer the anchor in the geographic index. After panning, the layout also checks positions within the visible part of the city. It places the selected city first, then cities with reported ranges, and skips boxes that would overlap, cross a polygon boundary or hole, or cover the reserved attribution area. Small cities may consequently have no label at a given zoom; zooming in makes room. Map labels use a fixed visual font size so their collision rectangles remain accurate; the company list retains normal scalable text and markers expose screen-reader descriptions. Labels are hidden while the map is moving and recomputed at idle. No provincial/region fallback and no gasoline-grade substitution are performed.
+Cards appear at every zoom independently of detailed geometry. Cards shrink modestly below zoom 10 and try alternate positions to avoid collisions. They may extend beyond small boundaries and overlap in dense views instead of disappearing. Selected cities and reported ranges receive placement priority. Cards avoid attribution, hide during movement and recompute at idle.
 
 ## Verification and remaining device checks
 

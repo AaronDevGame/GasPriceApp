@@ -8,6 +8,7 @@
 - Show province-level DOE ranges in local company comparisons and the Fuel Prices selector, with explicit coverage labels instead of presenting provincial prices as city-specific.
 
 ### Fixed
+- Show price cards at every zoom without requiring them to fit inside city boundaries. Add city names with province/group name fallback and compact overview sizing; retain cards when dense views overlap.
 - Place price boxes within the visible part of a city after panning, size boxes to their contents and prioritize reported ranges over unavailable placeholders. Show the no-prices message only after all visible cities report unavailable.
 - Hydrate map controllers from an already cached geographic index on focus, authentication changes and Map/List remounts. Publish the loaded index explicitly so successful cached reads cannot leave the screen stuck before MapRenderer mounts.
 
