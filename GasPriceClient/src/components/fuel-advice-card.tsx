@@ -8,19 +8,12 @@ import { adviceHeadline, adviceImpact, adviceTime, type AdviceFuel, type FuelAdv
 import { changeLabel, newsDate, newsIdPattern } from '@/news/api';
 
 export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFuelChange, oilCompany,
-<<<<<<< HEAD
   onCompanyChange, companies, initiallyShowDetails = false, onNavigate }: {
   advice: FuelAdvice | null; loading: boolean; error: boolean; reload: () => Promise<void>;
   fuelType: AdviceFuel; onFuelChange: (fuel: AdviceFuel) => void; oilCompany: string | null;
   onCompanyChange: (company: string | null) => void; companies: string[];
   initiallyShowDetails?: boolean;
   onNavigate?: () => void;
-=======
-  onCompanyChange, companies, onNavigate }: {
-  advice: FuelAdvice | null; loading: boolean; error: boolean; reload: () => Promise<void>;
-  fuelType: AdviceFuel; onFuelChange: (fuel: AdviceFuel) => void; oilCompany: string | null;
-  onCompanyChange: (company: string | null) => void; companies: string[]; onNavigate?: () => void;
->>>>>>> 729c0fe (feat: open refueling advice from header notices)
 }) {
   const theme = useTheme();
   const [showCompanies, setShowCompanies] = useState(false);
@@ -104,11 +97,7 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
     </View>
     {showDetails && advice && <View style={[styles.details, { borderTopColor: theme.backgroundSelected }]}>
       <ThemedText type="smallBold">Source announcements</ThemedText>
-<<<<<<< HEAD
       {newsId && <Link href={{ pathname: '/news-detail', params: { id: newsId } }} onPress={onNavigate} asChild><Pressable accessibilityRole="link" style={styles.textButton}>
-=======
-      {newsId && <Link onPress={onNavigate} href={{ pathname: '/news-detail', params: { id: newsId } }} asChild><Pressable accessibilityRole="link" style={styles.textButton}>
->>>>>>> 729c0fe (feat: open refueling advice from header notices)
         <ThemedText type="smallBold" style={{ color: accent }}>Read the full fuel update →</ThemedText>
       </Pressable></Link>}
       {sources.map((url, index) => <Pressable key={url} accessibilityRole="link" accessibilityLabel={`Open source ${index + 1}: ${new URL(url).hostname}`}

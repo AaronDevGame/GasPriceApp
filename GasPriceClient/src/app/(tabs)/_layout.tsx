@@ -5,7 +5,6 @@ import { FuelAdviceNotices } from '@/components/fuel-advice-notices';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/app-icon';
-import { FuelAdviceSummary } from '@/components/fuel-advice-summary';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -38,11 +37,7 @@ export default function TabLayout() {
           <View><ThemedText style={styles.brandName}>GasPrice</ThemedText><ThemedText style={styles.country}>PHILIPPINES</ThemedText></View>
         </View>
       </Link>
-<<<<<<< HEAD
-      <FuelAdviceSummary inHeader />
-=======
       <FuelAdviceNotices />
->>>>>>> 729c0fe (feat: open refueling advice from header notices)
       <View style={styles.links}>{destinations.map(item => {
         const route = state.routes.find(r => r.name === item.name);
         const selected = state.routes[state.index].name === item.name;
@@ -67,15 +62,6 @@ export default function TabLayout() {
   </View>;
 }
 const styles = StyleSheet.create({
-<<<<<<< HEAD
-  nav: { backgroundColor: '#151A21', borderBottomWidth: 1, borderColor: '#2B3441', alignItems: 'center', paddingHorizontal: 20 },
-  navInner: { width: '100%', maxWidth: 1160, minHeight: 84, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  brandLink: { flexShrink: 0 }, brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandIcon: { backgroundColor: '#21334B', borderRadius: 12, padding: 10 },
-  brandName: { fontSize: 20, lineHeight: 25, fontWeight: '700' }, country: { fontSize: 9, lineHeight: 15, letterSpacing: 2, color: '#9DA9BA' },
-  links: { flexDirection: 'row', gap: 4 }, navLink: { alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 12, borderRadius: 10 },
-  navLabel: { fontSize: 11, lineHeight: 16 },
-=======
   mobileNotices: { paddingHorizontal: 16, paddingVertical: 8 },
   nav: { backgroundColor: '#151A21', borderBottomWidth: 1, borderColor: '#2B3441', alignItems: 'center', paddingHorizontal: 28 },
   navInner: { width: '100%', maxWidth: 1160, minHeight: 84, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', paddingVertical: 10 },
@@ -83,6 +69,6 @@ const styles = StyleSheet.create({
   brandIcon: { backgroundColor: '#21334B', borderRadius: 12, padding: 10 },
   brandName: { fontSize: 20, lineHeight: 25, fontWeight: '700' }, country: { fontSize: 9, lineHeight: 15, letterSpacing: 2, color: '#9DA9BA' },
   links: { flexDirection: 'row', gap: 4 }, navLink: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 12, borderRadius: 10 },
->>>>>>> 729c0fe (feat: open refueling advice from header notices)
+  navLabel: { fontSize: 11, lineHeight: 16 },
   navLinkActive: { backgroundColor: '#21334B' }, activeText: { color: '#76B4FF' }, inactiveText: { color: '#9DA9BA' },
 });

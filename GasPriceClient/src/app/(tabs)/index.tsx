@@ -13,13 +13,6 @@ import { FuelNewsHeadline } from '@/components/fuel-news-headline';
 import { DashboardAction } from '@/components/dashboard-action';
 import { AppIcon } from '@/components/app-icon';
 import { useLatestNews } from '@/news/use-latest-news';
-<<<<<<< HEAD
-import { FuelAdviceCard } from '@/components/fuel-advice-card';
-import { FuelAdviceSummary } from '@/components/fuel-advice-summary';
-import { useFuelAdvice } from '@/fuel/use-fuel-advice';
-import type { AdviceFuel } from '@/fuel/advice';
-=======
->>>>>>> 729c0fe (feat: open refueling advice from header notices)
 
 function asOf(value: string) {
   return new Date(value).toLocaleDateString('en-PH', {
@@ -79,7 +72,6 @@ export default function HomeScreen() {
             <AppIcon name="fuel" color="#76B4FF" />
             <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>
           </View>
-          {!(Platform.OS === 'web' && width >= 900) && <FuelAdviceSummary />}
           {news.item && <FuelNewsHeadline item={news.item} />}
           {news.loading && !news.item && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small" themeColor="textSecondary">Loading fuel news…</ThemedText></View>}
           {news.error && <View style={styles.loading}>
