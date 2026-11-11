@@ -1,5 +1,5 @@
 import { Link, Tabs } from 'expo-router';
-import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, useWindowDimensions, View, type PressableProps } from 'react-native';
 
 import { FuelAdviceNotices } from '@/components/fuel-advice-notices';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +14,12 @@ const destinations = [
   { name: 'news', href: '/news', title: 'News', icon: 'news' },
   { name: 'weekly-changes', href: '/weekly-changes', title: 'Weekly Changes', icon: 'changes' },
 ] as const;
+
+function DesktopNavLink({ selected, ...props }: Omit<PressableProps, 'style'> & { selected: boolean }) {
+  // Keep the style callback inside Pressable: Link's asChild slot merges styles as objects.
+  return <Pressable {...props}
+    style={({ hovered, pressed }) => [styles.navLink, (selected || hovered || pressed) && styles.navLinkActive]} />;
+}
 
 export default function TabLayout() {
   const theme = useTheme();
@@ -42,14 +48,14 @@ export default function TabLayout() {
         const route = state.routes.find(r => r.name === item.name);
         const selected = state.routes[state.index].name === item.name;
         return <Link key={item.name} href={item.href} asChild>
-          <Pressable accessibilityRole="link" accessibilityState={{ selected }} onPress={event => {
+          <DesktopNavLink selected={selected} accessibilityRole="link" accessibilityState={{ selected }} onPress={event => {
             if (!route) return;
             const emitted = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
             if (emitted.defaultPrevented) event.preventDefault();
-          }} style={({ hovered, pressed }) => [styles.navLink, (selected || hovered || pressed) && styles.navLinkActive]}>
+          }}>
             <AppIcon name={item.icon} color={selected ? '#76B4FF' : theme.textSecondary} />
             <ThemedText type="smallBold" style={[styles.navLabel, selected ? styles.activeText : styles.inactiveText]}>{item.title}</ThemedText>
-          </Pressable>
+          </DesktopNavLink>
         </Link>;
       })}</View>
     </View>
