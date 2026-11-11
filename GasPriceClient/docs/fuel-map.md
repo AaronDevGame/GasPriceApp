@@ -1,6 +1,6 @@
 # Fuel price map
 
-The Fuel Prices screen defaults to a map, with the existing company list available through its switch. Other screens and existing price feeds are unchanged. Default location is City of Manila, PSGC `1380600000`; browsing does not request location permission or call AI/geocoding.
+The Fuel Prices screen defaults to a map, with the existing company list available through its switch. Other screens and existing price feeds are unchanged. Default view fits the whole Philippines; browsing does not request location permission or call AI/geocoding.
 
 ## Required backend deployment
 
@@ -32,13 +32,15 @@ Google Cloud requires billing enabled. Native maps without map IDs use the Maps 
 
 ## Camera and rendering policy
 
-- Start by fitting the City of Manila boundary from the index.
+- Start by fitting the national bounds from the index.
 - Derive the navigation rectangle from the national dataset extent plus 0.25 degrees of padding. This is a navigation rectangle, not a newly traced administrative boundary.
-- Calculate minimum zoom from that extent and the map dimensions, recalculating on layout changes; maximum zoom is 18. Rotation and tilt are disabled.
+- Calculate minimum zoom from the national bounds with 35 pixels of padding and the map dimensions, recalculating on layout changes; maximum zoom is 18. Rotation and tilt are disabled.
 - Web uses Google camera restriction with a separately calculated overview minimum zoom.
 - Native requests Google bounds but also clamps camera centers during movement and verifies center/zoom at idle. Inspection of the pinned library found its legacy `setMapBoundaries` command is not forwarded on the Fabric path, so correctness does not depend on that command. Native enforcement can correct the camera during/after gestures and must be device-tested for smoothness.
 - Restriction applies to camera centers. Visible corners at overview can include surrounding sea/neighboring basemap land. We load only Philippine administrative polygons and Philippine city prices; we do not claim the basemap itself contains only Philippine tiles.
-- City detail starts at zoom 9 with no more than 160 bounding-box candidate cities. At wider scales, hide detailed polygons but keep price labels. Clicking/tapping the basemap at overview zooms toward the point, then starts normal viewport loading automatically.
+- Show one geographic level at a time: nationwide, Luzon/Visayas/Mindanao, regions, provinces / independent cities, then cities / municipalities. Thresholds are relative to the zoom needed to fit the national extent at the current canvas size: below +0.75 is nationwide, +0.75 island groups, +2 regions, +3.5 provinces, and +5 cities. City detail polygons also require no more than 160 candidate cities.
+- Tapping an area card highlights its member city polygons and keeps its card first in placement order. Wide views download geometry only for a selected area; the highlight is composed of the actual member polygons, not a new dissolved administrative outline. Selection details remain readable below the map. Pinch or map zoom controls advance through levels; changing levels removes highlights that do not belong to the current level.
+- Province membership uses `provinceId`. Highly urbanized / independent cities without a province stay separate at that level; geographic storage groups are not treated as administrative provinces. The island grouping uses the index's regions, including Negros Island Region in Visayas and BARMM in Mindanao.
 - MultiPolygons and holes are rendered without inventing coordinates. Exact rectangle/polygon intersection refines bounding-box candidates once geometry is available.
 - Polygon taps highlight their city; no tap is required to fetch visible prices. Existing provider attribution remains unobscured. NAMRIA/PSA/OCHA, CC BY 3.0 IGO, James Faeldon/MIT and modification notices are displayed below the map with source/license links.
 
@@ -46,7 +48,7 @@ Google Cloud requires billing enabled. Native maps without map IDs use the Maps 
 
 `MapDataCache` is shared for the app session. Index reads and each version/file download coalesce in flight. Public geometry uses a separate credential-free transport with HTTP caching enabled, four concurrent boundary downloads, a timeout, and a bounded Retry-After retry. Prices go through the existing native/browser authenticated client, preserving cookie/CSRF and token renewal behavior.
 
-After map movement ends, a 750 ms debounce uses the index to find intersecting file/city bounds. Missing detail files download; prices are fetched in one batch for missing/expired candidate city IDs, including overview candidates without downloading nationwide polygons. Once geometry is loaded, precise intersections filter the rendered cities. One file may contain other cities in the same manageable geographic group; only current visible cities are rendered.
+After map movement ends, a 750 ms debounce uses the index to find intersecting file/city bounds. Missing detail or selected-area files download; prices are fetched in one batch for missing/expired IDs of every member of each visible area. This includes members outside the viewport, so panning within an area does not change its reported range. Nationwide requests include all 1,642 cities, without downloading unselected nationwide polygons. Once geometry is loaded, precise intersections filter the rendered cities. One file may contain other cities in the same manageable geographic group; city detail renders visible cities; a selected aggregate highlights all of its members without drawing internal city outlines.
 
 Boundaries/features are keyed by boundary version + file/PSGC. Prices are keyed by version + PSGC + RON 91. The same caches are used for panning and tapping, including Imus. Revisiting a cached city publishes available polygons/prices synchronously before the debounce or network work. Missing-price results are cached until their backend expiry too. Caches persist through tab/screen remounts, but not app/process reloads. They are currently held in session memory rather than persistent storage; nationwide raw geometry totals about 7.2 MB before JavaScript object overhead.
 
@@ -56,9 +58,9 @@ Moving invalidates pending debounce work and the view generation. Shared in-flig
 
 ## Price labels
 
-Each card shows the city name (province/group name if the city name is missing), then gasoline **RON 91** and ordinary **DIESEL** ranges. Missing grades use `—`. Price scope remains city-level; province prices are not substituted for missing city reports.
+Each card shows the area name, gasoline **RON 91** and ordinary **DIESEL** ranges, and the number of cities / municipalities reporting out of the area's total. Area ranges combine the minimum and maximum of unexpired city reports for each grade. These are **reported ranges, not averages or full station coverage**. Missing grades use `—`; missing reports never contribute zero. Incomplete loads are marked explicitly. No province feed is substituted for missing city reports.
 
-Cards appear at every zoom independently of detailed geometry. Cards shrink modestly below zoom 10 and try alternate positions to avoid collisions. They may extend beyond small boundaries and overlap in dense views instead of disappearing. Selected cities and reported ranges receive placement priority. Cards avoid attribution, hide during movement and recompute at idle.
+Cards use the current geographic level, independently of detailed geometry. They try alternate positions within the visible area bounds, with the selected area and then reported prices receiving placement priority. Colliding cards are suppressed until zooming or panning creates room. Every city polygon remains selectable at detail scale; selecting one reserves its card's placement first. Cards avoid attribution, hide during movement and recompute at idle.
 
 ## Verification and remaining device checks
 
@@ -75,6 +77,6 @@ npx expo-doctor
 
 Expo Doctor currently passes 20/21 checks; the remaining check lists ten existing Expo SDK patch-version mismatches already present in the base lockfile. No existing dependency versions were changed for this feature. npm also reports 25 dependency audit findings; those require a separate dependency review rather than an automatic major-version update here.
 
-Map tests use the real pinned Imus/Manila geometry with controlled time/transport. They cover shared caches, in-flight deduplication, debounce cancellation, expiry, old response completion, logout invalidation, missing grades/scope rejection, independent failures, polygon holes/intersections, overview zoom and label collision priority. Exports verify web static rendering and Android/iOS JavaScript/Hermes bundling; they do **not** verify signed native binaries or the live Google SDK.
+Map tests use the real pinned Imus/Manila geometry with controlled time/transport. They cover shared caches, in-flight deduplication, debounce cancellation, expiry, old response completion, logout invalidation, missing grades/scope rejection, independent failures, polygon holes/intersections, responsive level thresholds, all three island groups and all 18 regions, independent-city handling, aggregate ranges and coverage, nationwide member loading, selected-area geometry, and collision suppression/selection priority. Exports verify web static rendering and Android/iOS JavaScript/Hermes bundling; they do **not** verify signed native binaries or the live Google SDK.
 
 Before release, use restricted real keys and the deployed backend to test live web tiles/authentication/labels and both native development builds on devices. Check drag/pinch inside the parent scroll view, camera correction smoothness at all edges, minimum zoom on different aspect ratios, text bitmap rendering on Android, iOS Google provider setup, polygon holes, attribution visibility, offline/resume, rapid Imus/Manila revisits, unavailable prices, and supported screen-reader behavior. Do not interpret successful bundling as device verification.

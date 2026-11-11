@@ -2,13 +2,15 @@
 
 ## [Unreleased]
 
+### Changed
+- Replace overlapping city cards with a zoom-based hierarchy: nationwide, island groups, regions, provinces / independent cities, then cities / municipalities. Start with the Philippines overview, aggregate unexpired city report ranges with coverage counts, highlight selected areas, and suppress colliding cards.
+
 ### Added
 - Add a Philippines-only Fuel Prices map with Google Maps adapters for Android, iOS and web, a City of Manila default, constrained camera and overview zoom, selectable city polygons and collision-aware RON 91 gasoline/diesel range labels. Batch visible-city prices after 750 ms, reuse session boundary/price caches across panning and selection, handle expiry and stale requests, preserve attribution and retain the company list behind a Map/List switch. Configure platform-restricted keys through ignored environment files.
 - Add a theme-aware “Should I gas up?” Overview card backed by `/fuel-advice`, with fuel/company selection, green/amber/gray recommendations, API explanations, confirmed 40-liter impact examples, Philippine effective times and source links. Refresh at validity boundaries, on foreground, and with dashboard refresh; keep forecast and default-time labels explicit.
 - Show province-level DOE ranges in local company comparisons and the Fuel Prices selector, with explicit coverage labels instead of presenting provincial prices as city-specific.
 
 ### Fixed
-- Show price cards at every zoom without requiring them to fit inside city boundaries. Add city names with province/group name fallback and compact overview sizing; retain cards when dense views overlap.
 - Place price boxes within the visible part of a city after panning, size boxes to their contents and prioritize reported ranges over unavailable placeholders. Show the no-prices message only after all visible cities report unavailable.
 - Hydrate map controllers from an already cached geographic index on focus, authentication changes and Map/List remounts. Publish the loaded index explicitly so successful cached reads cannot leave the screen stuck before MapRenderer mounts.
 

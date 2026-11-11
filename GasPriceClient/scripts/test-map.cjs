@@ -172,30 +172,73 @@ function harness(overrides = {}) {
   const feature = { ...polygon, geometry: { type: 'Polygon', coordinates: [polygon.geometry.coordinates[0]] } };
   const city = { ...imus, id: 'a', bbox: [0, 0, 10, 10], labelPoint: [5, 5] };
   const price = h.feed([city.id]).items[0];
-  const snap = { detail: true, viewport: { bounds: [0, 0, 10, 10], width: 1000, height: 800, zoom: 12 },
+  const snap = { index: { ...index, bbox: [-180, -80, 180, 80], cities: [city, { ...city, id: 'b' }] }, detail: true, viewport: { bounds: [0, 0, 10, 10], width: 1000, height: 800, zoom: 12 },
     cities: [city, { ...city, id: 'b' }], features: [{ ...feature, id: 'a' }, { ...feature, id: 'b' }],
     prices: new Map([['a', price], ['b', { ...price, cityId: 'b' }]]) };
   const labels = placeLabels(snap, 'b');
   assert.equal(labels[0].id, 'b', 'Selection has collision priority');
   assert.equal(labels.length, 2, 'Move the second box when another position fits');
   assert(Math.abs(labels[0].x - labels[1].x) >= (labels[0].width + labels[1].width) / 2 + 8 ||
-    Math.abs(labels[0].y - labels[1].y) >= geometry.LABEL_HEIGHT + 8);
+    Math.abs(labels[0].y - labels[1].y) >= labels[0].height + 8);
   const clipped = { bounds: [120.925, 14.36, 120.97, 14.393], width: 480, height: 500, zoom: 14 };
   assert(geometry.project(imus.labelPoint, clipped)[1] < 0, 'Original Imus label is offscreen after panning');
   const imusFeature = h.cache.feature(imus.id);
-  const imusSnapshot = { detail: true, viewport: clipped, cities: [imus], features: [imusFeature],
+  const imusSnapshot = { index, detail: true, viewport: clipped, cities: [imus], features: [imusFeature],
     prices: new Map([[imus.id, h.feed([imus.id]).items[0]]]) };
   const [relocated] = placeLabels(imusSnapshot, null);
   assert(relocated, 'A visible part of Imus still has room for both price ranges');
   const [x, y] = geometry.project(relocated.anchor, clipped);
   assert(x >= relocated.width / 2 + 7.99 && y >= relocated.height / 2 + 7.99);
-  assert.equal(placeLabels({ ...snap, detail: false, features: [], viewport: { ...snap.viewport, zoom: 6 } }, null).length, 2,
-    'Overview labels do not require detailed boundaries');
-  const tiny = { ...city, bbox: [4.999, 4.999, 5.001, 5.001] };
-  assert.equal(placeLabels({ ...snap, cities: [tiny], features: [] }, null).length, 1,
-    'Small cities still display prices');
-  const fallback = placeLabels({ ...snap, cities: [{ ...city, name: '', groupName: 'Cavite' }] }, null);
+  const hierarchy = h.load('hierarchy');
+  for (const [width, height] of [[400, 600], [1200, 560]]) {
+    const base = geometry.fitZoom(index.bbox, width, height, 35);
+    for (const [offset, expected] of [[0, 'country'], [1, 'island'], [2.5, 'region'], [4, 'province'], [5.5, 'city']]) {
+      assert.equal(hierarchy.mapLevel(index, { bounds: index.bbox, width, height, zoom: base + offset }), expected);
+    }
+  }
+  assert.equal(hierarchy.mapAreas(index, 'country').length, 1);
+  const islands = hierarchy.mapAreas(index, 'island');
+  assert.equal(islands.length, 3);
+  assert.equal(islands.reduce((sum, area) => sum + area.members.length, 0), index.cities.length);
+  assert.equal(hierarchy.areaIdentity(imus, 'province')[1], 'Cavite');
+  assert.equal(hierarchy.areaIdentity(manila, 'province')[0], manila.id, 'Manila has no administrative province');
+  assert.equal(hierarchy.mapAreas(index, 'region').length, 18);
+  const country = hierarchy.mapAreas(index, 'country')[0];
+  const ranges = hierarchy.areaPrices(country, { prices: new Map([
+    [imus.id, h.feed([imus.id]).items[0]],
+    [manila.id, { ...h.feed([manila.id]).items[0], gasoline: { minPrice: 40, maxPrice: 90, currency: 'PHP', unit: 'liter' }, diesel: null }],
+  ]) });
+  assert.equal(ranges.gasoline.minPrice, 40);
+  assert.equal(ranges.gasoline.maxPrice, 90);
+  assert.equal(ranges.diesel.minPrice, 50, 'Missing diesel reports do not contribute zero');
+  assert.equal(ranges.reported, 2);
+  assert.equal(ranges.complete, false);
+  const overview = { ...snap, index, detail: false, features: [], viewport: { bounds: index.bbox, width: 1200, height: 560,
+    zoom: geometry.fitZoom(index.bbox, 1200, 560, 35) } };
+  const countryLabels = placeLabels(overview, null);
+  assert.equal(countryLabels.length, 1, 'National overview shows a single card');
+  assert.equal(countryLabels[0].name, 'Philippines');
+  const denseCities = Array.from({ length: 30 }, (_, i) => ({ ...city, id: String(i), bbox: [4.99, 4.99, 5.01, 5.01] }));
+  const dense = { ...snap, index: { ...snap.index, cities: denseCities }, cities: denseCities,
+    prices: new Map(denseCities.map(c => [c.id, { ...price, cityId: c.id }])) };
+  const sparse = placeLabels(dense, '29');
+  assert.equal(sparse[0].id, '29', 'Selected card retains collision priority');
+  assert.equal(sparse.length, 1, 'Colliding city cards are suppressed');
+  const fallbackCity = { ...city, name: '', groupName: 'Cavite' };
+  const fallback = placeLabels({ ...snap, index: { ...snap.index, cities: [fallbackCity] }, cities: [fallbackCity] }, null);
   assert.equal(fallback[0].name, 'Cavite');
+  // Fetch all members of a visible area, including cities outside the viewport.
+  const national = harness();
+  const nc = new national.Controller(national.cache); nc.setAuthenticated(true); await nc.start();
+  nc.idle(overview.viewport, true); await national.advance(0);
+  assert.equal(national.calls.prices[0].length, index.cities.length);
+  assert.equal(national.calls.files.length, 0, 'Overview does not download unselected city polygons');
+  nc.select('island:Luzon');
+  const islandViewport = { ...overview.viewport, zoom: overview.viewport.zoom + 1 };
+  nc.idle(islandViewport, true); await national.advance(0); await national.flush();
+  assert(national.calls.files.length > 0, 'Selection loads highlight boundaries');
+  assert(nc.snapshot.features.every(f => hierarchy.areaIdentity(index.cities.find(c => c.id === f.id), 'island')[1] === 'Luzon'));
+  nc.dispose();
   console.log('PASS rectangle intersections, holes, camera zoom, exact price text and label collision/zoom policies');
 })().catch(error => { console.error(error); process.exitCode = 1; });
 

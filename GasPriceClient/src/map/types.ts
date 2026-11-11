@@ -2,7 +2,7 @@ export type Bounds = [number, number, number, number]; // west, south, east, nor
 export type Point = [number, number]; // longitude, latitude
 export type City = {
   id: string; name: string; level: 'City' | 'Mun'; cityClass: string | null;
-  regionId: string; provinceId: string | null; groupId: string; groupName: string;
+  regionId: string; regionName: string; provinceId: string | null; groupId: string; groupName: string;
   bbox: Bounds; labelPoint: Point; fileId: string;
 };
 export type GeographicIndex = {

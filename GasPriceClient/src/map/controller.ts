@@ -1,5 +1,6 @@
 import { MapDataCache, mapCache } from './cache';
-import { DETAIL_ZOOM, MAX_DETAIL_CITIES } from './geometry';
+import { MAX_DETAIL_CITIES } from './geometry';
+import { mapLevel, visibleAreas } from './hierarchy';
 import type { MapSnapshot, Viewport } from './types';
 
 export class MapController {
@@ -9,6 +10,7 @@ export class MapController {
   private generation = 0;
   private disposed = false;
   private authenticated = false;
+  private selected: string | null = null;
   private unsubscribe: () => void;
   constructor(private cache: MapDataCache = mapCache) { this.unsubscribe = cache.subscribe(() => this.publish()); }
   subscribe = (callback: () => void) => { this.listeners.add(callback); return () => { this.listeners.delete(callback); }; };
@@ -38,9 +40,9 @@ export class MapController {
   };
   retry = () => { if (this.snapshot.viewport) this.idle(this.snapshot.viewport, true); else void this.start(); };
   select = (id: string) => {
-    // Tap and pan share exactly the same feature and price caches, including in-flight work.
-    if (!this.cache.index?.cities.some(city => city.id === id)) return;
+    this.selected = id;
     this.publish();
+    if (this.snapshot.viewport && !this.snapshot.detail) this.idle(this.snapshot.viewport, true);
   };
   private async load(generation: number) {
     if (this.disposed || generation !== this.generation || !this.snapshot.viewport) return;
@@ -50,12 +52,15 @@ export class MapController {
       if (generation !== this.generation || this.disposed) return;
       const viewport = this.snapshot.viewport;
       const candidates = this.cache.cities(viewport);
-      const detail = viewport.zoom >= DETAIL_ZOOM && candidates.length <= MAX_DETAIL_CITIES;
-      // Wide views need only the index. Detailed boundaries and prices start automatically.
+      const detail = mapLevel(this.cache.index!, viewport) === 'city' && candidates.length <= MAX_DETAIL_CITIES;
+      const areas = visibleAreas(this.cache.index!, viewport);
+      const members = areas.flatMap(area => area.members);
+      const selected = areas.find(area => area.id === this.selected);
+      // Wide views load geometry only for the selected area; city detail loads visible boundaries.
       // A boundary failure must not prevent the independent batch price read (and vice versa).
       const results = await Promise.allSettled([
-        detail ? this.cache.loadBoundaries(candidates) : Promise.resolve(),
-        this.authenticated ? this.cache.loadPrices(candidates) : Promise.resolve(),
+        this.cache.loadBoundaries(detail ? candidates : selected?.members ?? []),
+        this.authenticated ? this.cache.loadPrices(members) : Promise.resolve(),
       ]);
       if (generation !== this.generation || this.disposed) return;
       this.publish();
@@ -71,10 +76,13 @@ export class MapController {
     const viewport = this.snapshot.viewport;
     const candidates = viewport ? this.cache.cities(viewport) : [];
     const cities = viewport ? this.cache.cities(viewport, true) : [];
-    const detail = !!viewport && viewport.zoom >= DETAIL_ZOOM && candidates.length <= MAX_DETAIL_CITIES;
+    const detail = !!viewport && !!this.cache.index && mapLevel(this.cache.index, viewport) === 'city' && candidates.length <= MAX_DETAIL_CITIES;
+    const areas = viewport && this.cache.index ? visibleAreas(this.cache.index, viewport) : [];
+    const members = areas.flatMap(area => area.members);
+    const selected = areas.find(area => area.id === this.selected);
     this.update({ index: this.cache.index, cities, detail,
-      features: detail ? cities.flatMap(city => this.cache.feature(city.id) ? [this.cache.feature(city.id)!] : []) : [],
-      prices: new Map(this.authenticated ? cities.flatMap(city => this.cache.price(city.id) ? [[city.id, this.cache.price(city.id)!] as const] : []) : []) });
+      features: (detail ? cities : selected?.members ?? []).flatMap(city => this.cache.feature(city.id) ? [this.cache.feature(city.id)!] : []),
+      prices: new Map(this.authenticated ? members.flatMap(city => this.cache.price(city.id) ? [[city.id, this.cache.price(city.id)!] as const] : []) : []) });
   }
   private update(patch: Partial<MapSnapshot>) {
     if (this.disposed) return;

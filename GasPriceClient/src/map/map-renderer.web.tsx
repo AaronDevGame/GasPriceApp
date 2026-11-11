@@ -2,15 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { cameraBounds, fitZoom, MAX_ZOOM, polygons } from './geometry';
+import { areaIdentity, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
 import { type MapLabel, placeLabels, rangeText } from './labels';
 import type { Bounds, MapRendererProps } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
-type LabelOverlay = google.maps.OverlayView & { labels: MapLabel[] };
+type LabelOverlay = google.maps.OverlayView & { labels: MapLabel[]; selected: string | null };
 function createLabels(onSelect: (id: string) => void) {
       class Labels extends google.maps.OverlayView {
         labels: MapLabel[] = [];
+        selected: string | null = null;
         private root = document.createElement('div');
         onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.overlayMouseTarget.appendChild(this.root); }
         draw() {
@@ -20,9 +22,9 @@ function createLabels(onSelect: (id: string) => void) {
             const point = projection.fromLatLngToDivPixel(new google.maps.LatLng(label.anchor[1], label.anchor[0]));
             const button = document.createElement('button');
             button.type = 'button';
-            button.setAttribute('aria-label', `${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}`);
-            button.style.cssText = `position:absolute;z-index:${this.labels.length - priority};left:${point?.x ?? 0}px;top:${point?.y ?? 0}px;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;background:#172332;color:white;border:1px solid #6CB4F8;border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;cursor:pointer;pointer-events:auto;font-variant-numeric:tabular-nums;`;
-            button.textContent = `${label.name}\n${rangeText(label.price.gasoline)}\n${rangeText(label.price.diesel)}`;
+            button.setAttribute('aria-label', `${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`);
+            button.style.cssText = `box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${this.labels.length - priority};left:${point?.x ?? 0}px;top:${point?.y ?? 0}px;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;background:#172332;color:white;border:2px solid ${label.id === this.selected ? '#FFD166' : '#6CB4F8'};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;cursor:pointer;pointer-events:auto;font-variant-numeric:tabular-nums;`;
+            button.textContent = `${label.name}\n${rangeText(label.price.gasoline)}\n${rangeText(label.price.diesel)}\n${label.coverage}`;
             button.onclick = () => onSelect(label.id);
             google.maps.OverlayView.preventMapHitsAndGesturesFrom(button);
             return button;
@@ -59,9 +61,9 @@ export default function MapRenderer(props: MapRendererProps) {
       if (!active || !host.current) return;
       const index = latest.current.snapshot.index!;
       const bounds = cameraBounds(index.bbox);
-      const manila = index.cities.find(city => city.id === index.defaultCityId)!;
+
       const instance = new google.maps.Map(host.current, {
-        center: { lat: manila.labelPoint[1], lng: manila.labelPoint[0] }, zoom: 12, maxZoom: MAX_ZOOM,
+        center: { lat: 12.8, lng: 122 }, zoom: 5, maxZoom: MAX_ZOOM,
         restriction: { latLngBounds: literalBounds(bounds), strictBounds: false },
         mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
         rotateControl: false, tilt: 0, heading: 0, gestureHandling: 'greedy',
@@ -80,15 +82,12 @@ export default function MapRenderer(props: MapRendererProps) {
         latest.current.onIdle({ bounds: [sw.lng(), sw.lat(), ne.lng(), ne.lat()], zoom: instance.getZoom() ?? 12,
           width: host.current.clientWidth, height: host.current.clientHeight });
       }));
-      listeners.push(instance.addListener('click', (event: google.maps.MapMouseEvent) => {
-        if (!latest.current.snapshot.detail && event.latLng) { instance.panTo(event.latLng); instance.setZoom(12); }
-      }));
       const updateSize = () => {
         if (!host.current?.clientWidth) return;
-        instance.setOptions({ minZoom: fitZoom(bounds, host.current.clientWidth, host.current.clientHeight) });
+        instance.setOptions({ minZoom: fitZoom(index.bbox, host.current.clientWidth, host.current.clientHeight, 35) });
       };
       resize = new ResizeObserver(updateSize); resize.observe(host.current); updateSize();
-      instance.fitBounds(literalBounds(manila.bbox), 35);
+      instance.fitBounds(literalBounds(index.bbox), 35);
       setReady(true);
     }).catch(() => { if (active) setError(true); });
     return () => {
@@ -102,23 +101,27 @@ export default function MapRenderer(props: MapRendererProps) {
   useEffect(() => {
     if (!ready || !map.current) return;
     shapes.current.forEach(shape => { google.maps.event.clearInstanceListeners(shape); shape.setMap(null); });
+    const level = props.snapshot.viewport ? mapLevel(props.snapshot.index!, props.snapshot.viewport) : 'country';
+    const ids = new Map(props.snapshot.index!.cities.map(city => [city.id, areaIdentity(city, level)[0]]));
     shapes.current = props.snapshot.features.flatMap(feature => polygons(feature.geometry).map(rings => {
+      const id = ids.get(feature.id) ?? feature.id;
       const shape = new google.maps.Polygon({ map: map.current,
         paths: rings.map(ring => ring.map(([lng, lat]) => ({ lat, lng }))),
-        strokeColor: feature.id === props.selected ? '#0466CB' : '#3F83BE', strokeWeight: feature.id === props.selected ? 2.5 : 1,
-        fillColor: '#348EF0', fillOpacity: feature.id === props.selected ? 0.33 : 0.12,
+        strokeColor: id === props.selected ? '#D38B00' : '#3F83BE', strokeWeight: level === 'city' ? (id === props.selected ? 2.5 : 1) : 0,
+        fillColor: id === props.selected ? '#FFD166' : '#348EF0', fillOpacity: id === props.selected ? 0.33 : 0.12,
       });
-      shape.addListener('click', () => latest.current.onSelect(feature.id));
+      shape.addListener('click', () => latest.current.onSelect(id));
       return shape;
     }));
-  }, [ready, props.snapshot.features, props.selected]);
+  }, [ready, props.snapshot.features, props.snapshot.index, props.snapshot.viewport, props.selected]);
   useEffect(() => {
     if (!overlay.current || !ready) return;
+    overlay.current.selected = props.selected;
     overlay.current.labels = moving ? [] : placeLabels(props.snapshot, props.selected);
     overlay.current.draw();
   }, [ready, moving, props.snapshot, props.selected]);
   return <View style={styles.fill}>
-    <div ref={host} aria-label="Philippine city fuel price map" style={{ height: '100%', width: '100%' }} />
+    <div ref={host} aria-label="Philippine fuel price map by geographic level" style={{ height: '100%', width: '100%' }} />
     {(!key || error || !ready) && <View style={styles.message}>
       <Text style={styles.text}>{!key ? 'The map is not available in this build.' : error ? 'The map could not load. Check your connection and retry.' : 'Loading map…'}</Text>
       {key && error && <Pressable accessibilityRole="button" onPress={() => setRetry(value => value + 1)} style={styles.retry}><Text style={styles.text}>Retry map</Text></Pressable>}

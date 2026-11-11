@@ -4,6 +4,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
 import { cameraBounds, fitZoom, MAX_ZOOM, midpoint, polygons } from './geometry';
+import { areaIdentity, mapLevel } from './hierarchy';
 import { placeLabels, rangeText } from './labels';
 import type { MapRendererProps, Point } from './types';
 
@@ -26,9 +27,8 @@ function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: Ma
   const initialized = useRef(false);
   const [failure, setFailure] = useState(false);
   const bounds = useMemo(() => cameraBounds(index.bbox), [index]);
-  const manila = index.cities.find(city => city.id === index.defaultCityId)!;
-  const center = useMemo(() => midpoint(manila.bbox), [manila]);
-  const minZoom = size.width ? fitZoom(bounds, size.width, size.height) : 4;
+  const center = useMemo(() => midpoint(index.bbox), [index]);
+  const minZoom = size.width ? fitZoom(index.bbox, size.width, size.height, 35) : 4;
   const start = useCallback((region: Region) => {
     ++sequence.current; setMoving(true); onMove();
     const latitude = Math.max(bounds[1], Math.min(bounds[3], region.latitude));
@@ -66,45 +66,45 @@ function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: Ma
         map.current?.setMapBoundaries(coordinate([bounds[2], bounds[3]]), coordinate([bounds[0], bounds[1]]));
         if (!initialized.current) {
           initialized.current = true;
-          map.current?.setCamera({ center: coordinate(center), zoom: fitZoom(manila.bbox, size.width, size.height, 35), pitch: 0, heading: 0 });
+          map.current?.setCamera({ center: coordinate(center), zoom: fitZoom(index.bbox, size.width, size.height, 35), pitch: 0, heading: 0 });
         }
         void settle();
       } catch { setFailure(true); }
     });
     return () => cancelAnimationFrame(frame);
-  }, [ready, size, bounds, center, manila, settle]);
+  }, [ready, size, bounds, center, index, settle]);
   useEffect(() => () => { ++sequence.current; }, []);
   useEffect(() => {
     if (ready) return;
     const timeout = setTimeout(() => setFailure(true), 25000);
     return () => clearTimeout(timeout);
   }, [ready]);
+  const level = snapshot.viewport ? mapLevel(index, snapshot.viewport) : 'country';
+  const ids = useMemo(() => new Map(index.cities.map(city => [city.id, areaIdentity(city, level)[0]])), [index, level]);
   const shapes = useMemo(() => snapshot.features.flatMap(feature => polygons(feature.geometry).map((rings, part) => ({
-    id: feature.id, part, outer: rings[0].map(coordinate), holes: rings.slice(1).map(ring => ring.map(coordinate)),
-  }))), [snapshot.features]);
+    id: ids.get(feature.id) ?? feature.id, key: feature.id, part, outer: rings[0].map(coordinate), holes: rings.slice(1).map(ring => ring.map(coordinate)),
+  }))), [snapshot.features, ids]);
   const labels = moving ? [] : placeLabels(snapshot, selected);
   return <View style={styles.fill} onLayout={event => {
     const { width, height } = event.nativeEvent.layout;
     setSize(old => old.width === width && old.height === height ? old : { width, height });
   }}>
     <MapView ref={map} provider={PROVIDER_GOOGLE} style={styles.fill}
-      initialRegion={{ ...coordinate(center), latitudeDelta: manila.bbox[3] - manila.bbox[1], longitudeDelta: manila.bbox[2] - manila.bbox[0] }}
+      initialRegion={{ ...coordinate(center), latitudeDelta: index.bbox[3] - index.bbox[1], longitudeDelta: index.bbox[2] - index.bbox[0] }}
       minZoomLevel={minZoom} maxZoomLevel={MAX_ZOOM} rotateEnabled={false} pitchEnabled={false}
       toolbarEnabled={false} showsPointsOfInterests={false} showsBuildings={false}
-      onMapReady={() => setReady(true)} onRegionChange={start} onRegionChangeComplete={() => void settle()}
-      onPress={event => {
-        if (!snapshot.detail) map.current?.animateCamera({ center: event.nativeEvent.coordinate, zoom: 12 }, { duration: 250 });
-      }}>
-      {shapes.map(shape => <Polygon key={`${shape.id}:${shape.part}`} coordinates={shape.outer} holes={shape.holes}
-        tappable onPress={() => onSelect(shape.id)} strokeWidth={shape.id === selected ? 2.5 : 1}
-        strokeColor={shape.id === selected ? '#0466CB' : '#3F83BE'} fillColor={shape.id === selected ? '#348EF055' : '#348EF020'} />)}
-      {labels.map((label, priority) => <Marker zIndex={labels.length - priority} key={`${label.id}:${label.fontSize}:${label.name}:${rangeText(label.price.gasoline)}:${rangeText(label.price.diesel)}`}
+      onMapReady={() => setReady(true)} onRegionChange={start} onRegionChangeComplete={() => void settle()}>
+      {shapes.map(shape => <Polygon key={`${shape.key}:${shape.part}`} coordinates={shape.outer} holes={shape.holes}
+        tappable onPress={() => onSelect(shape.id)} strokeWidth={level === 'city' ? (shape.id === selected ? 2.5 : 1) : 0}
+        strokeColor={shape.id === selected ? '#D38B00' : '#3F83BE'} fillColor={shape.id === selected ? '#FFD16655' : '#348EF020'} />)}
+      {labels.map((label, priority) => <Marker zIndex={labels.length - priority} key={`${label.id}:${label.fontSize}:${label.name}:${rangeText(label.price.gasoline)}:${rangeText(label.price.diesel)}:${label.coverage}:${selected === label.id}`}
         coordinate={coordinate(label.anchor)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}
-        onPress={() => onSelect(label.id)} accessibilityLabel={`${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}`}>
-        <View style={[styles.label, { width: label.width, height: label.height }]}>
+        onPress={() => onSelect(label.id)} accessibilityLabel={`${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`}>
+        <View style={[styles.label, { width: label.width, height: label.height, borderColor: label.id === selected ? '#FFD166' : '#6CB4F8' }]}>
           <Text numberOfLines={1} allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{label.name}</Text>
           <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.gasoline)}</Text>
           <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.diesel)}</Text>
+          <Text allowFontScaling={false} style={[styles.price, { fontSize: 10 }]}>{label.coverage}</Text>
         </View>
       </Marker>)}
     </MapView>
