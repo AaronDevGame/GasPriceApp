@@ -46,14 +46,15 @@ export function FuelAdviceSummary({ inHeader = false }: { inHeader?: boolean }) 
           (hovered || pressed) && { borderColor: accent, backgroundColor: theme.backgroundSelected }]}>
         <View style={styles.row}>
           <View style={styles.fuelLabel}>
-            <Image source={fuelNozzles[fuel]} style={styles.nozzle} contentFit="contain" accessible={false} />
+            <Image source={fuelNozzles[fuel]} style={styles.nozzle} contentFit="contain"
+              tintColor={fuel === 'gasoline' ? '#64D99B' : '#F2CB45'} accessible={false} />
             <ThemedText style={styles.name}>{name}</ThemedText>
           </View>
           <ThemedText style={[styles.amount, { color: directionColor }]}>{arrow} {summary.amount}</ThemedText>
           <ThemedText themeColor="textSecondary" style={styles.chevron}>›</ThemedText>
         </View>
         <View style={styles.timingRow}>
-          {!!summary.timing && <ThemedText numberOfLines={1} style={styles.timing} themeColor="textSecondary">{summary.timing}</ThemedText>}
+          {!!summary.timing && <ThemedText style={styles.timing} themeColor="textSecondary">{summary.timing}</ThemedText>}
           <View style={[styles.badge, { backgroundColor: `${accent}18` }]}>
             <ThemedText numberOfLines={1} style={[styles.action, { color: accent }]}>{inHeader && result.error ? 'Unavailable' : summary.action}</ThemedText>
           </View>
@@ -84,11 +85,11 @@ const styles = StyleSheet.create({
   fuel: { flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0, borderWidth: 1, borderRadius: 12, padding: 10, gap: 4 },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   fuelLabel: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  nozzle: { width: 24, height: 24 },
+  nozzle: { width: 20, height: 20 },
   name: { fontSize: 13, lineHeight: 18, fontWeight: '700' },
   amount: { fontSize: 14, lineHeight: 20, fontWeight: '700', fontVariant: ['tabular-nums'] },
   chevron: { marginLeft: 'auto', fontSize: 20, lineHeight: 20 },
-  timingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  timingRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
   badge: { flexShrink: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
   action: { fontSize: 12, lineHeight: 18, fontWeight: '700' },
   timing: { flexShrink: 1, fontSize: 11, lineHeight: 16 },

@@ -64,7 +64,7 @@ export function adviceSummary(advice: FuelAdvice | null, loading: boolean, error
     : `₱${Math.min(Math.abs(min), Math.abs(max)).toFixed(2)}–${Math.max(Math.abs(min), Math.abs(max)).toFixed(2)}/L`;
   const date = new Date(evidence.effectiveAtUtc ?? `${evidence.effectiveDatePhilippines}T12:00:00+08:00`);
   const when = date.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' });
-  return { action, direction, amount, timing: `${confirmed ? '' : 'Estimated · '}${when}` };
+  return { action, direction, amount, timing: `${confirmed ? 'Effective' : 'Estimated effective'} ${when}` };
 }
 
 // Only calculate the example from agreed confirmed amounts; forecasts stay separate.
