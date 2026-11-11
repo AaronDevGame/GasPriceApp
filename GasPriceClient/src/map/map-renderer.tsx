@@ -104,7 +104,7 @@ function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: Ma
           <Text numberOfLines={1} allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{label.name}</Text>
           <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.gasoline)}</Text>
           <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.diesel)}</Text>
-          <Text allowFontScaling={false} style={[styles.price, { fontSize: 10 }]}>{label.coverage}</Text>
+          {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, { fontSize: 10 }]}>{label.coverage}</Text>}
         </View>
       </Marker>)}
     </MapView>

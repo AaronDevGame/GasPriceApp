@@ -58,7 +58,7 @@ Moving invalidates pending debounce work and the view generation. Shared in-flig
 
 ## Price labels
 
-Each card shows the area name, gasoline **RON 91** and ordinary **DIESEL** ranges, and the number of cities / municipalities reporting out of the area's total. Area ranges combine the minimum and maximum of unexpired city reports for each grade. These are **reported ranges, not averages or full station coverage**. Missing grades use `—`; missing reports never contribute zero. Incomplete loads are marked explicitly. No province feed is substituted for missing city reports.
+Each card shows the area name and gasoline **RON 91** and ordinary **DIESEL** ranges. Above City view, cards and selected-area details also show the number of cities / municipalities reporting out of the area's total. City view omits these counts. Area ranges combine the minimum and maximum of unexpired city reports for each grade. These are **reported ranges, not averages or full station coverage**. Missing grades use `—`; missing reports never contribute zero. Incomplete loads are marked explicitly. No province feed is substituted for missing city reports.
 
 Cards use the current geographic level, independently of detailed geometry. They try alternate positions within the visible area bounds, with the selected area and then reported prices receiving placement priority. Colliding cards are suppressed until zooming or panning creates room. Every city polygon remains selectable at detail scale; selecting one reserves its card's placement first. Cards avoid attribution, hide during movement and recompute at idle.
 

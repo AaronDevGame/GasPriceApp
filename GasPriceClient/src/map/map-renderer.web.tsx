@@ -24,7 +24,7 @@ function createLabels(onSelect: (id: string) => void) {
             button.type = 'button';
             button.setAttribute('aria-label', `${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`);
             button.style.cssText = `box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${this.labels.length - priority};left:${point?.x ?? 0}px;top:${point?.y ?? 0}px;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;background:#172332;color:white;border:2px solid ${label.id === this.selected ? '#FFD166' : '#6CB4F8'};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;cursor:pointer;pointer-events:auto;font-variant-numeric:tabular-nums;`;
-            button.textContent = `${label.name}\n${rangeText(label.price.gasoline)}\n${rangeText(label.price.diesel)}\n${label.coverage}`;
+            button.textContent = [label.name, rangeText(label.price.gasoline), rangeText(label.price.diesel), label.coverage].filter(Boolean).join('\n');
             button.onclick = () => onSelect(label.id);
             google.maps.OverlayView.preventMapHitsAndGesturesFrom(button);
             return button;

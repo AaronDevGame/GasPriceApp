@@ -53,7 +53,7 @@ export default function FuelMap() {
       {selection && prices && <View style={styles.selection}>
         <ThemedText type="smallBold">{selection.name}</ThemedText>
         <ThemedText type="small">RON 91 {rangeText(prices.gasoline)} · Diesel {rangeText(prices.diesel)}</ThemedText>
-        <ThemedText type="small">{prices.reported} of {prices.total} cities / municipalities reporting</ThemedText>
+        {level !== 'city' && <ThemedText type="small">{prices.reported} of {prices.total} cities / municipalities reporting</ThemedText>}
       </View>}
       {snapshot.loading && <View style={styles.loading}><ActivityIndicator size="small" /><ThemedText type="small">Updating map…</ThemedText></View>}
       {!authenticated && !authLoading && <ThemedText type="small">Reconnect from Overview to load city prices.</ThemedText>}

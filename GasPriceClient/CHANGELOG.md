@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Hide city reporting counts in City view map labels and selected-city details, and shorten labels to fit the remaining content.
 - Replace overlapping city cards with a zoom-based hierarchy: nationwide, island groups, regions, provinces / independent cities, then cities / municipalities. Start with the Philippines overview, aggregate unexpired city report ranges with coverage counts, highlight selected areas, and suppress colliding cards.
 
 ### Added

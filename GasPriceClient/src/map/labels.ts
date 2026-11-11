@@ -1,5 +1,5 @@
 import { pointAtPixel, project } from './geometry';
-import { areaPrices, visibleAreas, type MapArea } from './hierarchy';
+import { areaPrices, mapLevel, visibleAreas, type MapArea } from './hierarchy';
 import type { MapSnapshot, Point, PriceRange, Viewport } from './types';
 
 export const rangeText = (value: PriceRange | null) => value
@@ -37,6 +37,7 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null): Map
   if (!viewport) return [];
   const placed: MapLabel[] = [];
   if (!snapshot.index) return [];
+  const level = mapLevel(snapshot.index, viewport);
   const areas = visibleAreas(snapshot.index, viewport);
   const sorted = areas.map(area => ({ area, price: areaPrices(area, snapshot) })).sort((a, b) =>
     Number(b.area.id === selected) - Number(a.area.id === selected) ||
@@ -44,8 +45,9 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null): Map
   for (const { area, price } of sorted) {
     const name = area.name;
     const fontSize = 11;
-    const height = 78;
-    const coverage = `${price.reported}/${price.total} cities reporting${price.complete ? '' : ' · incomplete'}`;
+    const coverage = level === 'city' ? (price.complete ? '' : 'Incomplete') :
+      `${price.reported}/${price.total} cities reporting${price.complete ? '' : ' · incomplete'}`;
+    const height = coverage ? 78 : 62;
     const longestLine = Math.max(name.length, rangeText(price.gasoline).length, rangeText(price.diesel).length, coverage.length);
     const width = Math.min(viewport.width - 16, Math.max(130, longestLine * fontSize * 0.64 + 18));
     const positions = [...candidates(area, viewport, width, height)];
