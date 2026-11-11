@@ -43,10 +43,12 @@ export function FuelAdviceSummary({ inHeader = false }: { inHeader?: boolean }) 
           <ThemedText style={[styles.amount, { color: directionColor }]}>{arrow} {summary.amount}</ThemedText>
           <ThemedText themeColor="textSecondary" style={styles.chevron}>›</ThemedText>
         </View>
-        <View style={[styles.badge, { backgroundColor: `${accent}18` }]}>
-          <ThemedText style={[styles.action, { color: accent }]}>{summary.action}</ThemedText>
+        <View style={styles.timingRow}>
+          {!!summary.timing && <ThemedText numberOfLines={1} style={styles.timing} themeColor="textSecondary">{summary.timing}</ThemedText>}
+          <View style={[styles.badge, { backgroundColor: `${accent}18` }]}>
+            <ThemedText numberOfLines={1} style={[styles.action, { color: accent }]}>{inHeader && result.error ? 'Unavailable' : summary.action}</ThemedText>
+          </View>
         </View>
-        <ThemedText style={styles.timing} themeColor="textSecondary">{summary.timing}</ThemedText>
       </Pressable>;
     })}
     <Modal visible={selected !== null} transparent animationType="fade" onRequestClose={() => setSelected(null)}>
@@ -69,15 +71,16 @@ export function FuelAdviceSummary({ inHeader = false }: { inHeader?: boolean }) 
 const styles = StyleSheet.create({
   summary: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   header: { flex: 1, maxWidth: 520, minWidth: 300 },
-  headerFuel: { flexBasis: 140, padding: 10 },
-  fuel: { flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0, borderWidth: 1, borderRadius: 12, padding: 12, gap: 6 },
+  headerFuel: { flexBasis: 140, paddingVertical: 6 },
+  fuel: { flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0, borderWidth: 1, borderRadius: 12, padding: 10, gap: 4 },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   name: { fontSize: 13, lineHeight: 18, fontWeight: '700' },
   amount: { fontSize: 14, lineHeight: 20, fontWeight: '700', fontVariant: ['tabular-nums'] },
   chevron: { marginLeft: 'auto', fontSize: 20, lineHeight: 20 },
-  badge: { alignSelf: 'flex-start', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
+  timingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  badge: { flexShrink: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
   action: { fontSize: 12, lineHeight: 18, fontWeight: '700' },
-  timing: { fontSize: 11, lineHeight: 16 },
+  timing: { flexShrink: 1, fontSize: 11, lineHeight: 16 },
   overlay: { flex: 1, backgroundColor: '#000000AA', justifyContent: 'center', alignItems: 'center', padding: 12 },
   dialog: { width: '100%', maxWidth: 840, maxHeight: '95%', borderRadius: 18, overflow: 'hidden' },
   dialogHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, gap: 12 },

@@ -58,7 +58,7 @@ export default function TabLayout() {
 }
 const styles = StyleSheet.create({
   nav: { backgroundColor: '#151A21', borderBottomWidth: 1, borderColor: '#2B3441', alignItems: 'center', paddingHorizontal: 20 },
-  navInner: { width: '100%', maxWidth: 1160, minHeight: 84, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+  navInner: { width: '100%', maxWidth: 1160, minHeight: 84, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   brandLink: { flexShrink: 0 }, brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   brandIcon: { backgroundColor: '#21334B', borderRadius: 12, padding: 10 },
   brandName: { fontSize: 20, lineHeight: 25, fontWeight: '700' }, country: { fontSize: 9, lineHeight: 15, letterSpacing: 2, color: '#9DA9BA' },

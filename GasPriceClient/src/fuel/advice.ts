@@ -56,7 +56,7 @@ export function adviceSummary(advice: FuelAdvice | null, loading: boolean, error
   const evidence = confirmed ? advice.evidence[0] : advice?.evidence.length ? null : advice?.forecast;
   if (!evidence || !Number.isFinite(evidence.minChangePerLiter) || !Number.isFinite(evidence.maxChangePerLiter))
     return { action, direction: 'none', amount: '—', timing: advice?.reason === 'conflicting_adjustments'
-      ? 'Sources disagree' : 'Nationwide · No current adjustment' };
+      ? 'Sources disagree' : '' };
   const min = evidence.minChangePerLiter, max = evidence.maxChangePerLiter;
   const direction = max < 0 ? 'down' : min > 0 ? 'up' : min === 0 && max === 0 ? 'flat' : 'mixed';
   const amount = min === max ? `₱${Math.abs(min).toFixed(2)}/L`
@@ -64,11 +64,7 @@ export function adviceSummary(advice: FuelAdvice | null, loading: boolean, error
     : `₱${Math.min(Math.abs(min), Math.abs(max)).toFixed(2)}–${Math.max(Math.abs(min), Math.abs(max)).toFixed(2)}/L`;
   const date = new Date(evidence.effectiveAtUtc ?? `${evidence.effectiveDatePhilippines}T12:00:00+08:00`);
   const when = date.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' });
-  const time = evidence.effectiveAtUtc ? date.toLocaleTimeString('en-PH', {
-    timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit',
-  }) + ' PHT' : 'time unannounced';
-  const state = !confirmed ? 'Estimated' : Date.parse(evidence.effectiveAtUtc ?? '') <= Date.now() ? 'Now effective' : 'Confirmed';
-  return { action, direction, amount, timing: `${state} · ${when}, ${time}${evidence.isEffectiveTimeDefaulted ? ' (default)' : ''}` };
+  return { action, direction, amount, timing: `${confirmed ? '' : 'Estimated · '}${when}` };
 }
 
 // Only calculate the example from agreed confirmed amounts; forecasts stay separate.
