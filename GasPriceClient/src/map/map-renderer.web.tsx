@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { cameraBounds, fitZoom, MAX_ZOOM, polygons } from './geometry';
@@ -9,6 +9,7 @@ import type { Bounds, MapRendererProps } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
 type LabelOverlay = google.maps.OverlayView & { labels: MapLabel[]; selected: string | null };
+type AreaPolygon = { shape: google.maps.Polygon; areaId: string; hasOutline: boolean };
 function createLabels(onSelect: (id: string) => void) {
       class Labels extends google.maps.OverlayView {
         labels: MapLabel[] = [];
@@ -38,7 +39,7 @@ export default function MapRenderer(props: MapRendererProps) {
   const host = useRef<HTMLDivElement | null>(null);
   const latest = useRef(props);
   const map = useRef<google.maps.Map | null>(null);
-  const shapes = useRef<google.maps.Polygon[]>([]);
+  const shapes = useRef<AreaPolygon[]>([]);
   const overlay = useRef<LabelOverlay | null>(null);
   const [moving, setMoving] = useState(true);
   const [ready, setReady] = useState(false);
@@ -46,6 +47,9 @@ export default function MapRenderer(props: MapRendererProps) {
   const [retry, setRetry] = useState(0);
   const key = process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY;
   const version = props.snapshot.index!.version;
+  const index = props.snapshot.index!;
+  const level = props.snapshot.viewport ? mapLevel(index, props.snapshot.viewport) : 'country';
+  const areaIds = useMemo(() => new Map(index.cities.map(city => [city.id, areaIdentity(city, level)[0]])), [index, level]);
   useEffect(() => { latest.current = props; }, [props]);
   useEffect(() => {
     if (!key || !host.current) return;
@@ -93,27 +97,40 @@ export default function MapRenderer(props: MapRendererProps) {
     return () => {
       active = false; resize?.disconnect(); listeners.forEach(listener => listener.remove());
       overlay.current?.setMap(null); overlay.current = null;
-      shapes.current.forEach(shape => { google.maps.event.clearInstanceListeners(shape); shape.setMap(null); }); shapes.current = [];
       map.current = null;
       if (callbacks.gm_authFailure === authFailure) callbacks.gm_authFailure = previousAuthFailure;
     };
   }, [key, version, retry]);
   useEffect(() => {
     if (!ready || !map.current) return;
-    shapes.current.forEach(shape => { google.maps.event.clearInstanceListeners(shape); shape.setMap(null); });
-    const level = props.snapshot.viewport ? mapLevel(props.snapshot.index!, props.snapshot.viewport) : 'country';
-    const ids = new Map(props.snapshot.index!.cities.map(city => [city.id, areaIdentity(city, level)[0]]));
-    shapes.current = props.snapshot.features.flatMap(feature => polygons(feature.geometry).map(rings => {
-      const id = ids.get(feature.id) ?? feature.id;
-      const shape = new google.maps.Polygon({ map: map.current,
-        paths: rings.map(ring => ring.map(([lng, lat]) => ({ lat, lng }))),
-        strokeColor: id === props.selected ? '#D38B00' : '#3F83BE', strokeWeight: level === 'city' ? (id === props.selected ? 2.5 : 1) : 0,
-        fillColor: id === props.selected ? '#FFD166' : '#348EF0', fillOpacity: id === props.selected ? 0.33 : 0.12,
+    shapes.current = props.snapshot.features.map(feature => {
+      const areaId = areaIds.get(feature.id) ?? feature.id;
+      // A Maps polygon accepts disjoint outer rings and oppositely wound holes.
+      const shape = new google.maps.Polygon({
+        map: map.current, clickable: true,
+        paths: polygons(feature.geometry).flatMap(rings => rings.map(ring => ring.map(([lng, lat]) => ({ lat, lng })))),
       });
-      shape.addListener('click', () => latest.current.onSelect(id));
-      return shape;
-    }));
-  }, [ready, props.snapshot.features, props.snapshot.index, props.snapshot.viewport, props.selected]);
+      shape.addListener('click', () => latest.current.onSelect(areaId));
+      return { shape, areaId, hasOutline: feature.id === areaId };
+    });
+    return () => {
+      for (const { shape } of shapes.current) {
+        google.maps.event.clearInstanceListeners(shape);
+        shape.setMap(null);
+      }
+      shapes.current = [];
+    };
+  }, [ready, props.snapshot.features, areaIds]);
+  useEffect(() => {
+    for (const { shape, areaId, hasOutline } of shapes.current) {
+      const selected = areaId === props.selected;
+      shape.setOptions({
+        strokeColor: selected ? '#D38B00' : '#3F83BE', strokeWeight: hasOutline ? (selected ? 2.5 : 1) : 0,
+        fillColor: selected ? '#FFD166' : '#348EF0', fillOpacity: selected ? 0.33 : 0.12,
+        zIndex: selected ? 1 : 0,
+      });
+    }
+  }, [ready, props.snapshot.features, areaIds, props.selected]);
   useEffect(() => {
     if (!overlay.current || !ready) return;
     overlay.current.selected = props.selected;

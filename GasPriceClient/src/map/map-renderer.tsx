@@ -3,12 +3,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
-import { cameraBounds, fitZoom, MAX_ZOOM, midpoint, polygons } from './geometry';
+import { cameraBounds, fitZoom, intersects, MAX_ZOOM, midpoint, polygons } from './geometry';
 import { areaIdentity, mapLevel } from './hierarchy';
 import { placeLabels, rangeText } from './labels';
-import type { MapRendererProps, Point } from './types';
+import type { Bounds, MapRendererProps, Point } from './types';
 
 const coordinate = ([longitude, latitude]: Point) => ({ latitude, longitude });
+function ringBounds(ring: Point[]): Bounds {
+  const bounds: Bounds = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [lng, lat] of ring) {
+    bounds[0] = Math.min(bounds[0], lng);
+    bounds[1] = Math.min(bounds[1], lat);
+    bounds[2] = Math.max(bounds[2], lng);
+    bounds[3] = Math.max(bounds[3], lat);
+  }
+  return bounds;
+}
 export default function MapRenderer(props: MapRendererProps) {
   const [attempt, setAttempt] = useState(0);
   const configured = Constants.expoConfig?.extra?.fuelMap?.[Platform.OS === 'ios' ? 'iosConfigured' : 'androidConfigured'];
@@ -81,9 +91,22 @@ function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: Ma
   }, [ready]);
   const level = snapshot.viewport ? mapLevel(index, snapshot.viewport) : 'country';
   const ids = useMemo(() => new Map(index.cities.map(city => [city.id, areaIdentity(city, level)[0]])), [index, level]);
-  const shapes = useMemo(() => snapshot.features.flatMap(feature => polygons(feature.geometry).map((rings, part) => ({
-    id: ids.get(feature.id) ?? feature.id, key: feature.id, part, outer: rings[0].map(coordinate), holes: rings.slice(1).map(ring => ring.map(coordinate)),
-  }))), [snapshot.features, ids]);
+  const shapes = useMemo(() => snapshot.features.flatMap(feature => {
+    const areaId = ids.get(feature.id) ?? feature.id;
+    return polygons(feature.geometry).map((rings, part) => ({
+      key: `${feature.id}:${part}`, areaId, hasOutline: areaId === feature.id, bbox: ringBounds(rings[0]),
+      outer: rings[0].map(coordinate), holes: rings.slice(1).map(ring => ring.map(coordinate)),
+    }));
+  }), [snapshot.features, ids]);
+  // Native Maps needs one overlay per separate island. Mount only the visible parts.
+  const visibleBounds = snapshot.viewport?.bounds;
+  const polygonOverlays = useMemo(() => shapes.filter(shape => visibleBounds && intersects(shape.bbox, visibleBounds)).map(shape => {
+    const highlighted = shape.areaId === selected;
+    return <Polygon key={shape.key} coordinates={shape.outer} holes={shape.holes}
+      tappable onPress={() => onSelect(shape.areaId)} strokeWidth={shape.hasOutline ? (highlighted ? 2.5 : 1) : 0}
+      zIndex={highlighted ? 1 : 0} strokeColor={highlighted ? '#D38B00' : '#3F83BE'}
+      fillColor={highlighted ? '#FFD16655' : '#348EF020'} />;
+  }), [shapes, visibleBounds, selected, onSelect]);
   const labels = moving ? [] : placeLabels(snapshot, selected);
   return <View style={styles.fill} onLayout={event => {
     const { width, height } = event.nativeEvent.layout;
@@ -94,9 +117,7 @@ function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: Ma
       minZoomLevel={minZoom} maxZoomLevel={MAX_ZOOM} rotateEnabled={false} pitchEnabled={false}
       toolbarEnabled={false} showsPointsOfInterests={false} showsBuildings={false}
       onMapReady={() => setReady(true)} onRegionChange={start} onRegionChangeComplete={() => void settle()}>
-      {shapes.map(shape => <Polygon key={`${shape.key}:${shape.part}`} coordinates={shape.outer} holes={shape.holes}
-        tappable onPress={() => onSelect(shape.id)} strokeWidth={level === 'city' ? (shape.id === selected ? 2.5 : 1) : 0}
-        strokeColor={shape.id === selected ? '#D38B00' : '#3F83BE'} fillColor={shape.id === selected ? '#FFD16655' : '#348EF020'} />)}
+      {polygonOverlays}
       {labels.map((label, priority) => <Marker zIndex={labels.length - priority} key={`${label.id}:${label.fontSize}:${label.name}:${rangeText(label.price.gasoline)}:${rangeText(label.price.diesel)}:${label.coverage}:${selected === label.id}`}
         coordinate={coordinate(label.anchor)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}
         onPress={() => onSelect(label.id)} accessibilityLabel={`${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`}>

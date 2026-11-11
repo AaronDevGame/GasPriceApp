@@ -64,7 +64,7 @@ export default function FuelMap() {
       <ThemedText type="small" themeColor="textSecondary">Top: gasoline RON 91 · Bottom: diesel · PHP per liter · — unavailable</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">Area ranges combine the lowest–highest reported city prices, not averages. Coverage varies; individual station prices vary.</ThemedText>
       <Pressable accessibilityRole="link" accessibilityLabel="Boundary source and license" onPress={() => void Linking.openURL('https://github.com/faeldon/philippines-json-maps')}>
-        <ThemedText style={styles.attribution}>Boundaries: NAMRIA / PSA through OCHA COD-AB · CC BY 3.0 IGO · James Faeldon · MIT. Regrouped / ring orientation normalized by GasPriceApp.</ThemedText>
+        <ThemedText style={styles.attribution}>Boundaries: NAMRIA / PSA through OCHA COD-AB · CC BY 3.0 IGO · James Faeldon · MIT. GasPriceApp regrouped city boundaries, normalized ring orientation, and merged and simplified area outlines.</ThemedText>
       </Pressable>
       <Pressable accessibilityRole="link" onPress={() => void Linking.openURL('https://creativecommons.org/licenses/by/3.0/igo/legalcode')}>
         <ThemedText style={styles.attribution}>Boundary license ↗</ThemedText>

@@ -34,7 +34,11 @@ function harness(overrides = {}) {
     const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
     vm.runInNewContext(code, { exports, Date: Clock, Map, Set, Promise, URL, console,
       setTimeout: (fn, delay = 0) => { const key = ++id; timers.set(key, { fn, at: now + delay }); return key; }, clearTimeout: key => timers.delete(key),
-      require: spec => spec === './api' ? { mapApi: api } : load(spec.replace('./', '')),
+      require: spec => {
+        if (spec === './api') return { mapApi: api };
+        if (spec.endsWith('.json')) return require(path.resolve(root, 'src/map', spec));
+        return load(spec.replace('./', ''));
+      },
     }, { filename: name });
     return exports;
   };
@@ -233,12 +237,48 @@ function harness(overrides = {}) {
   nc.idle(overview.viewport, true); await national.advance(0);
   assert.equal(national.calls.prices[0].length, index.cities.length);
   assert.equal(national.calls.files.length, 0, 'Overview does not download unselected city polygons');
-  nc.select('island:Luzon');
-  const islandViewport = { ...overview.viewport, zoom: overview.viewport.zoom + 1 };
-  nc.idle(islandViewport, true); await national.advance(0); await national.flush();
-  assert(national.calls.files.length > 0, 'Selection loads highlight boundaries');
-  assert(nc.snapshot.features.every(f => hierarchy.areaIdentity(index.cities.find(c => c.id === f.id), 'island')[1] === 'Luzon'));
+  assert.equal(nc.snapshot.features.length, 0, 'The initial national overview has no selected boundary');
+
+  const baguio = index.cities.find(city => city.name === 'City of Baguio');
+  const tuba = index.cities.find(city => city.name === 'Tuba' && city.groupName === 'Benguet');
+  const cebu = index.cities.find(city => city.groupName === 'Cebu' && city.name === 'City of Naga');
+  const davao = index.cities.find(city => city.name === 'City of Davao');
+  for (const [level, offset] of [['island', 1], ['region', 2.5], ['province', 4]]) {
+    nc.idle({ ...overview.viewport, zoom: overview.viewport.zoom + offset }, true);
+    const displayed = nc.snapshot.features;
+    const byId = new Map(displayed.map(f => [f.id, f]));
+    assert.deepEqual(new Set(byId.keys()), new Set(hierarchy.mapAreas(index, level).map(area => area.id)),
+      `Every ${level} must already have a tap target when the zoom level changes`);
+    for (const city of index.cities) {
+      const [areaId] = hierarchy.areaIdentity(city, level);
+      assert(geometry.containsFeature(byId.get(areaId), city.labelPoint), `${areaId} must still contain ${city.name}`);
+    }
+    for (const sample of [imus, cebu, davao, baguio, tuba]) {
+      const hits = displayed.filter(f => geometry.containsFeature(f, sample.labelPoint));
+      const expected = hierarchy.areaIdentity(sample, level)[0];
+      assert.deepEqual(Array.from(hits, f => f.id), [expected], `Tapping ${sample.name} selects only its ${level}`);
+      nc.select(expected);
+      assert.equal(placeLabels(nc.snapshot, expected)[0]?.id, expected, 'A selected polygon receives the matching price card');
+    }
+    assert(!displayed.some(f => geometry.containsFeature(f, [119.1, 15])), 'Offshore water should have no tap target');
+    if (level === 'province') {
+      const cavite = byId.get(hierarchy.areaIdentity(imus, level)[0]);
+      assert(geometry.polygons(cavite.geometry).some(rings =>
+        geometry.insidePolygon(imus.labelPoint, rings) && geometry.insidePolygon(bacoor.labelPoint, rings)),
+      'Adjacent cities share one province polygon with no internal city outline');
+      // Baguio is an independent city enclosed by Benguet. Each has its own selection target.
+      nc.idle({ ...overview.viewport, bounds: baguio.bbox, zoom: overview.viewport.zoom + offset });
+      assert(nc.snapshot.features.some(f => f.id === baguio.id));
+      assert(!nc.snapshot.features.some(f => f.id === cavite.id), 'Panning removes offscreen provinces');
+    }
+    await national.advance(750);
+    assert.equal(national.calls.files.length, 0, `Tapping a ${level} should not require detailed city downloads`);
+  }
+  nc.idle({ ...viewport, bounds: imus.bbox }, true); await national.advance(0);
+  assert(nc.snapshot.features.some(f => f.id === imus.id), 'Zooming into cities restores detailed city tap targets');
+  assert(national.calls.files.includes(imus.fileId));
   nc.dispose();
+  console.log('PASS land and card selection at island, region and province zooms, independent-city holes and city detail');
   console.log('PASS rectangle intersections, holes, camera zoom, exact price text and label collision/zoom policies');
 })().catch(error => { console.error(error); process.exitCode = 1; });
 

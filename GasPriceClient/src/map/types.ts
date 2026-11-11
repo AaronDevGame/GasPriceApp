@@ -12,7 +12,7 @@ export type GeographicIndex = {
 };
 export type PolygonGeometry = { type: 'Polygon'; coordinates: Point[][] } |
   { type: 'MultiPolygon'; coordinates: Point[][][] };
-export type Feature = { type: 'Feature'; id: string; properties: { cityId: string }; geometry: PolygonGeometry };
+export type Feature = { type: 'Feature'; id: string; properties: { cityId: string } | { areaId: string }; geometry: PolygonGeometry };
 export type BoundaryFile = { type: 'FeatureCollection'; features: Feature[] };
 export type PriceRange = { minPrice: number; maxPrice: number; currency: 'PHP'; unit: 'liter' };
 export type CityPrices = {
