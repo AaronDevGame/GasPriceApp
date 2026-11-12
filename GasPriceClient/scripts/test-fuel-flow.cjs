@@ -7,7 +7,6 @@ const ts = require('typescript');
 const range = value => ({ minPrice: value, maxPrice: value, currency: 'PHP', unit: 'liter' });
 const point = (date, value) => ({ dataAsOf: date, prices: { diesel: range(value), gasoline91: range(value), gasoline95: range(value) } });
 const feed = { items: [{ ...point('2026-09-28', 60), area: { level: 'province', name: 'Cebu', province: 'Cebu' } }] };
-const featured = { groups: ['Luzon', 'Visayas', 'Mindanao'].map(name => ({ name, items: [{ city: name + ' City', province: name, ...point('2026-09-28', 60) }] })) };
 function harness(options = {}) {
   const calls = [], effects = [], states = [], modules = new Map();
   let onForeground;
@@ -19,10 +18,6 @@ function harness(options = {}) {
     resume: async () => { calls.push('resume'); return options.resume ? options.resume() : auth.session; },
     request: async (url, init) => {
       calls.push({ url, init });
-      if (url === '/fuel-prices/featured') {
-        if (options.featuredFailure) throw new Error('Featured feed unavailable');
-        return options.featuredFeed ?? featured;
-      }
       if (url.startsWith('/fuel-prices/history')) return { items: [point('2026-09-28', 60), point('2026-09-27', 60)] };
       if (url.startsWith('/fuel-prices/doe?')) {
         if (options.doeFailure) throw new Error('DOE feed unavailable');
@@ -84,7 +79,7 @@ function harness(options = {}) {
 }
 async function settle(h) {
   for (let i = 0; i < 50; i++) {
-    if (!h.states[6]?.value) return;
+    if (!h.states[4]?.value) return;
     await new Promise(resolve => setTimeout(resolve, 5));
   }
   throw new Error('Flow did not settle');
@@ -127,64 +122,51 @@ async function settle(h) {
   assert.ok(offlineProvider.states[3].value.at(-1).message.includes('Session check failed'));
   console.log('PASS foreground provider: no blocking loading, duplicate-return coalescing, cleanup and offline screen preservation');
   const granted = harness(); granted.load('fuel/use-fuel-prices').useFuelPrices(); granted.effects[0](); await settle(granted);
-  assert.equal(granted.calls[0].url, '/fuel-prices/featured');
-  assert.ok(granted.calls.indexOf('permission') > 0);
+  assert.equal(granted.calls[0], 'permission');
+  assert.ok(!granted.calls.some(call => call.url === '/fuel-prices/featured'));
   const ai = granted.calls.find(call => call.url === '/ai/fuel-prices');
   assert.equal(ai.init.method, 'POST'); assert.equal(ai.init.body, JSON.stringify({ latitude: 10.3, longitude: 123.8 }));
   const local = granted.calls.find(call => call.url?.startsWith('/fuel-prices?'));
   assert.ok(granted.calls.indexOf(ai) < granted.calls.indexOf(local));
   assert.equal(new URLSearchParams(local.url.split('?')[1]).get('city'), 'Cebu City');
-  assert.equal(granted.states[3].value.prices[0].oilCompany, 'Petron');
-  assert.equal(granted.states[2].value.area.name, 'Cebu City');
-  assert.equal(granted.states[2].value.prices.gasoline91.minPrice, 60);
-  assert.equal(granted.states[2].value.prices.gasoline91.maxPrice, 64);
-  assert.equal(granted.states[0].value.groups.length, 3);
+  assert.equal(granted.states[1].value.prices[0].oilCompany, 'Petron');
+  assert.equal(granted.states[0].value.area.name, 'Cebu City');
+  assert.equal(granted.states[0].value.prices.gasoline91.minPrice, 60);
+  assert.equal(granted.states[0].value.prices.gasoline91.maxPrice, 64);
   assert.ok(!granted.calls.some(call => call.url?.startsWith('/fuel-prices/doe?')));
-  console.log('PASS featured GET, permission, coordinates POST, then local-area GET');
+  console.log('PASS permission, coordinates POST, then local-area GET');
   const fallback = harness({ doeInAi: false }); fallback.load('fuel/use-fuel-prices').useFuelPrices(); fallback.effects[0](); await settle(fallback);
-  assert.equal(fallback.states[3].value.prices[0].oilCompany, 'Shell');
+  assert.equal(fallback.states[1].value.prices[0].oilCompany, 'Shell');
   assert.ok(fallback.calls.some(call => call.url === '/fuel-prices/doe?latitude=10.3&longitude=123.8'));
   const failedDoe = harness({ doeInAi: false, doeFailure: true }); failedDoe.load('fuel/use-fuel-prices').useFuelPrices(); failedDoe.effects[0](); await settle(failedDoe);
-  assert.equal(failedDoe.states[2].value.area.name, 'Cebu City');
-  assert.equal(failedDoe.states[3].value, null);
+  assert.equal(failedDoe.states[0].value.area.name, 'Cebu City');
+  assert.equal(failedDoe.states[1].value, null);
   console.log('PASS DOE fallback displays saved rows without blocking local estimates');
   for (const options of [{ denied: true }, { gpsFailure: true }, { aiFailure: true }]) {
     const h = harness(options); h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
-    assert.equal(h.states[0].value.groups.length, 3);
-    assert.equal(h.states[2].value, null);
-    if (options.aiFailure) assert.ok(h.states[8].value.includes('location was received'));
-    if (options.denied) assert.ok(h.states[8].value.includes('access is blocked'));
+    assert.equal(h.states[0].value, null);
+    if (options.aiFailure) assert.ok(h.states[6].value.includes('location was received'));
+    if (options.denied) assert.ok(h.states[6].value.includes('access is blocked'));
     if (!options.aiFailure) assert.ok(!h.calls.some(call => call.url === '/ai/fuel-prices'));
     assert.ok(!h.calls.some(call => call.url?.startsWith('/fuel-prices?')));
   }
-  console.log('PASS denial, GPS and AI failures retain featured feed and skip location GET');
+  console.log('PASS denial, GPS and AI failures skip location GET');
   for (const reason of ['timeout', 'unavailable']) {
     const h = harness({ locationReason: reason });
     h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
-    assert.ok(h.states[8].value.includes(reason === 'timeout' ? 'timed out' : 'could not determine'));
-    assert.equal(h.states[6].value, false);
+    assert.ok(h.states[6].value.includes(reason === 'timeout' ? 'timed out' : 'could not determine'));
+    assert.equal(h.states[4].value, false);
     assert.ok(!h.calls.some(call => call.url === '/ai/fuel-prices'));
   }
   console.log('PASS location timeout and positioning failure show distinct recovery messages');
   const denied = harness({ denied: true }); const screen = denied.load('fuel/use-fuel-prices').useFuelPrices(); denied.effects[0](); await settle(denied);
   const before = denied.calls.length; screen.refresh(); await settle(denied);
-  assert.ok(denied.calls.slice(before).some(call => call.url === '/fuel-prices/featured'));
+  assert.ok(!denied.calls.slice(before).some(call => call.url === '/fuel-prices/featured'));
   assert.ok(!denied.calls.slice(before).includes('permission'));
   await screen.signOut(); assert.ok(denied.calls.includes('logout'));
   const cancelled = harness(); cancelled.load('fuel/use-fuel-prices').useFuelPrices(); cancelled.effects[0]()();
   await new Promise(resolve => setTimeout(resolve, 5)); assert.ok(!cancelled.calls.includes('permission'));
-  console.log('PASS featured refresh, logout and startup cancellation');
-  for (const groups of [
-    ['Luzon', 'Visayas', 'Mindanao'].map(name => ({ name, items: [] })),
-    [{ name: 'Luzon', items: featured.groups[0].items }, { name: 'Visayas', items: [] }, { name: 'Mindanao', items: [] }],
-    featured.groups,
-  ]) {
-    const h = harness({ denied: true, featuredFeed: { groups } });
-    h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
-    assert.equal(h.states[0].value.groups.reduce((count, group) => count + group.items.length, 0),
-      groups.reduce((count, group) => count + group.items.length, 0));
-  }
-  console.log('PASS empty, partial and full featured responses');
+  console.log('PASS refresh without featured fetch, logout and startup cancellation');
   const api = granted.load('fuel/api');
   assert.equal(api.doeCoverageLabel({ scope: 'province', city: 'Boac', province: 'Marinduque' }),
     'Marinduque province-level DOE range');
@@ -208,7 +190,7 @@ async function settle(h) {
   const changes = api.meaningfulUpdates(Array.from({ length: 8 }, (_, i) => point(`2026-09-${28-i}`, 60+i)));
   assert.equal(changes.length, 5); assert.equal(changes[0].dataAsOf, '2026-09-28');
   assert.equal(api.formatPrice(range(null)), 'Not available');
-  assert.equal(api.formatPrice(granted.states[2].value.prices.gasoline91), '₱60.00–₱64.00');
+  assert.equal(api.formatPrice(granted.states[0].value.prices.gasoline91), '₱60.00–₱64.00');
   console.log('PASS unchanged history, baseline requirement, newest-first five-change limit');
   const code = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, '../src/fuel/location.web.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   for (const result of ['allowed', 'denied', 'unavailable', 'timeout']) {

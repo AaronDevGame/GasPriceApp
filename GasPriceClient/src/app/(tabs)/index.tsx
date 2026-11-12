@@ -1,13 +1,13 @@
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { LocalPriceBoard } from '@/components/local-price-board';
 import { useTheme } from '@/hooks/use-theme';
-import { formatPrice, type Prices, type FeaturedFuelPrice } from '@/fuel/api';
+import { formatPrice, type Prices } from '@/fuel/api';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
 import { FuelNewsHeadline } from '@/components/fuel-news-headline';
 import { DashboardAction } from '@/components/dashboard-action';
@@ -36,20 +36,10 @@ function PriceGrid({ prices }: { prices: Prices }) {
     })}
   </View>;
 }
-function FeaturedPriceCard({ item }: { item: FeaturedFuelPrice }) {
-  return <ThemedView type="backgroundElement" style={styles.card}>
-    <ThemedText style={styles.area}>{item.city}, {item.province}</ThemedText>
-    <ThemedText type="small" themeColor="textSecondary">DOE data as of {asOf(item.dataAsOf)} · Report week {item.reportWeekStart} to {item.reportWeekEnd}</ThemedText>
-    <PriceGrid prices={item.prices} />
-    <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(item.source.url)} style={styles.sourceLink}><ThemedText type="smallBold" style={styles.accent}>View DOE source ↗</ThemedText></Pressable>
-  </ThemedView>;
-}
-
 export default function HomeScreen() {
   const fuel = useFuelPrices();
   const news = useLatestNews();
   const { width } = useWindowDimensions();
-  const wide = width >= 1000;
   const theme = useTheme();
   const [refreshing, setRefreshing] = useState(false);
   const refreshHint = Platform.OS === 'web' ? 'Reload this page to reconnect or update prices.' : 'Pull down to reconnect or update prices.';
@@ -91,19 +81,8 @@ export default function HomeScreen() {
           </ThemedView>
           {!fuel.authenticated && !fuel.busy && !fuel.error && <ThemedText>You are signed out. {refreshHint}</ThemedText>}
           {fuel.error && <ThemedText accessibilityRole="alert">{fuel.error} {refreshHint}</ThemedText>}
-          {fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">{fuel.featured ? 'Updating prices…' : 'Loading featured prices…'}</ThemedText></View>}
+          {fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">Updating prices…</ThemedText></View>}
           {fuel.localItem && <LocalPriceBoard item={fuel.localItem} doePrices={fuel.doePrices} />}
-          <View style={styles.history}>
-            <ThemedText style={styles.area}>Fuel prices across the Philippines</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">Featured DOE city prices are examples, not prices near you.</ThemedText>
-            {fuel.featuredError && <ThemedText accessibilityRole="alert">Featured prices could not be updated. Pull down or reload to retry.</ThemedText>}
-            {fuel.featured?.groups.map(group => <View key={group.name} style={styles.history}>
-              <ThemedText style={styles.area}>{group.name}</ThemedText>
-              {group.items.length ? <View style={[styles.featuredGrid, wide && styles.featuredGridWide]}>{group.items.map(item =>
-                <View key={`${item.city}-${item.province}`} style={wide ? styles.featuredColumn : undefined}><FeaturedPriceCard item={item} /></View>)}</View> :
-                <ThemedText type="small" themeColor="textSecondary">No recent DOE prices for the featured cities.</ThemedText>}
-            </View>)}
-          </View>
           {fuel.localItem && <View style={styles.history}>
             <ThemedText style={styles.area}>Recent updates</ThemedText>
             {fuel.updates.length ? <>
@@ -133,6 +112,5 @@ const styles = StyleSheet.create({
   prices: { flexDirection: 'row', gap: 12, marginTop: 8 }, pricesCompact: { gap: 8 }, price: { flex: 1, minWidth: 0, gap: 4 },
   priceCaptionCompact: { fontSize: 12, lineHeight: 18 }, priceLabelNarrow: { minHeight: 36 },
   amount: { fontSize: 24, lineHeight: 32, fontWeight: '700', flexGrow: 1, fontVariant: ['tabular-nums'] },
-  history: { gap: 16, marginTop: 8 }, featuredGrid: { gap: 12 }, featuredGridWide: { flexDirection: 'row', flexWrap: 'wrap' },
-  featuredColumn: { flexBasis: '48%', flexGrow: 1, minWidth: 0 }, sourceLink: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  history: { gap: 16, marginTop: 8 },
 });

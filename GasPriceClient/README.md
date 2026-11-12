@@ -111,15 +111,15 @@ the same HTTPS origin and API route handlers.
 On launch the app restores or silently creates a guest session without asking for
 any name or input. Native protected calls use Bearer plus `X-App-Instance-Id`;
 browser secrets remain in HttpOnly cookies with CSRF protection on mutations.
-The initial `GET /fuel-prices/featured` shows recent stored DOE city prices in
-Luzon, Visayas, and Mindanao groups before requesting foreground location
-permission (Expo on native; browser geolocation on web).
+The Overview page requests foreground location permission after authentication
+(Expo on native; browser geolocation on web). Featured nationwide prices are
+currently hidden, and Overview does not call `GET /fuel-prices/featured`.
 On permission grant, latitude/longitude are sent to `POST /ai/fuel-prices`, then
 its resolved city/province/region are passed to `GET /fuel-prices` for the local
 result. The general cache entries from that response are not shown. When DOE
 supplies the local research result, the app also shows its city-level company
 prices by fuel grade and links to the weekly DOE PDF; these rows do not identify
-individual stations. Denial or location failure keeps the featured feed visible.
+individual stations. Denial or location failure leaves city selection available.
 Browser geolocation needs HTTPS or localhost. Native permission text
 is configured in `app.json`; rebuild native clients after adding the module.
 See the [SDK 57 location docs](https://docs.expo.dev/versions/v57.0.0/sdk/location/).

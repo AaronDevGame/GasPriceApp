@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Remove the featured “Fuel prices across the Philippines” section from Overview and stop fetching featured prices on launch and refresh.
 - Restore the compact desktop header height and show each adjustment date to the left of its refueling badge; keep effective-time and default-time details in the expanded advice.
 - Hide city reporting counts in City view map labels and selected-city details, and shorten labels to fit the remaining content.
 - Replace overlapping city cards with a zoom-based hierarchy: nationwide, island groups, regions, provinces / independent cities, then cities / municipalities. Start with the Philippines overview, aggregate unexpired city report ranges with coverage counts, highlight selected areas, and suppress colliding cards.

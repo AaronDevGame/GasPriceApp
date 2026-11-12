@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/auth/auth-provider';
 import { errorMessage } from '@/auth/http';
-import { getFeaturedPrices, getHistory, refreshLocation, type Coordinates, type DoeFuelPriceFeed, type FeaturedFuelPriceFeed, type FeedItem, type PricePoint } from './api';
+import { getHistory, refreshLocation, type Coordinates, type DoeFuelPriceFeed, type FeedItem, type PricePoint } from './api';
 import { requestLocation } from './location';
 import { locationErrorMessage } from './location-error';
 
 export function useFuelPrices() {
   const { session, loading: authLoading, error: authError, restore, logout } = useAuth();
-  const [featured, setFeatured] = useState<FeaturedFuelPriceFeed | null>(null);
-  const [featuredError, setFeaturedError] = useState(false);
   const [localItem, setLocalItem] = useState<FeedItem | null>(null);
   const [doePrices, setDoePrices] = useState<DoeFuelPriceFeed | null>(null);
   const [updates, setUpdates] = useState<PricePoint[]>([]);
@@ -31,15 +29,6 @@ export function useFuelPrices() {
       points => { if (ticket === version.current) setUpdates(points); },
       () => { if (ticket === version.current) setHistoryError(true); },
     );
-  }, []);
-
-  const loadFeatured = useCallback(async (ticket: number) => {
-    try {
-      const next = await getFeaturedPrices();
-      if (ticket === version.current) { setFeatured(next); setFeaturedError(false); }
-    } catch {
-      if (ticket === version.current) setFeaturedError(true);
-    }
   }, []);
 
   const locate = useCallback(async (ticket: number) => {
@@ -81,7 +70,7 @@ export function useFuelPrices() {
     try { await operation(ticket); } catch (failure) {
       if (ticket === version.current) {
         setError(errorMessage(failure));
-        setLocationNote('Featured prices are still available. Try refreshing.');
+        setLocationNote('Local prices could not be updated. Try refreshing.');
       }
     } finally {
       if (ticket === version.current) { running.current = false; setBusy(false); }
@@ -97,20 +86,18 @@ export function useFuelPrices() {
   useEffect(() => {
     if (!authenticated) return;
     void run(async ticket => {
-      await loadFeatured(ticket);
       if (ticket !== version.current || prompted.current) return;
       prompted.current = true;
-      // Give the saved-price screen a chance to render before the OS/browser prompt.
+      // Give the Overview screen a chance to render before the OS/browser prompt.
       await new Promise(resolve => setTimeout(resolve, 300));
       if (ticket === version.current) await locate(ticket);
     });
     return cancel;
-  }, [authenticated, run, loadFeatured, locate, cancel]);
+  }, [authenticated, run, locate, cancel]);
 
   const refresh = () => {
     if (!authenticated || authError) return restore();
     return run(async ticket => {
-      await loadFeatured(ticket);
       if (coordinates.current) {
         await locateWithSavedCoordinates(ticket);
       }
@@ -132,7 +119,7 @@ export function useFuelPrices() {
     cancel();
     await logout();
   };
-  return { featured, featuredError, localItem, doePrices, updates, historyError,
+  return { localItem, doePrices, updates, historyError,
     busy: busy || authLoading, error: authError ?? error,
     locationNote, authenticated, refresh, useLocation, signOut };
 }
