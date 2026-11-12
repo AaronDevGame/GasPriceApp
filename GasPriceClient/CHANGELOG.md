@@ -19,6 +19,7 @@
 - Move detailed refueling advice from Overview into a dismissible panel opened by the shared Gasoline and Diesel header notices, with the clicked fuel selected. Remove the dashboard introduction and keep mobile access above the tabs.
 
 ### Fixed
+- Restore flat green gasoline and yellow diesel nozzle icons and the “Effective” date prefix in the shared desktop and mobile header notices after switching away from the older summary component.
 - Resolve committed merge markers in the tab layout, Overview and advice card so the web export builds; retain shared header notices without duplicating Overview advice.
 - Share fuel advice across the header, dashboard and detail views; deduplicate and pace requests to respect the API cooldown, reuse valid results across tab changes and responsive remounts, and retain unexpired advice when background refreshes fail.
 - Place price boxes within the visible part of a city after panning, size boxes to their contents and prioritize reported ranges over unavailable placeholders. Show the no-prices message only after all visible cities report unavailable.

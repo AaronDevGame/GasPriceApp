@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -14,6 +15,11 @@ import { useLatestNews } from '@/news/use-latest-news';
 
 type HeaderFuel = Extract<AdviceFuel, 'gasoline' | 'diesel'>;
 
+const fuelNozzles = {
+  gasoline: require('@/assets/images/fuel-nozzles/gasoline-green.png'),
+  diesel: require('@/assets/images/fuel-nozzles/diesel-yellow.png'),
+};
+
 function AdviceNotice({ fuel, onOpen }: { fuel: HeaderFuel; onOpen: () => void }) {
   const theme = useTheme();
   const { advice, loading, error } = useFuelAdvice(fuel, null);
@@ -29,18 +35,22 @@ function AdviceNotice({ fuel, onOpen }: { fuel: HeaderFuel; onOpen: () => void }
   const dateLabel = date ? new Date(`${date}T12:00:00+08:00`).toLocaleDateString('en-PH', {
     month: 'short', day: 'numeric', timeZone: 'Asia/Manila',
   }) : null;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${change ?? ''} ${notice}. Open refueling advice`}
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${change ?? ''} ${dateLabel ? `Effective ${dateLabel}. ` : ''}${notice}. Open refueling advice`}
     accessibilityHint="Opens Should I gas up with this fuel selected"
     onPress={onOpen} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
     style={({ hovered, pressed }) => [styles.notice, { backgroundColor: theme.backgroundElement,
       borderColor: focused || hovered ? '#76B4FF' : theme.backgroundSelected }, pressed && { opacity: 0.75 }]}>
     <View style={styles.noticeRow}>
-      <ThemedText type="smallBold">{label}</ThemedText>
+      <View style={styles.fuelLabel}>
+        <Image source={fuelNozzles[fuel]} style={styles.nozzle} contentFit="contain"
+          tintColor={fuel === 'gasoline' ? '#64D99B' : '#F2CB45'} accessible={false} />
+        <ThemedText type="smallBold">{label}</ThemedText>
+      </View>
       {change && <ThemedText type="smallBold" style={{ color }}>{change}</ThemedText>}
       <ThemedText themeColor="textSecondary" style={styles.chevron}>›</ThemedText>
     </View>
     <View style={styles.noticeRow}>
-      {dateLabel && <ThemedText type="small" themeColor="textSecondary">{dateLabel}</ThemedText>}
+      {dateLabel && <ThemedText type="small" themeColor="textSecondary">Effective {dateLabel}</ThemedText>}
       <ThemedText type="smallBold" style={{ color }}>{notice}</ThemedText>
     </View>
   </Pressable>;
@@ -102,6 +112,8 @@ const styles = StyleSheet.create({
   notices: { flexDirection: 'row', flexGrow: 1, flexShrink: 1, gap: 10 },
   notice: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 8, gap: 3 },
   noticeRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
+  fuelLabel: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  nozzle: { width: 20, height: 20, flexShrink: 0 },
   chevron: { marginLeft: 'auto' },
   overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.65)', padding: 16 },
   panel: { width: '100%', maxWidth: 960, maxHeight: '100%', flexShrink: 1, borderRadius: 20, overflow: 'hidden' },
