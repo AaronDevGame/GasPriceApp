@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-11-13
+
 ### Added
 - Add versioned, attributed Philippine city/municipality GeoJSON and geographic index, plus authenticated batch map-price reads using confirmed RON 91 gasoline and ordinary diesel. Match PSGC boundaries to stored DOE cities without province/region fallback, external AI or geocoding; include explicit missing coverage, bounded requests, rate limits, cache metadata and a documented freshness policy.
 - Add public `GET /fuel-advice?fuelType=gasoline` with optional company selection and `gas_now`, `wait`, `neutral`, or `unknown` advice from structured confirmed news and existing DOE adjustments. Include source evidence, forecast context, UTC timing and bounded validity; handle date-only notices and conflicting sources conservatively.
@@ -14,6 +16,7 @@ All notable changes to this project will be documented in this file.
 - Add Codex-scoped DOE report lookup and extracted-job polling, a separate scheduled-task environment template, a credential-safe HTTP helper and a daily import runbook.
 
 ### Changed
+- Bump project and API version to `1.14.0`.
 - Default missing confirmed fuel-advice effective times to 06:00 Philippine time on the announced date, returned in UTC with `isEffectiveTimeDefaulted`. Prefer explicit announcement times and preserve the stated date; forecasts remain unconfirmed.
 - Require `CODEX_ADMIN_API_KEY` instead of `ADMIN_API_KEY` for externally extracted DOE imports. Return a polling URL under the same credential scope; leave other admin and news credentials separate. Configure matching Render/task secrets before enabling scheduled imports.
 
