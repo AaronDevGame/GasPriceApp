@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
 import { errorMessage } from '@/auth/http';
 import { ThemedText } from '@/components/themed-text';
+import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { ThemedView } from '@/components/themed-view';
 import { doeCoverageLabel, doeLocationLabel, getDoePriceBrowse, type DoeFuelPrice, type DoePriceBrowseFeed, type DoePriceLocation } from '@/fuel/api';
 import { useTheme } from '@/hooks/use-theme';
@@ -104,10 +105,9 @@ function FuelPriceList({ switchView }: { switchView: React.ReactNode }) {
 
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.page}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
-        refreshControl={Platform.OS === 'web' ? undefined : <RefreshControl refreshing={refreshing}
-          onRefresh={() => void load(selected ?? undefined, true)} enabled={authenticated && !loading}
-          tintColor={theme.text} colors={[theme.text]} progressBackgroundColor={theme.backgroundElement} />}>
+      <RefreshableScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
+        refreshing={refreshing} onRefresh={() => load(selected ?? undefined, true)}
+        refreshEnabled={authenticated && !loading}>
         <View style={styles.content}>
           <View style={styles.header}>
             <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>
@@ -117,7 +117,7 @@ function FuelPriceList({ switchView }: { switchView: React.ReactNode }) {
           {switchView}
           {!authenticated && !authLoading && <ThemedText accessibilityRole="alert">{authError ?? 'You are signed out. Reopen the Overview tab to reconnect.'}</ThemedText>}
           {(authLoading || loading) && <View style={styles.loading}><ActivityIndicator /><ThemedText>Loading DOE prices…</ThemedText></View>}
-          {error && <ThemedText accessibilityRole="alert">{error} {Platform.OS === 'web' ? 'Reload to retry.' : 'Pull down to retry.'}</ThemedText>}
+          {error && <ThemedText accessibilityRole="alert">{error} {Platform.OS === 'web' ? 'Pull down on a touch screen or reload to retry.' : 'Pull down to retry.'}</ThemedText>}
           {authenticated && !loading && feed?.locations.length === 0 &&
             <ThemedView type="backgroundElement" style={styles.card}>
               <ThemedText type="smallBold">No recent DOE prices are available yet.</ThemedText>
@@ -176,7 +176,7 @@ function FuelPriceList({ switchView }: { switchView: React.ReactNode }) {
             </>}
           </>}
         </View>
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   </ThemedView>;
 }

@@ -9,6 +9,7 @@
 - Replace overlapping city cards with a zoom-based hierarchy: nationwide, island groups, regions, provinces / independent cities, then cities / municipalities. Start with the Philippines overview, aggregate unexpired city report ranges with coverage counts, highlight selected areas, and suppress colliding cards.
 
 ### Added
+- Add touch pull-to-refresh on web for Overview, News, Weekly Changes and the Fuel Prices company list, with pull/release feedback and in-place data updates. Preserve map, nested scrolling and native refresh gestures.
 - Add clickable gasoline and diesel adjustment summaries in the desktop header and above mobile Overview news, with red increase / green decrease arrows, separate refuel or wait badges, confirmation and Philippine effective times, and detailed advice with sources.
 - Select an island group, region, province, or independent city by tapping its boundary or price card on the Fuel Prices map. The selected area shows a gold outline and its fuel price ranges.
 - Add a Philippines-only Fuel Prices map with Google Maps adapters for Android, iOS and web, a City of Manila default, constrained camera and overview zoom, selectable city polygons and collision-aware RON 91 gasoline/diesel range labels. Batch visible-city prices after 750 ms, reuse session boundary/price caches across panning and selection, handle expiry and stale requests, preserve attribution and retain the company list behind a Map/List switch. Configure platform-restricted keys through ignored environment files.

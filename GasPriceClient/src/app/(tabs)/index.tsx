@@ -1,12 +1,12 @@
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { ThemedView } from '@/components/themed-view';
 import { LocalPriceBoard } from '@/components/local-price-board';
-import { useTheme } from '@/hooks/use-theme';
 import { formatPrice, type Prices } from '@/fuel/api';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
 import { FuelNewsHeadline } from '@/components/fuel-news-headline';
@@ -40,9 +40,8 @@ export default function HomeScreen() {
   const fuel = useFuelPrices();
   const news = useLatestNews();
   const { width } = useWindowDimensions();
-  const theme = useTheme();
   const [refreshing, setRefreshing] = useState(false);
-  const refreshHint = Platform.OS === 'web' ? 'Reload this page to reconnect or update prices.' : 'Pull down to reconnect or update prices.';
+  const refreshHint = Platform.OS === 'web' ? 'Pull down on a touch screen or reload this page to reconnect or update prices.' : 'Pull down to reconnect or update prices.';
   const pullToRefresh = async () => {
     if (fuel.busy || refreshing) return;
     setRefreshing(true);
@@ -50,12 +49,9 @@ export default function HomeScreen() {
   };
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
+      <RefreshableScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
         alwaysBounceVertical={Platform.OS === 'ios'}
-        refreshControl={Platform.OS === 'web' ? undefined : <RefreshControl
-          refreshing={refreshing} onRefresh={() => void pullToRefresh()} enabled={!fuel.busy}
-          tintColor={theme.text} colors={[theme.text]} progressBackgroundColor={theme.backgroundElement}
-        />}
+        refreshing={refreshing} onRefresh={pullToRefresh} refreshEnabled={!fuel.busy}
       >
         <View style={styles.content}>
           <View style={[styles.mobileBrand, Platform.OS === 'web' && width >= 900 && { display: 'none' }]}>
@@ -94,7 +90,7 @@ export default function HomeScreen() {
           </View>}
           <ThemedText type="small" themeColor="textSecondary">Prices are area estimates and may vary by station. Location lookup uses Geoapify and OpenStreetMap contributors.</ThemedText>
         </View>
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   </ThemedView>;
 }

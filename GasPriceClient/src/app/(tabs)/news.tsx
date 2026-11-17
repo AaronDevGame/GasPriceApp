@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Button, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Button, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { ThemedView } from '@/components/themed-view';
 import { subscribeToForeground } from '@/auth/foreground';
 import { FuelNewsCard } from '@/components/fuel-news-card';
@@ -41,8 +42,8 @@ export default function NewsScreen() {
   }, [load]);
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.page}>
-      <ScrollView contentContainerStyle={styles.scroll} refreshControl={Platform.OS === 'web' ? undefined :
-        <RefreshControl refreshing={loading && items.length > 0} onRefresh={() => void load()} />}>
+      <RefreshableScrollView contentContainerStyle={styles.scroll} refreshing={loading && items.length > 0}
+        onRefresh={() => load()} refreshEnabled={!loading}>
         <View style={styles.content}>
           <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>
           <ThemedText type="title" style={styles.title}>News</ThemedText>
@@ -55,7 +56,7 @@ export default function NewsScreen() {
           {items.map(item => <FuelNewsCard key={item.id} item={item} />)}
           {cursor && <Button title="Load older news" onPress={() => void load(cursor)} disabled={loading} />}
         </View>
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   </ThemedView>;
 }

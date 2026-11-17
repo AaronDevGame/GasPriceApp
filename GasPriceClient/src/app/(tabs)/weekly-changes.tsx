@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, Image, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Image, Linking, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
 import { errorMessage } from '@/auth/http';
 import { ThemedText } from '@/components/themed-text';
+import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { ThemedView } from '@/components/themed-view';
 import { getFuelAdjustments, type FuelAdjustment, type FuelAdjustmentFeed } from '@/fuel/api';
 import { useTheme } from '@/hooks/use-theme';
@@ -190,10 +191,9 @@ export default function WeeklyChangesScreen() {
 
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.scroll}
-        refreshControl={Platform.OS === 'web' ? undefined : <RefreshControl refreshing={refreshing}
-          onRefresh={() => void load(true)} enabled={authenticated && !loading}
-          tintColor={theme.text} colors={[theme.text]} progressBackgroundColor={theme.backgroundElement} />}
+      <RefreshableScrollView contentContainerStyle={styles.scroll}
+        refreshing={refreshing} onRefresh={() => load(true)}
+        refreshEnabled={authenticated && !loading}
       >
         <View style={styles.content}>
           <View style={styles.header}>
@@ -203,7 +203,7 @@ export default function WeeklyChangesScreen() {
           </View>
           {authLoading || (authenticated && loading) ? <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">Loading weekly changes…</ThemedText></View> : null}
           {!authenticated && !authLoading && <ThemedText accessibilityRole="alert">{authError ?? 'You are signed out. Reopen the Overview tab to reconnect.'}</ThemedText>}
-          {error && <ThemedText accessibilityRole="alert">{error} {Platform.OS === 'web' ? 'Reload this page to try again.' : 'Pull down to try again.'}</ThemedText>}
+          {error && <ThemedText accessibilityRole="alert">{error} {Platform.OS === 'web' ? 'Pull down on a touch screen or reload this page to try again.' : 'Pull down to try again.'}</ThemedText>}
           {authenticated && !loading && !error && feed?.groups.length === 0 && <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText style={styles.company}>No weekly changes yet</ThemedText>
             <ThemedText>Changes will appear here when a DOE notice has been imported.</ThemedText>
@@ -234,7 +234,7 @@ export default function WeeklyChangesScreen() {
           </View>}
           <ThemedText type="small" themeColor="textSecondary">Based on DOE notices. These are changes per liter, not current pump prices.</ThemedText>
         </View>
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   </ThemedView>;
 }
