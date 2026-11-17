@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Enable web pull-to-refresh outside the Fuel Prices map canvas. Reuse the map refresh and top spinner while preserving camera, selection and gestures inside the interactive map.
 - Keep the shared web refresh spinner visible for at least 900 ms so fast foreground refreshes finish opening before the content returns. Data updates stay immediate; longer refreshes hide the spinner when complete.
 - Allow web pull-to-refresh to begin on buttons, links and tappable cards; cancel their activation after a drag while preserving taps, inputs, text selection and nested control gestures.
 - Refresh Overview, the Fuel Prices company list and map, and Weekly Changes on foreground return using the shared top indicator. Retain current selections, suppress duplicate inline refresh spinners and avoid a second Overview news request.

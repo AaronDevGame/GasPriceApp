@@ -10,7 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { doeCoverageLabel, doeLocationLabel, getDoePriceBrowse, type DoeFuelPrice, type DoePriceBrowseFeed, type DoePriceLocation } from '@/fuel/api';
 import { useTheme } from '@/hooks/use-theme';
 import { useForegroundRefresh } from '@/hooks/use-foreground-refresh';
-import FuelMap from '@/map/fuel-map';
+import FuelMap, { type FuelMapHandle } from '@/map/fuel-map';
 
 const grades = [
   { value: 'DIESEL', label: 'Diesel' },
@@ -27,14 +27,16 @@ function priceLabel(row: DoeFuelPrice) {
 export default function FuelPricesScreen() {
   const [mode, setMode] = useState<'map' | 'list'>('map');
   const [mapRefreshing, setMapRefreshing] = useState(false);
+  const map = useRef<FuelMapHandle>(null);
   return mode === 'list' ? <FuelPriceList switchView={<ViewSwitch mode={mode} setMode={setMode} />} /> :
     <ThemedView style={styles.page}><SafeAreaView style={styles.page}>
       <RefreshableScrollView contentContainerStyle={styles.scroll}
-        refreshing={mapRefreshing} refreshEnabled={false} onRefresh={() => {}}>
+        refreshing={mapRefreshing} refreshEnabled={Platform.OS === 'web' && !mapRefreshing}
+        onRefresh={() => map.current?.refresh()}>
         <View style={styles.content}>
           <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>
           <ViewSwitch mode={mode} setMode={setMode} />
-          <FuelMap foregroundRefreshing={mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
+          <FuelMap ref={map} foregroundRefreshing={mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
         </View>
       </RefreshableScrollView>
     </SafeAreaView></ThemedView>;

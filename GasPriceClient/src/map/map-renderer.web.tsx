@@ -138,7 +138,7 @@ export default function MapRenderer(props: MapRendererProps) {
     overlay.current.draw();
   }, [ready, moving, props.snapshot, props.selected]);
   return <View style={styles.fill}>
-    <div ref={host} aria-label="Philippine fuel price map by geographic level" style={{ height: '100%', width: '100%' }} />
+    <div ref={host} data-pull-refresh-ignore aria-label="Philippine fuel price map by geographic level" style={{ height: '100%', width: '100%' }} />
     {(!key || error || !ready) && <View style={styles.message}>
       <Text style={styles.text}>{!key ? 'The map is not available in this build.' : error ? 'The map could not load. Check your connection and retry.' : 'Loading map…'}</Text>
       {key && error && <Pressable accessibilityRole="button" onPress={() => setRetry(value => value + 1)} style={styles.retry}><Text style={styles.text}>Retry map</Text></Pressable>}

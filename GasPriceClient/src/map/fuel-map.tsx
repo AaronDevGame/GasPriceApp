@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
 
@@ -13,7 +13,10 @@ import { rangeText } from './labels';
 import type { MapSnapshot, Viewport } from './types';
 
 const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: true, detail: false, error: null };
-export default function FuelMap({ foregroundRefreshing = false, onForegroundRefreshChange }: {
+export type FuelMapHandle = { refresh(): Promise<void> };
+
+export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange }: {
+  ref?: Ref<FuelMapHandle>;
   foregroundRefreshing?: boolean;
   onForegroundRefreshChange?(refreshing: boolean): void;
 }) {
@@ -23,6 +26,22 @@ export default function FuelMap({ foregroundRefreshing = false, onForegroundRefr
   const [selected, setSelected] = useState<string | null>(null);
   const controller = useRef<MapController | null>(null);
   const lastViewport = useRef<Viewport | null>(null);
+  const refreshRequest = useRef<Promise<void> | null>(null);
+  const refresh = useCallback(() => {
+    const next = controller.current;
+    if (!next) return Promise.resolve();
+    if (refreshRequest.current) return refreshRequest.current;
+    onForegroundRefreshChange?.(true);
+    const request = next.refreshAndWait().finally(() => {
+      if (controller.current === next) {
+        refreshRequest.current = null;
+        onForegroundRefreshChange?.(false);
+      }
+    });
+    refreshRequest.current = request;
+    return request;
+  }, [onForegroundRefreshChange]);
+  useImperativeHandle(ref, () => ({ refresh }), [refresh]);
   useEffect(() => {
     mapCache.setSession(authenticated ? String(session?.playerId ?? 'authenticated') : null);
   }, [authenticated, session?.playerId]);
@@ -34,18 +53,13 @@ export default function FuelMap({ foregroundRefreshing = false, onForegroundRefr
     void next.start().then(() => { if (lastViewport.current) next.idle(lastViewport.current, true); });
     // Refresh cached expiries even while the map remains stationary, plus on foreground return.
     const interval = setInterval(next.refresh, 15000);
-    let foregroundBusy = false;
-    const foreground = subscribeToForeground(() => {
-      if (foregroundBusy) return;
-      foregroundBusy = true;
-      onForegroundRefreshChange?.(true);
-      void next.refreshAndWait().finally(() => {
-        foregroundBusy = false;
-        if (controller.current === next) onForegroundRefreshChange?.(false);
-      });
-    });
-    return () => { clearInterval(interval); foreground(); unsubscribe(); next.dispose(); controller.current = null; onForegroundRefreshChange?.(false); };
-  }, [authenticated, onForegroundRefreshChange]));
+    const foreground = subscribeToForeground(() => { void refresh(); });
+    return () => {
+      clearInterval(interval); foreground(); unsubscribe(); next.dispose();
+      controller.current = null; refreshRequest.current = null;
+      onForegroundRefreshChange?.(false);
+    };
+  }, [authenticated, refresh, onForegroundRefreshChange]));
   const onIdle = useCallback((viewport: Viewport) => { lastViewport.current = viewport; controller.current?.idle(viewport); }, []);
   const onMove = useCallback(() => controller.current?.move(), []);
   const onSelect = useCallback((id: string) => { setSelected(id); controller.current?.select(id); }, []);
