@@ -1,3 +1,4 @@
+import { MobileHeader } from '@/components/mobile-header';
 import { Link } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
@@ -54,6 +55,7 @@ export default function HomeScreen() {
         refreshing={refreshing} onRefresh={pullToRefresh} refreshEnabled={!fuel.busy}
       >
         <View style={styles.content}>
+          <MobileHeader />
           {news.item && <FuelNewsHeadline item={news.item} />}
           {news.loading && !news.item && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small" themeColor="textSecondary">Loading fuel news…</ThemedText></View>}
           {news.error && <View style={styles.loading}>

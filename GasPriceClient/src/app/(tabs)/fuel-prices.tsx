@@ -1,3 +1,4 @@
+import { MobileHeader } from '@/components/mobile-header';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -34,6 +35,7 @@ export default function FuelPricesScreen() {
         refreshing={mapRefreshing} refreshEnabled={Platform.OS === 'web' && !mapRefreshing}
         onRefresh={() => map.current?.refresh()}>
         <View style={styles.content}>
+          <MobileHeader />
           <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>
           <ViewSwitch mode={mode} setMode={setMode} />
           <FuelMap ref={map} foregroundRefreshing={mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
@@ -119,6 +121,7 @@ function FuelPriceList({ switchView }: { switchView: React.ReactNode }) {
         refreshing={refreshing} onRefresh={() => load(selected ?? undefined, true)}
         refreshEnabled={authenticated && !loading}>
         <View style={styles.content}>
+          <MobileHeader />
           <View style={styles.header}>
             {Platform.OS === 'web' && width >= 900 && <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>}
             <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>

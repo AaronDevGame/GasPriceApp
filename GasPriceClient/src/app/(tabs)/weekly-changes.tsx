@@ -1,3 +1,4 @@
+import { MobileHeader } from '@/components/mobile-header';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Easing, Image, Linking, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -201,6 +202,7 @@ export default function WeeklyChangesScreen() {
         refreshEnabled={authenticated && !loading}
       >
         <View style={styles.content}>
+          <MobileHeader />
           <View style={styles.header}>
             {Platform.OS === 'web' && width >= 900 && <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>}
             <ThemedText type="title" style={styles.title}>Weekly Changes</ThemedText>

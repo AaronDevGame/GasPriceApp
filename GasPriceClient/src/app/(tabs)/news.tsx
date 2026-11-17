@@ -1,3 +1,4 @@
+import { MobileHeader } from '@/components/mobile-header';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Button, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,6 +48,7 @@ export default function NewsScreen() {
       <RefreshableScrollView contentContainerStyle={styles.scroll} refreshing={refreshing}
         onRefresh={() => load(undefined, true)} refreshEnabled={!loading}>
         <View style={styles.content}>
+          <MobileHeader />
           {Platform.OS === 'web' && width >= 900 && <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>}
           <ThemedText type="title" style={styles.title}>News</ThemedText>
           <ThemedText themeColor="textSecondary">Fuel announcements, forecasts, and the context behind price changes.</ThemedText>

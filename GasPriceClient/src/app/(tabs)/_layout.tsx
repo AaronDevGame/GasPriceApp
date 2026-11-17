@@ -2,7 +2,6 @@ import { Link, Tabs } from 'expo-router';
 import { Platform, Pressable, StyleSheet, useWindowDimensions, View, type PressableProps } from 'react-native';
 
 import { FuelAdviceNotices } from '@/components/fuel-advice-notices';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/app-icon';
 import { ThemedText } from '@/components/themed-text';
@@ -26,14 +25,6 @@ export default function TabLayout() {
   const { width } = useWindowDimensions();
   const desktop = Platform.OS === 'web' && width >= 900;
   return <View style={{ flex: 1, backgroundColor: theme.background }}>
-    {!desktop && <SafeAreaView edges={['top']}>
-      <View style={styles.mobileHeader}>
-        <Link href="/" accessibilityLabel="GasPrice Philippines home" style={styles.mobileBrandLink}>
-          <ThemedText type="smallBold" style={styles.mobileBrand}>GASPRICE · PHILIPPINES</ThemedText>
-        </Link>
-        <FuelAdviceNotices compact />
-      </View>
-    </SafeAreaView>}
     <Tabs screenOptions={{
     headerShown: false,
     tabBarPosition: desktop ? 'top' : 'bottom',
@@ -75,9 +66,6 @@ export default function TabLayout() {
   </View>;
 }
 const styles = StyleSheet.create({
-  mobileHeader: { paddingHorizontal: 16, paddingVertical: 8, gap: 12 },
-  mobileBrandLink: { alignSelf: 'flex-start', paddingVertical: 4 },
-  mobileBrand: { color: '#76B4FF' },
   nav: { backgroundColor: '#151A21', borderBottomWidth: 1, borderColor: '#2B3441', alignItems: 'center', paddingHorizontal: 28 },
   navInner: { width: '100%', maxWidth: 1160, minHeight: 84, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', paddingVertical: 10 },
   brandLink: { flexShrink: 0 }, brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
