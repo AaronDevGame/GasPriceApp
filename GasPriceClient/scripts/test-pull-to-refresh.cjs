@@ -16,8 +16,21 @@ class Element extends DomNode {
   scrollHeight = 100; clientHeight = 100;
   scrollWidth = 100; clientWidth = 100;
   parentElement = null;
-  interactive = false;
-  closest() { return this.interactive ? this : this.parentElement?.closest() ?? null; }
+  tagName = 'div'; role = null; editable = false; ignored = false;
+  ownerDocument = { selection: null, getSelection() { return this.selection; } };
+  contains(node) {
+    for (let current = node; current; current = current.parentElement) if (current === this) return true;
+    return false;
+  }
+  closest(selector) {
+    const matches = selector.split(',').some(value => {
+      const rule = value.trim();
+      return rule === this.tagName || (this.role && rule === `[role="${this.role}"]`) ||
+        (this.editable && rule.startsWith('[contenteditable]')) ||
+        (this.ignored && rule === '[data-pull-refresh-ignore]');
+    });
+    return matches ? this : this.parentElement?.closest(selector) ?? null;
+  }
 }
 const exportsObject = {};
 const source = fs.readFileSync(path.join(__dirname, '../src/scroll/pull-to-refresh.ts'), 'utf8');
@@ -74,10 +87,10 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await settle(); assert.equal(h.state().calls, 1, 'cancel never refreshes');
   h.send('touchstart'); h.send('touchmove', 0, 160, { touches: [{}, {}] }); h.send('touchend');
   await settle(); assert.equal(h.state().calls, 1, 'pinch never refreshes');
-  const child = new Element(); child.parentElement = h.node; child.interactive = true;
+  const child = new Element(); child.parentElement = h.node; child.tagName = 'input';
   h.send('touchstart', 0, 0, { target: child }); h.send('touchmove', 0, 160); h.send('touchend');
   await settle(); assert.equal(h.state().calls, 1, 'interactive control keeps its gesture');
-  child.interactive = false; child.style.overflowY = 'auto'; child.scrollHeight = 200;
+  child.tagName = 'div'; child.style.overflowY = 'auto'; child.scrollHeight = 200;
   h.send('touchstart', 0, 0, { target: child }); h.send('touchmove', 0, 160); h.send('touchend');
   await settle(); assert.equal(h.state().calls, 1, 'nested scroll keeps its gesture');
   h.disable(); h.pull(); await settle(); assert.equal(h.state().calls, 1, 'disabled refresh ignored');
@@ -95,13 +108,65 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   textPull.send('touchmove', 0, 160); textPull.send('touchmove', 0, 2); textPull.send('touchend');
   await settle();
   assert.equal(textPull.state().calls, 1, 'retreating below threshold cancels a text pull');
-  textElement.interactive = true;
+  textElement.tagName = 'input';
   textPull.send('touchstart', 0, 0, { target: textNode });
   assert.equal(textPull.send('touchmove', 0, 160).defaultPrevented, false,
     'text inside a control preserves its gesture');
   textPull.send('touchend'); await settle();
   assert.equal(textPull.state().calls, 1, 'text inside a control cannot refresh');
   textPull.detach();
+  for (const controlType of ['button', 'a', 'role-button', 'role-link']) {
+    const controlPull = harness();
+    const control = new Element(); control.parentElement = controlPull.node;
+    if (controlType.startsWith('role-')) control.role = controlType.slice(5);
+    else control.tagName = controlType;
+    const label = new Element(); label.parentElement = control;
+    const target = new DomNode(); target.parentElement = label;
+    let activations = 0;
+    controlPull.node.addEventListener('click', () => { activations++; });
+    const click = detail => controlPull.send('click', 0, 0, { target: control, detail });
+    controlPull.send('touchstart', 0, 0, { target });
+    controlPull.send('touchend');
+    assert.equal(click(1).defaultPrevented, false, `${controlType} tap is preserved`);
+    assert.equal(activations, 1);
+    controlPull.send('touchstart', 0, 0, { target });
+    assert.equal(controlPull.send('touchmove', 0, 2).defaultPrevented, false, 'small tap jitter is preserved');
+    controlPull.send('touchend'); click(1);
+    assert.equal(activations, 2);
+    controlPull.send('touchstart', 0, 0, { target });
+    controlPull.send('touchmove', 0, 160); controlPull.send('touchend'); await settle();
+    assert.equal(controlPull.state().calls, 1, `${controlType} can start refresh`);
+    assert.equal(click(1).defaultPrevented, true, 'drag suppresses navigation/activation');
+    assert.equal(activations, 2);
+    controlPull.send('touchstart', 0, 0, { target });
+    controlPull.send('touchmove', 0, 30); controlPull.send('touchend'); await settle();
+    assert.equal(controlPull.state().calls, 1, 'short drag does not refresh');
+    assert.equal(click(1).defaultPrevented, true, 'short drag also cancels activation');
+    controlPull.send('touchstart', 0, 0, { target });
+    controlPull.send('touchmove', 0, 160); controlPull.send('touchend'); await settle();
+    assert.equal(click(0).defaultPrevented, false, 'keyboard activation stays available');
+    controlPull.send('touchstart', 0, 0, { target }); controlPull.send('touchend');
+    assert.equal(click(1).defaultPrevented, false, 'next deliberate tap is independent');
+    controlPull.detach();
+  }
+  for (const kind of ['input', 'textarea', 'select', 'slider', 'tab', 'checkbox', 'switch', 'editable', 'map']) {
+    const protectedPull = harness();
+    const control = new Element(); control.parentElement = protectedPull.node;
+    if (['input', 'textarea', 'select'].includes(kind)) control.tagName = kind;
+    else if (kind === 'editable') control.editable = true;
+    else if (kind === 'map') control.ignored = true;
+    else control.role = kind;
+    protectedPull.send('touchstart', 0, 0, { target: control });
+    assert.equal(protectedPull.send('touchmove', 0, 160).defaultPrevented, false, `${kind} keeps its gesture`);
+    protectedPull.send('touchend'); await settle();
+    assert.equal(protectedPull.state().calls, 0);
+    protectedPull.detach();
+  }
+  const selected = harness();
+  const selectedText = new Element(); selectedText.parentElement = selected.node;
+  selected.node.ownerDocument.selection = { isCollapsed: false, anchorNode: selectedText, focusNode: selectedText };
+  selected.pull(); await settle(); assert.equal(selected.state().calls, 0, 'preserve active text selection');
+  selected.detach();
   const detached = harness(); detached.detach(); detached.pull(); await settle();
   assert.equal(detached.state().calls, 0, 'cleanup removes listeners');
   const failed = harness(() => Promise.reject(new Error('offline')));
