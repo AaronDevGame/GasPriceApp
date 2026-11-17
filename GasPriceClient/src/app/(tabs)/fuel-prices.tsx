@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
@@ -49,6 +49,7 @@ function ViewSwitch({ mode, setMode }: { mode: 'map' | 'list'; setMode(mode: 'ma
     </Pressable>)}</View>;
 }
 function FuelPriceList({ switchView }: { switchView: React.ReactNode }) {
+  const { width } = useWindowDimensions();
   const { session, loading: authLoading, error: authError } = useAuth();
   const theme = useTheme();
   const [feed, setFeed] = useState<DoePriceBrowseFeed | null>(null);
@@ -119,7 +120,7 @@ function FuelPriceList({ switchView }: { switchView: React.ReactNode }) {
         refreshEnabled={authenticated && !loading}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>
+            {Platform.OS === 'web' && width >= 900 && <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>}
             <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>
             <ThemedText themeColor="textSecondary">Compare recent DOE company prices by city, province and fuel grade.</ThemedText>
           </View>

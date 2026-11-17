@@ -3,6 +3,7 @@ import type { Bounds, Feature, Point, PolygonGeometry, Viewport } from './types'
 export const DETAIL_ZOOM = 9;
 export const MAX_DETAIL_CITIES = 160;
 export const MAX_ZOOM = 18;
+export const OVERVIEW_PADDING = 56;
 export const LABEL_HEIGHT = 62;
 export const intersects = (a: Bounds, b: Bounds) => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 const inBox = ([x, y]: Point, b: Bounds) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
@@ -48,7 +49,18 @@ export function fitZoom(bounds: Bounds, width: number, height: number, padding =
   return Math.max(0, Math.min(MAX_ZOOM, Math.log2(Math.min(Math.max(1, width - padding * 2) / (b[0] - a[0]),
     Math.max(1, height - padding * 2) / (b[1] - a[1])) / 256)));
 }
-export const cameraBounds = (bounds: Bounds): Bounds => [bounds[0] - 0.25, bounds[1] - 0.25, bounds[2] + 0.25, bounds[3] + 0.25];
+// Leave half a country span on every side so the overview can still be panned.
+export function cameraBounds(bounds: Bounds): Bounds {
+  const longitudePadding = (bounds[2] - bounds[0]) / 2;
+  const latitudePadding = (bounds[3] - bounds[1]) / 2;
+  return [bounds[0] - longitudePadding, bounds[1] - latitudePadding,
+    bounds[2] + longitudePadding, bounds[3] + latitudePadding];
+}
+// Center in the map's Mercator projection so north/south margins are equal on screen.
+export function cameraCenter(bounds: Bounds): Point {
+  const north = world([bounds[0], bounds[3]])[1], south = world([bounds[2], bounds[1]])[1];
+  return [(bounds[0] + bounds[2]) / 2, Math.atan(Math.sinh(Math.PI * (1 - north - south))) * 180 / Math.PI];
+}
 export const midpoint = (b: Bounds): Point => [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
 export function project(point: Point, viewport: Viewport): Point {
   const p = world(point), nw = world([viewport.bounds[0], viewport.bounds[3]]), se = world([viewport.bounds[2], viewport.bounds[1]]);

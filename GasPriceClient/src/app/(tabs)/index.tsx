@@ -1,6 +1,6 @@
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -11,7 +11,6 @@ import { formatPrice, type Prices } from '@/fuel/api';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
 import { FuelNewsHeadline } from '@/components/fuel-news-headline';
 import { DashboardAction } from '@/components/dashboard-action';
-import { AppIcon } from '@/components/app-icon';
 import { useLatestNews } from '@/news/use-latest-news';
 import { useForegroundRefresh } from '@/hooks/use-foreground-refresh';
 
@@ -40,7 +39,6 @@ function PriceGrid({ prices }: { prices: Prices }) {
 export default function HomeScreen() {
   const fuel = useFuelPrices();
   const news = useLatestNews({ refreshOnForeground: false });
-  const { width } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
   const refreshHint = Platform.OS === 'web' ? 'Pull down on a touch screen or reload this page to reconnect or update prices.' : 'Pull down to reconnect or update prices.';
   const pullToRefresh = async () => {
@@ -56,10 +54,6 @@ export default function HomeScreen() {
         refreshing={refreshing} onRefresh={pullToRefresh} refreshEnabled={!fuel.busy}
       >
         <View style={styles.content}>
-          <View style={[styles.mobileBrand, Platform.OS === 'web' && width >= 900 && { display: 'none' }]}>
-            <AppIcon name="fuel" color="#76B4FF" />
-            <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>
-          </View>
           {news.item && <FuelNewsHeadline item={news.item} />}
           {news.loading && !news.item && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small" themeColor="textSecondary">Loading fuel news…</ThemedText></View>}
           {news.error && <View style={styles.loading}>
@@ -99,7 +93,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   page: { flex: 1 }, safe: { flex: 1 }, scroll: { padding: 20, alignItems: 'center' },
   content: { width: '100%', maxWidth: 1160, gap: 20, paddingVertical: 8, paddingBottom: 24 },
-  mobileBrand: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 4 },
   accent: { color: '#76B4FF' },
   loading: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center' },
   locationCard: { borderRadius: 14, padding: 20, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 16 },

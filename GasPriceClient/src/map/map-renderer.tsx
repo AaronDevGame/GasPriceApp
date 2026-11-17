@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
-import { cameraBounds, fitZoom, intersects, MAX_ZOOM, midpoint, polygons } from './geometry';
+import { cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, OVERVIEW_PADDING, polygons } from './geometry';
 import { areaIdentity, mapLevel } from './hierarchy';
 import { placeLabels, rangeText } from './labels';
 import type { Bounds, MapRendererProps, Point } from './types';
@@ -37,8 +37,8 @@ function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: Ma
   const initialized = useRef(false);
   const [failure, setFailure] = useState(false);
   const bounds = useMemo(() => cameraBounds(index.bbox), [index]);
-  const center = useMemo(() => midpoint(index.bbox), [index]);
-  const minZoom = size.width ? fitZoom(index.bbox, size.width, size.height, 35) : 4;
+  const center = useMemo(() => cameraCenter(index.bbox), [index]);
+  const minZoom = size.width ? fitZoom(bounds, size.width, size.height, 0) : 0;
   const start = useCallback((region: Region) => {
     ++sequence.current; setMoving(true); onMove();
     const latitude = Math.max(bounds[1], Math.min(bounds[3], region.latitude));
@@ -72,11 +72,11 @@ function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: Ma
     if (!ready || !size.width || !map.current) return;
     const frame = requestAnimationFrame(() => {
       try {
-        // Google native bounds constrain the center; min zoom independently limits the overview.
+        // Google native bounds constrain the center; min zoom independently limits how far out users can browse.
         map.current?.setMapBoundaries(coordinate([bounds[2], bounds[3]]), coordinate([bounds[0], bounds[1]]));
         if (!initialized.current) {
           initialized.current = true;
-          map.current?.setCamera({ center: coordinate(center), zoom: fitZoom(index.bbox, size.width, size.height, 35), pitch: 0, heading: 0 });
+          map.current?.setCamera({ center: coordinate(center), zoom: fitZoom(index.bbox, size.width, size.height, OVERVIEW_PADDING), pitch: 0, heading: 0 });
         }
         void settle();
       } catch { setFailure(true); }

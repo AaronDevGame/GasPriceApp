@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { cameraBounds, fitZoom, MAX_ZOOM, polygons } from './geometry';
+import { cameraBounds, cameraCenter, fitZoom, MAX_ZOOM, OVERVIEW_PADDING, polygons } from './geometry';
 import { areaIdentity, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
 import { type MapLabel, placeLabels, rangeText } from './labels';
@@ -65,9 +65,10 @@ export default function MapRenderer(props: MapRendererProps) {
       if (!active || !host.current) return;
       const index = latest.current.snapshot.index!;
       const bounds = cameraBounds(index.bbox);
+      const [lng, lat] = cameraCenter(index.bbox);
 
       const instance = new google.maps.Map(host.current, {
-        center: { lat: 12.8, lng: 122 }, zoom: 5, maxZoom: MAX_ZOOM,
+        center: { lat, lng }, zoom: 5, maxZoom: MAX_ZOOM,
         restriction: { latLngBounds: literalBounds(bounds), strictBounds: false },
         mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
         rotateControl: false, tilt: 0, heading: 0, gestureHandling: 'greedy',
@@ -88,10 +89,10 @@ export default function MapRenderer(props: MapRendererProps) {
       }));
       const updateSize = () => {
         if (!host.current?.clientWidth) return;
-        instance.setOptions({ minZoom: fitZoom(index.bbox, host.current.clientWidth, host.current.clientHeight, 35) });
+        instance.setOptions({ minZoom: fitZoom(bounds, host.current.clientWidth, host.current.clientHeight, 0) });
       };
       resize = new ResizeObserver(updateSize); resize.observe(host.current); updateSize();
-      instance.fitBounds(literalBounds(index.bbox), 35);
+      instance.fitBounds(literalBounds(index.bbox), OVERVIEW_PADDING);
       setReady(true);
     }).catch(() => { if (active) setError(true); });
     return () => {

@@ -32,9 +32,9 @@ Google Cloud requires billing enabled. Native maps without map IDs use the Maps 
 
 ## Camera and rendering policy
 
-- Start by fitting the national bounds from the index.
-- Derive the navigation rectangle from the national dataset extent plus 0.25 degrees of padding. This is a navigation rectangle, not a newly traced administrative boundary.
-- Calculate minimum zoom from the national bounds with 35 pixels of padding and the map dimensions, recalculating on layout changes; maximum zoom is 18. Rotation and tilt are disabled.
+- Start by fitting the national bounds from the index with 56 pixels of padding on each side. Center the country in the map projection so the initial overview has balanced margins.
+- Derive the navigation rectangle from the national dataset extent plus half its longitude/latitude span on each side, leaving room to pan even in the national overview. This is a navigation rectangle, not a newly traced administrative boundary.
+- Calculate minimum zoom from the expanded navigation rectangle without pixel padding and the map dimensions, recalculating on layout changes; maximum zoom is 18. Rotation and tilt are disabled.
 - Web uses Google camera restriction with a separately calculated overview minimum zoom.
 - Native requests Google bounds but also clamps camera centers during movement and verifies center/zoom at idle. Inspection of the pinned library found its legacy `setMapBoundaries` command is not forwarded on the Fabric path, so correctness does not depend on that command. Native enforcement can correct the camera during/after gestures and must be device-tested for smoothness.
 - Restriction applies to camera centers. Visible corners at overview can include surrounding sea/neighboring basemap land. We load only Philippine administrative polygons and Philippine city prices; we do not claim the basemap itself contains only Philippine tiles.

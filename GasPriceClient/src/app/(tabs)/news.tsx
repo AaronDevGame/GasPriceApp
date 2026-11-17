@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Button, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Button, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -11,6 +11,7 @@ import { NewsAlerts } from '@/components/news-alerts';
 import { getNewsPage, type NewsItem } from '@/news/api';
 
 export default function NewsScreen() {
+  const { width } = useWindowDimensions();
   const [items, setItems] = useState<NewsItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,7 +47,7 @@ export default function NewsScreen() {
       <RefreshableScrollView contentContainerStyle={styles.scroll} refreshing={refreshing}
         onRefresh={() => load(undefined, true)} refreshEnabled={!loading}>
         <View style={styles.content}>
-          <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>
+          {Platform.OS === 'web' && width >= 900 && <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>}
           <ThemedText type="title" style={styles.title}>News</ThemedText>
           <ThemedText themeColor="textSecondary">Fuel announcements, forecasts, and the context behind price changes.</ThemedText>
           <NewsAlerts />
