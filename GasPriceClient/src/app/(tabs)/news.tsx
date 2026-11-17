@@ -48,7 +48,6 @@ export default function NewsScreen() {
           <ThemedText type="title" style={styles.title}>News</ThemedText>
           <ThemedText themeColor="textSecondary">Fuel announcements, forecasts, and the context behind price changes.</ThemedText>
           <NewsAlerts />
-          {Platform.OS === 'web' && <Button title="Refresh news" onPress={() => void load()} disabled={loading} />}
           {error && <View style={{ gap: 8 }}><ThemedText accessibilityRole="alert">News is temporarily unavailable. Any loaded articles are retained.</ThemedText>
             <Button title="Retry" disabled={loading} onPress={() => void load(failedCursor)} /></View>}
           {loading && <ActivityIndicator accessibilityLabel="Loading fuel news" />}
