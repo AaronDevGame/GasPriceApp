@@ -1,4 +1,10 @@
-const threshold = 64;
+export const pullRefreshThreshold = 64;
+export const refreshHoldDistance = 64;
+
+/** Increasing resistance rather than a hard stop as the finger travels farther. */
+export function rubberBandDistance(travel: number) {
+  return 120 * (1 - Math.exp(-Math.max(0, travel) / 180));
+}
 
 /** Attach only to the screen's scroll container, never the document or map. */
 export function attachPullToRefresh(
@@ -6,7 +12,7 @@ export function attachPullToRefresh(
   options: {
     canRefresh(): boolean;
     onRefresh(): Promise<unknown> | void;
-    onPull(distance: number): void;
+    onPull(distance: number, pulling: boolean): void;
     onBusy(busy: boolean): void;
   },
 ) {
@@ -15,8 +21,8 @@ export function attachPullToRefresh(
   let busy = false;
   let disposed = false;
   const previousOverscroll = node.style.overscrollBehaviorY;
-  node.style.overscrollBehaviorY = 'contain';
-  const reset = () => { start = null; distance = 0; options.onPull(0); };
+  node.style.overscrollBehaviorY = 'none';
+  const reset = () => { start = null; distance = 0; options.onPull(0, false); };
   const touchStart = (event: TouchEvent) => {
     reset();
     if (busy || !options.canRefresh() || node.scrollTop > 0 || event.touches.length !== 1) return;
@@ -41,11 +47,11 @@ export function attachPullToRefresh(
     if (dy < 8) return;
     if (!event.cancelable) { reset(); return; }
     event.preventDefault();
-    distance = Math.min(96, dy * 0.5);
-    options.onPull(distance);
+    distance = rubberBandDistance(dy);
+    options.onPull(distance, true);
   };
   const touchEnd = () => {
-    const refresh = start !== null && distance >= threshold && options.canRefresh() && !busy;
+    const refresh = start !== null && distance >= pullRefreshThreshold && options.canRefresh() && !busy;
     reset();
     if (!refresh) return;
     busy = true;

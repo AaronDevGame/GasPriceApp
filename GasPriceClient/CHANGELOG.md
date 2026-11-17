@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Animate mobile web pull-to-refresh with increasing rubber-band resistance, content displacement, a held spinner during refresh and a spring-like return. Respect reduced-motion preferences.
 - Remove the featured “Fuel prices across the Philippines” section from Overview and stop fetching featured prices on launch and refresh.
 - Restore the compact desktop header height and show each adjustment date to the left of its refueling badge; keep effective-time and default-time details in the expanded advice.
 - Hide city reporting counts in City view map labels and selected-city details, and shorten labels to fit the remaining content.

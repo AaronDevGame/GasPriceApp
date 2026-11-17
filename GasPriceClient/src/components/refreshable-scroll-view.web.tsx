@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView } from 'react-native';
 
 import type { RefreshableScrollViewProps } from './refreshable-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
-import { attachPullToRefresh } from '@/scroll/pull-to-refresh';
+import { attachPullToRefresh, pullRefreshThreshold, refreshHoldDistance } from '@/scroll/pull-to-refresh';
+import classes from './refreshable-scroll-view.module.css';
 
 export function RefreshableScrollView({ refreshing, onRefresh, refreshEnabled = true, children, ...props }: RefreshableScrollViewProps) {
   const scroll = useRef<ScrollView>(null);
   const latest = useRef({ refreshing, onRefresh, refreshEnabled });
-  const [distance, setDistance] = useState(0);
+  const [pull, setPull] = useState({ distance: 0, pulling: false });
   const [busy, setBusy] = useState(false);
   const theme = useTheme();
   useEffect(() => { latest.current = { refreshing, onRefresh, refreshEnabled }; }, [refreshing, onRefresh, refreshEnabled]);
@@ -19,24 +20,26 @@ export function RefreshableScrollView({ refreshing, onRefresh, refreshEnabled = 
     return attachPullToRefresh(node, {
       canRefresh: () => latest.current.refreshEnabled && !latest.current.refreshing,
       onRefresh: () => latest.current.onRefresh(),
-      onPull: setDistance,
+      onPull: (distance, pulling) => setPull({ distance, pulling }),
       onBusy: setBusy,
     });
   }, []);
-  const active = busy || refreshing;
-  return <View style={styles.container}>
-    <ScrollView {...props} ref={scroll}>{children}</ScrollView>
-    {(distance > 0 || busy) && <View pointerEvents="none" style={[styles.indicator, { backgroundColor: theme.backgroundElement }]}>
-      {active && <ActivityIndicator size="small" color={theme.text} />}
+  // Only a gesture-initiated refresh opens the gap; background updates stay put.
+  const offset = busy ? refreshHoldDistance : pull.distance;
+  const ready = pull.distance >= pullRefreshThreshold;
+  const visible = offset > 0;
+  return <div className={classes.container} style={{ backgroundColor: theme.background }}>
+    <div className={classes.indicator} data-pulling={pull.pulling} aria-hidden={!visible}
+      style={{ transform: `translate3d(0, ${offset - refreshHoldDistance}px, 0)`, color: theme.text }}>
+      {busy ? <ActivityIndicator size="small" color={theme.text} /> :
+        <span className={classes.arrow} aria-hidden="true" style={{ transform: `rotate(${ready ? 180 : 0}deg)` }}>↓</span>}
       <ThemedText accessibilityLiveRegion="polite" type="small">
-        {active ? 'Refreshing…' : distance >= 64 ? 'Release to refresh' : 'Pull down to refresh'}
+        {busy ? 'Refreshing…' : ready ? 'Release to refresh' : 'Pull down to refresh'}
       </ThemedText>
-    </View>}
-  </View>;
+    </div>
+    <div className={classes.content} data-pulling={pull.pulling}
+      style={{ transform: offset > 0 ? `translate3d(0, ${offset}px, 0)` : 'translate3d(0, 0, 0)' }}>
+      <ScrollView {...props} ref={scroll}>{children}</ScrollView>
+    </div>
+  </div>;
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, minHeight: 0 },
-  indicator: { position: 'absolute', top: 8, alignSelf: 'center', borderRadius: 24, paddingHorizontal: 16,
-    paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 8, boxShadow: '0 2px 10px #0004' },
-});

@@ -21,11 +21,11 @@ vm.runInNewContext(ts.transpileModule(source, { compilerOptions: {
 
 function harness(refresh) {
   const node = new Element();
-  let enabled = true, calls = 0, distance = 0, busy = false;
+  let enabled = true, calls = 0, distance = 0, busy = false, pulling = false;
   const detach = exportsObject.attachPullToRefresh(node, {
     canRefresh: () => enabled,
     onRefresh: () => { calls++; return refresh?.(); },
-    onPull: value => { distance = value; },
+    onPull: (value, dragging) => { distance = value; pulling = dragging; },
     onBusy: value => { busy = value; },
   });
   const send = (type, x = 0, y = 0, extra = {}) => {
@@ -37,7 +37,7 @@ function harness(refresh) {
   };
   const pull = (y = 160, x = 0) => { send('touchstart'); send('touchmove', x, y); send('touchend'); };
   return { node, send, pull, detach, disable: () => { enabled = false; },
-    state: () => ({ calls, distance, busy }) };
+    isPulling: () => pulling, state: () => ({ calls, distance, busy }) };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 (async () => {
@@ -45,10 +45,19 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   const h = harness(() => new Promise(resolve => { finish = resolve; }));
   h.send('touchstart');
   assert.equal(h.send('touchmove', 0, 160).defaultPrevented, true);
-  assert.equal(h.state().distance, 80);
+  assert.equal(h.state().distance, exportsObject.rubberBandDistance(160));
+  assert.equal(h.isPulling(), true, 'follow finger during pull');
+  const rubber = exportsObject.rubberBandDistance;
+  assert.equal(rubber(0), 0);
+  assert.equal(rubber(-50), 0);
+  assert(rubber(160) >= exportsObject.pullRefreshThreshold, 'normal pull reaches refresh');
+  assert(rubber(320) > rubber(160), 'content keeps moving on a longer pull');
+  assert(rubber(320) - rubber(160) < rubber(160), 'resistance grows with travel');
+  assert(rubber(10000) <= 120, 'overscroll stays bounded');
   h.send('touchend');
   await settle();
   assert.deepEqual(h.state(), { calls: 1, distance: 0, busy: true });
+  assert.equal(h.isPulling(), false, 'release enables settling animation');
   h.pull(); await settle(); assert.equal(h.state().calls, 1, 'deduplicate in-flight refresh');
   finish(); await settle(); assert.equal(h.state().busy, false);
   h.pull(50); await settle(); assert.equal(h.state().calls, 1, 'short pull cancels');
