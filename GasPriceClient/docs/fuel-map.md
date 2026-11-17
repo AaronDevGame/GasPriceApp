@@ -33,7 +33,7 @@ Google Cloud requires billing enabled. Native maps without map IDs use the Maps 
 ## Camera and rendering policy
 
 - Start 0.4 zoom levels above the national bounds fit with 20 pixels of padding (about 32% larger). Outer islands may require panning to see at this closer scale. Balance the vertical margins in the map projection and shift the camera east by 10% of the national longitude span so the main islands sit farther left, visually centered rather than centered on the western offshore extent.
-- Derive the navigation rectangle from the national dataset extent plus half its longitude/latitude span on each side, leaving room to pan even in the national overview. This is a navigation rectangle, not a newly traced administrative boundary.
+- Derive the navigation rectangle from the national dataset extent plus 5% of its longitude span on the west, 25% on the east, and 10% of its latitude span on the top/bottom. The smaller western margin reduces the extra sea at the left panning limit while retaining the right-side room. This is a navigation rectangle, not a newly traced administrative boundary.
 - Calculate minimum zoom from the expanded navigation rectangle without pixel padding and the map dimensions, recalculating on layout changes; maximum zoom is 18. Rotation and tilt are disabled.
 - Web uses Google camera restriction with a separately calculated overview minimum zoom.
 - Native requests Google bounds but also clamps camera centers during movement and verifies center/zoom at idle. Inspection of the pinned library found its legacy `setMapBoundaries` command is not forwarded on the Fabric path, so correctness does not depend on that command. Native enforcement can correct the camera during/after gestures and must be device-tested for smoothness.

@@ -195,6 +195,8 @@ function harness(overrides = {}) {
   // The overview centers the country and starts closer than its padded fit on all canvases,
   // while allowing users to pan or zoom out beyond that initial framing.
   const navigationBounds = geometry.cameraBounds(index.bbox);
+  assert.deepEqual(Array.from(geometry.cameraBounds([110, 5, 130, 25])), [109, 3, 135, 27],
+    'Navigation limits west padding to 5% while retaining 25% east and 10% vertical room');
   const cameraCenter = geometry.world(geometry.cameraCenter(index.bbox));
   const northwest = geometry.world([index.bbox[0], index.bbox[3]]);
   const southeast = geometry.world([index.bbox[2], index.bbox[1]]);

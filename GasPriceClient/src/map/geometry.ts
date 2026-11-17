@@ -50,12 +50,12 @@ export function fitZoom(bounds: Bounds, width: number, height: number, padding =
   return Math.max(0, Math.min(MAX_ZOOM, Math.log2(Math.min(Math.max(1, width - padding * 2) / (b[0] - a[0]),
     Math.max(1, height - padding * 2) / (b[1] - a[1])) / 256)));
 }
-// Leave half a country span on every side so the overview can still be panned.
+// Limit the extra sea on the west while preserving the existing east-side panning room.
 export function cameraBounds(bounds: Bounds): Bounds {
-  const longitudePadding = (bounds[2] - bounds[0]) / 2;
-  const latitudePadding = (bounds[3] - bounds[1]) / 2;
-  return [bounds[0] - longitudePadding, bounds[1] - latitudePadding,
-    bounds[2] + longitudePadding, bounds[3] + latitudePadding];
+  const longitudeSpan = bounds[2] - bounds[0];
+  const latitudePadding = (bounds[3] - bounds[1]) * 0.1;
+  return [bounds[0] - longitudeSpan * 0.05, bounds[1] - latitudePadding,
+    bounds[2] + longitudeSpan * 0.25, bounds[3] + latitudePadding];
 }
 // Balance north/south margins in Mercator and frame slightly east of the bounds
 // midpoint to visually center the main islands rather than the western offshore extent.
