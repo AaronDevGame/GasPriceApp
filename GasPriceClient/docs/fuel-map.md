@@ -32,7 +32,7 @@ Google Cloud requires billing enabled. Native maps without map IDs use the Maps 
 
 ## Camera and rendering policy
 
-- Start by fitting the national bounds from the index with 56 pixels of padding on each side. Center the country in the map projection so the initial overview has balanced margins.
+- Start 0.4 zoom levels above the national bounds fit with 20 pixels of padding (about 32% larger). Outer islands may require panning to see at this closer scale. Balance the vertical margins in the map projection and shift the camera east by 10% of the national longitude span so the main islands sit farther left, visually centered rather than centered on the western offshore extent.
 - Derive the navigation rectangle from the national dataset extent plus half its longitude/latitude span on each side, leaving room to pan even in the national overview. This is a navigation rectangle, not a newly traced administrative boundary.
 - Calculate minimum zoom from the expanded navigation rectangle without pixel padding and the map dimensions, recalculating on layout changes; maximum zoom is 18. Rotation and tilt are disabled.
 - Web uses Google camera restriction with a separately calculated overview minimum zoom.

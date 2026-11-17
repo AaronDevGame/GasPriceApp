@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
-import { cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, OVERVIEW_PADDING, polygons } from './geometry';
+import { cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, OVERVIEW_PADDING, OVERVIEW_ZOOM_OFFSET, polygons } from './geometry';
 import { areaIdentity, mapLevel } from './hierarchy';
 import { placeLabels, rangeText } from './labels';
 import type { Bounds, MapRendererProps, Point } from './types';
@@ -76,7 +76,7 @@ function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: Ma
         map.current?.setMapBoundaries(coordinate([bounds[2], bounds[3]]), coordinate([bounds[0], bounds[1]]));
         if (!initialized.current) {
           initialized.current = true;
-          map.current?.setCamera({ center: coordinate(center), zoom: fitZoom(index.bbox, size.width, size.height, OVERVIEW_PADDING), pitch: 0, heading: 0 });
+          map.current?.setCamera({ center: coordinate(center), zoom: fitZoom(index.bbox, size.width, size.height, OVERVIEW_PADDING) + OVERVIEW_ZOOM_OFFSET, pitch: 0, heading: 0 });
         }
         void settle();
       } catch { setFailure(true); }

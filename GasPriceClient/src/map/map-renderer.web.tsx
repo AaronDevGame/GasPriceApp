@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { cameraBounds, cameraCenter, fitZoom, MAX_ZOOM, OVERVIEW_PADDING, polygons } from './geometry';
+import { cameraBounds, cameraCenter, fitZoom, MAX_ZOOM, OVERVIEW_PADDING, OVERVIEW_ZOOM_OFFSET, polygons } from './geometry';
 import { areaIdentity, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
 import { type MapLabel, placeLabels, rangeText } from './labels';
@@ -68,7 +68,7 @@ export default function MapRenderer(props: MapRendererProps) {
       const [lng, lat] = cameraCenter(index.bbox);
 
       const instance = new google.maps.Map(host.current, {
-        center: { lat, lng }, zoom: 5, maxZoom: MAX_ZOOM,
+        center: { lat, lng }, zoom: 5, maxZoom: MAX_ZOOM, isFractionalZoomEnabled: true,
         restriction: { latLngBounds: literalBounds(bounds), strictBounds: false },
         mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
         rotateControl: false, tilt: 0, heading: 0, gestureHandling: 'greedy',
@@ -92,7 +92,8 @@ export default function MapRenderer(props: MapRendererProps) {
         instance.setOptions({ minZoom: fitZoom(bounds, host.current.clientWidth, host.current.clientHeight, 0) });
       };
       resize = new ResizeObserver(updateSize); resize.observe(host.current); updateSize();
-      instance.fitBounds(literalBounds(index.bbox), OVERVIEW_PADDING);
+      instance.setCenter({ lat, lng });
+      instance.setZoom(fitZoom(index.bbox, host.current.clientWidth, host.current.clientHeight, OVERVIEW_PADDING) + OVERVIEW_ZOOM_OFFSET);
       setReady(true);
     }).catch(() => { if (active) setError(true); });
     return () => {

@@ -192,17 +192,20 @@ function harness(overrides = {}) {
   assert.equal(geometry.rectangleInside(polygon, [3, 3, 7, 7]), false, 'Labels cannot cover a hole');
   assert.equal(geometry.rectangleInside(polygon, [1, 1, 2, 2]), true);
   assert(geometry.fitZoom(index.bbox, 400, 600) < geometry.fitZoom(imus.bbox, 400, 600));
-  // The initial camera must fit and center the country on portrait and wide canvases,
+  // The overview centers the country and starts closer than its padded fit on all canvases,
   // while allowing users to pan or zoom out beyond that initial framing.
   const navigationBounds = geometry.cameraBounds(index.bbox);
   const cameraCenter = geometry.world(geometry.cameraCenter(index.bbox));
   const northwest = geometry.world([index.bbox[0], index.bbox[3]]);
   const southeast = geometry.world([index.bbox[2], index.bbox[1]]);
-  assert(Math.abs(cameraCenter[0] - (northwest[0] + southeast[0]) / 2) < 1e-10);
+  assert(Math.abs(cameraCenter[0] - (northwest[0] + (southeast[0] - northwest[0]) * 0.6)) < 1e-10,
+    'Camera frames east of the bounding-box midpoint so the main islands move left');
   assert(Math.abs(cameraCenter[1] - (northwest[1] + southeast[1]) / 2) < 1e-10);
   for (const [width, height] of [[320, 560], [400, 600], [1200, 560]]) {
-    const initialZoom = geometry.fitZoom(index.bbox, width, height, geometry.OVERVIEW_PADDING);
-    const scale = 256 * 2 ** initialZoom;
+    const fittedZoom = geometry.fitZoom(index.bbox, width, height, geometry.OVERVIEW_PADDING);
+    const initialZoom = fittedZoom + geometry.OVERVIEW_ZOOM_OFFSET;
+    assert(2 ** (initialZoom - fittedZoom) > 1.3, 'Initial overview renders the country at least 30% larger');
+    const scale = 256 * 2 ** fittedZoom;
     assert((width - (southeast[0] - northwest[0]) * scale) / 2 >= geometry.OVERVIEW_PADDING - 1e-8);
     assert((height - (southeast[1] - northwest[1]) * scale) / 2 >= geometry.OVERVIEW_PADDING - 1e-8);
     assert(geometry.fitZoom(navigationBounds, width, height, 0) < initialZoom);

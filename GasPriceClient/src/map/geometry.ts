@@ -3,7 +3,8 @@ import type { Bounds, Feature, Point, PolygonGeometry, Viewport } from './types'
 export const DETAIL_ZOOM = 9;
 export const MAX_DETAIL_CITIES = 160;
 export const MAX_ZOOM = 18;
-export const OVERVIEW_PADDING = 56;
+export const OVERVIEW_PADDING = 20;
+export const OVERVIEW_ZOOM_OFFSET = 0.4;
 export const LABEL_HEIGHT = 62;
 export const intersects = (a: Bounds, b: Bounds) => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 const inBox = ([x, y]: Point, b: Bounds) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
@@ -56,10 +57,11 @@ export function cameraBounds(bounds: Bounds): Bounds {
   return [bounds[0] - longitudePadding, bounds[1] - latitudePadding,
     bounds[2] + longitudePadding, bounds[3] + latitudePadding];
 }
-// Center in the map's Mercator projection so north/south margins are equal on screen.
+// Balance north/south margins in Mercator and frame slightly east of the bounds
+// midpoint to visually center the main islands rather than the western offshore extent.
 export function cameraCenter(bounds: Bounds): Point {
   const north = world([bounds[0], bounds[3]])[1], south = world([bounds[2], bounds[1]])[1];
-  return [(bounds[0] + bounds[2]) / 2, Math.atan(Math.sinh(Math.PI * (1 - north - south))) * 180 / Math.PI];
+  return [(bounds[0] + bounds[2]) / 2 + (bounds[2] - bounds[0]) * 0.1, Math.atan(Math.sinh(Math.PI * (1 - north - south))) * 180 / Math.PI];
 }
 export const midpoint = (b: Bounds): Point => [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
 export function project(point: Point, viewport: Viewport): Point {
