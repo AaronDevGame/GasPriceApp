@@ -76,6 +76,12 @@ export class MapController {
     }
   }
   refresh = () => { if (this.snapshot.viewport) this.idle(this.snapshot.viewport, true); };
+  // Foreground callers can keep their shared indicator visible until loading settles.
+  refreshAndWait = async () => {
+    if (this.disposed || !this.snapshot.viewport) return;
+    this.move();
+    await this.load(this.generation);
+  };
   private publish() {
     if (this.disposed) return;
     const viewport = this.snapshot.viewport;

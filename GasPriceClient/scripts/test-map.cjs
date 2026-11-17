@@ -147,6 +147,28 @@ function harness(overrides = {}) {
   assert.equal(logout.cache.price(imus.id), undefined, 'Old authorized work cannot repopulate cache after logout');
   console.log('PASS stale viewport completion and logout invalidation');
 
+  // Foreground UI must stay active until its real map work settles.
+  const foregroundGate = deferred();
+  const foreground = harness({ prices: async (_v, ids, feed) => {
+    await foregroundGate.promise; return feed(ids);
+  } });
+  const returning = new foreground.Controller(foreground.cache);
+  returning.setAuthenticated(true); await returning.start();
+  await returning.refreshAndWait(); // Returning before the first camera event is harmless.
+  returning.idle({ ...viewport, bounds: imus.bbox }, true);
+  let refreshFinished = false;
+  const foregroundRequest = returning.refreshAndWait().then(() => { refreshFinished = true; });
+  await foreground.flush();
+  assert.equal(returning.snapshot.loading, true);
+  assert.equal(refreshFinished, false, 'Foreground spinner must wait for prices');
+  foregroundGate.resolve(); await foregroundRequest;
+  assert.equal(returning.snapshot.loading, false);
+  assert.equal(refreshFinished, true);
+  assert.equal(foreground.calls.prices.length, 1, 'Foreground refresh replaces pending debounce work');
+  returning.dispose(); await returning.refreshAndWait();
+  console.log('PASS foreground refresh awaits map loading and tolerates missing viewport/disposal');
+
+
   const broken = harness({ boundary: async () => { throw new Error('offline'); } });
   const partial = new broken.Controller(broken.cache); partial.setAuthenticated(true); await partial.start();
   partial.idle(viewport, true); await broken.advance(0);

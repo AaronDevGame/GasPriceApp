@@ -13,7 +13,10 @@ import { rangeText } from './labels';
 import type { MapSnapshot, Viewport } from './types';
 
 const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: true, detail: false, error: null };
-export default function FuelMap() {
+export default function FuelMap({ foregroundRefreshing = false, onForegroundRefreshChange }: {
+  foregroundRefreshing?: boolean;
+  onForegroundRefreshChange?(refreshing: boolean): void;
+}) {
   const { session, loading: authLoading } = useAuth();
   const authenticated = session?.state === 'authenticated';
   const [snapshot, setSnapshot] = useState(empty);
@@ -31,9 +34,18 @@ export default function FuelMap() {
     void next.start().then(() => { if (lastViewport.current) next.idle(lastViewport.current, true); });
     // Refresh cached expiries even while the map remains stationary, plus on foreground return.
     const interval = setInterval(next.refresh, 15000);
-    const foreground = subscribeToForeground(next.refresh);
-    return () => { clearInterval(interval); foreground(); unsubscribe(); next.dispose(); controller.current = null; };
-  }, [authenticated]));
+    let foregroundBusy = false;
+    const foreground = subscribeToForeground(() => {
+      if (foregroundBusy) return;
+      foregroundBusy = true;
+      onForegroundRefreshChange?.(true);
+      void next.refreshAndWait().finally(() => {
+        foregroundBusy = false;
+        if (controller.current === next) onForegroundRefreshChange?.(false);
+      });
+    });
+    return () => { clearInterval(interval); foreground(); unsubscribe(); next.dispose(); controller.current = null; onForegroundRefreshChange?.(false); };
+  }, [authenticated, onForegroundRefreshChange]));
   const onIdle = useCallback((viewport: Viewport) => { lastViewport.current = viewport; controller.current?.idle(viewport); }, []);
   const onMove = useCallback(() => controller.current?.move(), []);
   const onSelect = useCallback((id: string) => { setSelected(id); controller.current?.select(id); }, []);
@@ -55,7 +67,7 @@ export default function FuelMap() {
         <ThemedText type="small">RON 91 {rangeText(prices.gasoline)} · Diesel {rangeText(prices.diesel)}</ThemedText>
         {level !== 'city' && <ThemedText type="small">{prices.reported} of {prices.total} cities / municipalities reporting</ThemedText>}
       </View>}
-      {snapshot.loading && <View style={styles.loading}><ActivityIndicator size="small" /><ThemedText type="small">Updating map…</ThemedText></View>}
+      {snapshot.loading && !foregroundRefreshing && <View style={styles.loading}><ActivityIndicator size="small" /><ThemedText type="small">Updating map…</ThemedText></View>}
       {!authenticated && !authLoading && <ThemedText type="small">Reconnect from Overview to load city prices.</ThemedText>}
       {noPrices && <ThemedText type="small">No current city prices are available in this view.</ThemedText>}
       {snapshot.error && <View style={styles.error}><ThemedText type="small" accessibilityRole="alert">{snapshot.error}</ThemedText>

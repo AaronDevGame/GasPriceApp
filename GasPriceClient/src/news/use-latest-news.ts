@@ -3,7 +3,7 @@ import { subscribeToForeground } from '@/auth/foreground';
 import { getLatestNews, type NewsItem } from './api';
 import { useNewsClock } from './use-news-clock';
 
-export function useLatestNews() {
+export function useLatestNews({ refreshOnForeground = true } = {}) {
   const [item, setItem] = useState<NewsItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -25,9 +25,9 @@ export function useLatestNews() {
       if (requests.current === current) { setItem(result); setError(false); }
     }, () => { if (requests.current === current) setError(true); })
       .finally(() => { if (requests.current === current) setLoading(false); });
-    const unsubscribe = subscribeToForeground(() => void reload());
+    const unsubscribe = refreshOnForeground ? subscribeToForeground(() => void reload()) : () => {};
     return () => { requests.current++; unsubscribe(); };
-  }, [reload]);
+  }, [reload, refreshOnForeground]);
   const visible = item && Date.parse(item.article.expiresAtUtc) > now && !item.supersededById ? item : null;
   return { item: visible, loading, error, reload };
 }

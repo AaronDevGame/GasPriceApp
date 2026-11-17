@@ -13,6 +13,7 @@ import { FuelNewsHeadline } from '@/components/fuel-news-headline';
 import { DashboardAction } from '@/components/dashboard-action';
 import { AppIcon } from '@/components/app-icon';
 import { useLatestNews } from '@/news/use-latest-news';
+import { useForegroundRefresh } from '@/hooks/use-foreground-refresh';
 
 function asOf(value: string) {
   return new Date(value).toLocaleDateString('en-PH', {
@@ -38,7 +39,7 @@ function PriceGrid({ prices }: { prices: Prices }) {
 }
 export default function HomeScreen() {
   const fuel = useFuelPrices();
-  const news = useLatestNews();
+  const news = useLatestNews({ refreshOnForeground: false });
   const { width } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
   const refreshHint = Platform.OS === 'web' ? 'Pull down on a touch screen or reload this page to reconnect or update prices.' : 'Pull down to reconnect or update prices.';
@@ -47,6 +48,7 @@ export default function HomeScreen() {
     setRefreshing(true);
     try { await Promise.allSettled([fuel.refresh(), news.reload()]); } finally { setRefreshing(false); }
   };
+  useForegroundRefresh(() => { void pullToRefresh(); });
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.safe}>
       <RefreshableScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
@@ -59,7 +61,7 @@ export default function HomeScreen() {
             <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>
           </View>
           {news.item && <FuelNewsHeadline item={news.item} />}
-          {news.loading && !news.item && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small" themeColor="textSecondary">Loading fuel news…</ThemedText></View>}
+          {news.loading && !news.item && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small" themeColor="textSecondary">Loading fuel news…</ThemedText></View>}
           {news.error && <View style={styles.loading}>
             <ThemedText type="small" themeColor="textSecondary">News could not be updated.</ThemedText>
             <DashboardAction title="Retry news" onPress={() => void news.reload()} disabled={news.loading} />

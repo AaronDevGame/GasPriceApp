@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
@@ -9,6 +9,7 @@ import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { ThemedView } from '@/components/themed-view';
 import { doeCoverageLabel, doeLocationLabel, getDoePriceBrowse, type DoeFuelPrice, type DoePriceBrowseFeed, type DoePriceLocation } from '@/fuel/api';
 import { useTheme } from '@/hooks/use-theme';
+import { useForegroundRefresh } from '@/hooks/use-foreground-refresh';
 import FuelMap from '@/map/fuel-map';
 
 const grades = [
@@ -25,15 +26,17 @@ function priceLabel(row: DoeFuelPrice) {
 
 export default function FuelPricesScreen() {
   const [mode, setMode] = useState<'map' | 'list'>('map');
+  const [mapRefreshing, setMapRefreshing] = useState(false);
   return mode === 'list' ? <FuelPriceList switchView={<ViewSwitch mode={mode} setMode={setMode} />} /> :
     <ThemedView style={styles.page}><SafeAreaView style={styles.page}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <RefreshableScrollView contentContainerStyle={styles.scroll}
+        refreshing={mapRefreshing} refreshEnabled={false} onRefresh={() => {}}>
         <View style={styles.content}>
           <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>
           <ViewSwitch mode={mode} setMode={setMode} />
-          <FuelMap />
+          <FuelMap foregroundRefreshing={mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
         </View>
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView></ThemedView>;
 }
 function ViewSwitch({ mode, setMode }: { mode: 'map' | 'list'; setMode(mode: 'map' | 'list'): void }) {
@@ -94,6 +97,10 @@ function FuelPriceList({ switchView }: { switchView: React.ReactNode }) {
     });
     return () => { active = false; };
   }, [authenticated]);
+
+  useForegroundRefresh(() => {
+    if (authenticated && !loading && !refreshing) void load(selected ?? undefined, true);
+  });
 
   const locations = feed?.locations.filter(location =>
     `${location.city} ${location.province}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) ?? [];

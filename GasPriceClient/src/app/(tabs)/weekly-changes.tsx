@@ -9,6 +9,7 @@ import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { ThemedView } from '@/components/themed-view';
 import { getFuelAdjustments, type FuelAdjustment, type FuelAdjustmentFeed } from '@/fuel/api';
 import { useTheme } from '@/hooks/use-theme';
+import { useForegroundRefresh } from '@/hooks/use-foreground-refresh';
 
 function dateLabel(value: string) {
   return new Date(`${value}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -115,6 +116,10 @@ export default function WeeklyChangesScreen() {
     ).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [authenticated]);
+
+  useForegroundRefresh(() => {
+    if (authenticated && !loading && !refreshing) void load(true);
+  });
 
   const availableWeeks = feed?.groups ?? [];
   const activeWeek = availableWeeks.find(week => week.weekStart === selectedWeek) ?? availableWeeks[0];

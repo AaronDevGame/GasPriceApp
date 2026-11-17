@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Refresh Overview, the Fuel Prices company list and map, and Weekly Changes on foreground return using the shared top indicator. Retain current selections, suppress duplicate inline refresh spinners and avoid a second Overview news request.
 - Use the shared top refresh indicator when News reloads after returning to the browser or app, keeping automatic refresh without showing a second spinner inside News.
 - Show only the pull-to-refresh icon on web while retaining screen-reader status messages, and hide the extra News loading spinner during pull-to-refresh. Keep initial-load and pagination indicators.
 - Animate mobile web pull-to-refresh with increasing rubber-band resistance, content displacement, a held spinner during refresh and a spring-like return. Respect reduced-motion preferences.
