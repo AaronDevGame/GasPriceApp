@@ -38,7 +38,7 @@ export default function NewsScreen() {
       if (requests.current === current) { setItems(result.items); setCursor(result.nextCursor); setError(false); setFailedCursor(undefined); }
     }, () => { if (requests.current === current) setError(true); })
       .finally(() => { if (requests.current === current) setLoading(false); });
-    const unsubscribe = subscribeToForeground(() => void load());
+    const unsubscribe = subscribeToForeground(() => void load(undefined, true));
     return () => { requests.current++; unsubscribe(); };
   }, [load]);
   return <ThemedView style={styles.page}>
