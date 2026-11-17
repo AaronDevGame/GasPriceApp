@@ -4,7 +4,13 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-class Element extends EventTarget {
+class DomNode extends EventTarget {
+  removeEventListener(type, listener, options) {
+    super.removeEventListener(type, listener, typeof options === 'boolean' ? { capture: options } : options);
+  }
+  parentElement = null;
+}
+class Element extends DomNode {
   style = { overscrollBehaviorY: 'auto', overflowX: '', overflowY: '' };
   scrollTop = 0;
   scrollHeight = 100; clientHeight = 100;
@@ -17,7 +23,7 @@ const exportsObject = {};
 const source = fs.readFileSync(path.join(__dirname, '../src/scroll/pull-to-refresh.ts'), 'utf8');
 vm.runInNewContext(ts.transpileModule(source, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
-} }).outputText, { exports: exportsObject, HTMLElement: Element, getComputedStyle: node => node.style });
+} }).outputText, { exports: exportsObject, HTMLElement: Element, Element, Node: DomNode, getComputedStyle: node => node.style });
 
 function harness(refresh) {
   const node = new Element();
@@ -76,6 +82,26 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await settle(); assert.equal(h.state().calls, 1, 'nested scroll keeps its gesture');
   h.disable(); h.pull(); await settle(); assert.equal(h.state().calls, 1, 'disabled refresh ignored');
   h.detach(); assert.equal(h.node.style.overscrollBehaviorY, 'auto');
+  const textPull = harness();
+  const textElement = new Element(); textElement.parentElement = textPull.node;
+  const textNode = new DomNode(); textNode.parentElement = textElement;
+  textPull.send('touchstart', 0, 0, { target: textNode });
+  assert.equal(textPull.send('touchmove', 0, 2).defaultPrevented, true,
+    'claim a slow downward pull before browser scrolling takes over');
+  assert.equal(textPull.state().distance, 0, 'tiny movement does not show indicator');
+  textPull.send('touchmove', 0, 160); textPull.send('touchend'); await settle();
+  assert.equal(textPull.state().calls, 1, 'pull can begin on an ordinary text node');
+  textPull.send('touchstart', 0, 0, { target: textNode });
+  textPull.send('touchmove', 0, 160); textPull.send('touchmove', 0, 2); textPull.send('touchend');
+  await settle();
+  assert.equal(textPull.state().calls, 1, 'retreating below threshold cancels a text pull');
+  textElement.interactive = true;
+  textPull.send('touchstart', 0, 0, { target: textNode });
+  assert.equal(textPull.send('touchmove', 0, 160).defaultPrevented, false,
+    'text inside a control preserves its gesture');
+  textPull.send('touchend'); await settle();
+  assert.equal(textPull.state().calls, 1, 'text inside a control cannot refresh');
+  textPull.detach();
   const detached = harness(); detached.detach(); detached.pull(); await settle();
   assert.equal(detached.state().calls, 0, 'cleanup removes listeners');
   const failed = harness(() => Promise.reject(new Error('offline')));

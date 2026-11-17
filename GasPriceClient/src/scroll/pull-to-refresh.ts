@@ -26,10 +26,13 @@ export function attachPullToRefresh(
   const touchStart = (event: TouchEvent) => {
     reset();
     if (busy || !options.canRefresh() || node.scrollTop > 0 || event.touches.length !== 1) return;
-    const target = event.target;
-    if (!(target instanceof HTMLElement) || target.closest('input, textarea, select, button, a, [role="button"], [role="tab"], [role="slider"], [data-pull-refresh-ignore]')) return;
+    // Text nodes and SVG descendants can be touch targets too. Resolve their
+    // owning element without disabling pointer events on the content.
+    const target = event.target instanceof Element ? event.target :
+      event.target instanceof Node ? event.target.parentElement : null;
+    if (!target || target.closest('input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="tab"], [role="slider"], [role="checkbox"], [role="switch"], [data-pull-refresh-ignore]')) return;
     // Preserve gestures inside nested lists and horizontal selectors.
-    for (let child: HTMLElement | null = target; child && child !== node; child = child.parentElement) {
+    for (let child: Element | null = target; child && child !== node; child = child.parentElement) {
       const style = getComputedStyle(child);
       if ((child.scrollHeight > child.clientHeight && /auto|scroll/.test(style.overflowY)) ||
           (child.scrollWidth > child.clientWidth && /auto|scroll/.test(style.overflowX))) return;
@@ -44,9 +47,12 @@ export function attachPullToRefresh(
     const dx = Math.abs(touch.clientX - start.x);
     const dy = touch.clientY - start.y;
     if (dy < 0 || dx > Math.max(10, dy)) { reset(); return; }
-    if (dy < 8) return;
+    if (dy === 0) { distance = 0; options.onPull(0, false); return; }
     if (!event.cancelable) { reset(); return; }
+    // Claim the first downward move, even below the visual threshold. Waiting
+    // here can let the browser start scrolling and make later moves uncancelable.
     event.preventDefault();
+    if (dy < 8) { distance = 0; options.onPull(0, true); return; }
     distance = rubberBandDistance(dy);
     options.onPull(distance, true);
   };
@@ -62,16 +68,16 @@ export function attachPullToRefresh(
       if (!disposed) options.onBusy(false);
     });
   };
-  node.addEventListener('touchstart', touchStart, { passive: true });
-  node.addEventListener('touchmove', touchMove, { passive: false });
-  node.addEventListener('touchend', touchEnd);
-  node.addEventListener('touchcancel', reset);
+  node.addEventListener('touchstart', touchStart, { passive: true, capture: true });
+  node.addEventListener('touchmove', touchMove, { passive: false, capture: true });
+  node.addEventListener('touchend', touchEnd, true);
+  node.addEventListener('touchcancel', reset, true);
   return () => {
     disposed = true;
-    node.removeEventListener('touchstart', touchStart);
-    node.removeEventListener('touchmove', touchMove);
-    node.removeEventListener('touchend', touchEnd);
-    node.removeEventListener('touchcancel', reset);
+    node.removeEventListener('touchstart', touchStart, true);
+    node.removeEventListener('touchmove', touchMove, true);
+    node.removeEventListener('touchend', touchEnd, true);
+    node.removeEventListener('touchcancel', reset, true);
     node.style.overscrollBehaviorY = previousOverscroll;
   };
 }
