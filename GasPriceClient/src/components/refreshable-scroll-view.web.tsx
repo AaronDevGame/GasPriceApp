@@ -3,16 +3,18 @@ import { ActivityIndicator, ScrollView } from 'react-native';
 
 import type { RefreshableScrollViewProps } from './refreshable-scroll-view';
 import { useTheme } from '@/hooks/use-theme';
+import { useRefreshIndicator } from '@/hooks/use-refresh-indicator';
 import { attachPullToRefresh, pullRefreshThreshold, refreshHoldDistance } from '@/scroll/pull-to-refresh';
 import classes from './refreshable-scroll-view.module.css';
 
 export function RefreshableScrollView({ refreshing, onRefresh, refreshEnabled = true, children, ...props }: RefreshableScrollViewProps) {
   const scroll = useRef<ScrollView>(null);
-  const latest = useRef({ refreshing, onRefresh, refreshEnabled });
   const [pull, setPull] = useState({ distance: 0, pulling: false });
   const [busy, setBusy] = useState(false);
+  const active = useRefreshIndicator(busy || refreshing);
+  const latest = useRef({ refreshing: active, onRefresh, refreshEnabled });
   const theme = useTheme();
-  useEffect(() => { latest.current = { refreshing, onRefresh, refreshEnabled }; }, [refreshing, onRefresh, refreshEnabled]);
+  useEffect(() => { latest.current = { refreshing: active, onRefresh, refreshEnabled }; }, [active, onRefresh, refreshEnabled]);
   useEffect(() => {
     const node = scroll.current?.getScrollableNode();
     if (!(node instanceof HTMLElement)) return;
@@ -24,7 +26,6 @@ export function RefreshableScrollView({ refreshing, onRefresh, refreshEnabled = 
     });
   }, []);
   // Pull gestures and foreground refreshes share the same top indicator.
-  const active = busy || refreshing;
   const pulling = pull.pulling && !active;
   const offset = active ? refreshHoldDistance : pull.distance;
   const ready = pull.distance >= pullRefreshThreshold;
