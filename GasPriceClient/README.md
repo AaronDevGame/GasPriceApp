@@ -118,7 +118,7 @@ Navigation has three tabs: Fuel Prices, News and Weekly Changes. The former
 `/fuel-prices` URL redirects to the merged home page. Area selection is shared
 between the price summary, map and company list; fuel grade and sort choice
 survive view changes. Recent local estimate updates are collapsible below prices,
-and the latest news headline follows the price content.
+and the latest news headline appears at the top, above the price content.
 On permission grant, latitude/longitude are sent to `POST /ai/fuel-prices`, then
 its resolved city/province/region are passed to `GET /fuel-prices` for the local
 result. The general cache entries from that response are not shown. When DOE

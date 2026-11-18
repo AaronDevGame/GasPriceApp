@@ -3,7 +3,8 @@
 ## [Unreleased]
 
 ### Changed
-- Merge Overview and Fuel Prices into the Fuel Prices home tab, leaving News and Weekly Changes as the other tabs. Share city/province selection across DOE summaries, map and company comparisons, preserve view selections, label local estimates separately, collapse recent updates, move the news headline below prices, and redirect existing `/fuel-prices` links to home.
+- Restore the latest news headline and news retry message to the top of Fuel Prices, above the page title and area selector.
+- Merge Overview and Fuel Prices into the Fuel Prices home tab, leaving News and Weekly Changes as the other tabs. Share city/province selection across DOE summaries, map and company comparisons, preserve view selections, label local estimates separately, collapse recent updates, keep the news headline above prices, and redirect existing `/fuel-prices` links to home.
 - Enable web pull-to-refresh outside the Fuel Prices map canvas. Reuse the map refresh and top spinner while preserving camera, selection and gestures inside the interactive map.
 - Keep the shared web refresh spinner visible for at least 900 ms so fast foreground refreshes finish opening before the content returns. Data updates stay immediate; longer refreshes hide the spinner when complete.
 - Allow web pull-to-refresh to begin on buttons, links and tappable cards; cancel their activation after a drag while preserving taps, inputs, text selection and nested control gestures.

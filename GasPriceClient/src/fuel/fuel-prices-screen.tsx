@@ -150,6 +150,8 @@ export default function FuelPricesScreen() {
         refreshEnabled={(!authenticated || !loading) && !fuel.busy}>
         <View style={styles.content}>
           <MobileHeader />
+          {news.item && <FuelNewsHeadline item={news.item} />}
+          {news.error && <View><ThemedText type="small" themeColor="textSecondary">News could not be updated.</ThemedText><DashboardAction title="Retry news" onPress={() => void news.reload()} disabled={news.loading} /></View>}
           <View style={styles.header}>
             <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>
             <ThemedText themeColor="textSecondary">Find prices in your area and compare reported company ranges.</ThemedText>
@@ -234,8 +236,6 @@ export default function FuelPricesScreen() {
           </>
           {showLocal && <RecentPriceUpdates area={showLocal.area.name} updates={fuel.updates} error={fuel.historyError} />}
           {showLocal && <ThemedText type="small" themeColor="textSecondary">Location lookup uses Geoapify and OpenStreetMap contributors. Local estimates may differ from DOE report ranges.</ThemedText>}
-          {news.item && <FuelNewsHeadline item={news.item} />}
-          {news.error && <View><ThemedText type="small" themeColor="textSecondary">News could not be updated.</ThemedText><DashboardAction title="Retry news" onPress={() => void news.reload()} disabled={news.loading} /></View>}
         </View>
       </RefreshableScrollView>
     </SafeAreaView>
