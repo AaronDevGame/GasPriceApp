@@ -10,26 +10,25 @@ import type { Bounds, MapRendererProps } from './types';
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
 type LabelOverlay = google.maps.OverlayView & { labels: MapLabel[]; selected: string | null };
 type AreaPolygon = { shape: google.maps.Polygon; areaId: string; hasOutline: boolean };
-function createLabels(onSelect: (id: string) => void) {
+function createLabels() {
       class Labels extends google.maps.OverlayView {
         labels: MapLabel[] = [];
         selected: string | null = null;
         private root = document.createElement('div');
-        onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.overlayMouseTarget.appendChild(this.root); }
+        onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.overlayLayer.appendChild(this.root); }
         draw() {
           const projection = this.getProjection();
           if (!projection) return;
           this.root.replaceChildren(...this.labels.map((label, priority) => {
             const point = projection.fromLatLngToDivPixel(new google.maps.LatLng(label.anchor[1], label.anchor[0]));
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.setAttribute('aria-label', `${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`);
-            button.style.cssText = `box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${this.labels.length - priority};left:${point?.x ?? 0}px;top:${point?.y ?? 0}px;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;background:#172332;color:white;border:2px solid ${label.id === this.selected ? '#FFD166' : '#6CB4F8'};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;cursor:pointer;pointer-events:auto;font-variant-numeric:tabular-nums;`;
-            button.textContent = [label.name, rangeText(label.price.gasoline), rangeText(label.price.diesel), label.coverage].filter(Boolean).join('\n');
-            if (label.price.estimated || label.price.outdated) button.style.borderStyle = 'dashed';
-            button.onclick = () => onSelect(label.id);
-            google.maps.OverlayView.preventMapHitsAndGesturesFrom(button);
-            return button;
+            // Display-only labels let mouse, touch and wheel gestures reach the map.
+            const card = document.createElement('div');
+            card.setAttribute('role', 'img');
+            card.setAttribute('aria-label', `${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`);
+            card.style.cssText = `box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${this.labels.length - priority};left:${point?.x ?? 0}px;top:${point?.y ?? 0}px;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;background:#172332;color:white;border:2px solid ${label.id === this.selected ? '#FFD166' : '#6CB4F8'};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:none;user-select:none;font-variant-numeric:tabular-nums;`;
+            card.textContent = [label.name, rangeText(label.price.gasoline), rangeText(label.price.diesel), label.coverage].filter(Boolean).join('\n');
+            if (label.price.estimated || label.price.outdated) card.style.borderStyle = 'dashed';
+            return card;
           }));
         }
         onRemove() { this.root.remove(); }
@@ -79,7 +78,7 @@ export default function MapRenderer(props: MapRendererProps) {
         styles: [{ featureType: 'poi', stylers: [{ visibility: 'off' }] }, { featureType: 'transit', stylers: [{ visibility: 'off' }] }],
       });
       map.current = instance; focusedBounds.current = null; focusedLocation.current = null; focusedZoom.current = null;
-      const labels = createLabels(id => latest.current.onSelect(id)); labels.setMap(instance); overlay.current = labels;
+      const labels = createLabels(); labels.setMap(instance); overlay.current = labels;
       listeners.push(instance.addListener('bounds_changed', () => {
         latest.current.onMove(); setMoving(true); labels.labels = []; labels.draw();
       }));

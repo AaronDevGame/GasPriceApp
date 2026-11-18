@@ -1,7 +1,7 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import MapView, { Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, OVERVIEW_PADDING, OVERVIEW_ZOOM_OFFSET, polygons } from './geometry';
 import { areaIdentity, mapLevel } from './hierarchy';
@@ -147,17 +147,20 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       toolbarEnabled={false} showsPointsOfInterests={false} showsBuildings={false}
       onMapReady={() => setReady(true)} onRegionChange={start} onRegionChangeComplete={() => void settle()}>
       {polygonOverlays}
-      {labels.map((label, priority) => <Marker zIndex={labels.length - priority} key={`${label.id}:${label.fontSize}:${label.name}:${rangeText(label.price.gasoline)}:${rangeText(label.price.diesel)}:${label.coverage}:${selected === label.id}`}
-        coordinate={coordinate(label.anchor)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}
-        onPress={() => onSelect(label.id)} accessibilityLabel={`${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`}>
+    </MapView>
+    {/* Keep price cards outside native markers so they cannot intercept map gestures. */}
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {labels.map((label, priority) => <View accessible key={`${label.id}:${label.fontSize}:${label.name}:${rangeText(label.price.gasoline)}:${rangeText(label.price.diesel)}:${label.coverage}:${selected === label.id}`}
+        style={{ position: 'absolute', left: label.x - label.width / 2, top: label.y - label.height / 2, zIndex: labels.length - priority }}
+        accessibilityLabel={`${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`}>
         <View style={[styles.label, { width: label.width, height: label.height, borderColor: label.id === selected ? '#FFD166' : '#6CB4F8', borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
           <Text numberOfLines={1} allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{label.name}</Text>
           <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.gasoline)}</Text>
           <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.diesel)}</Text>
           {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, { fontSize: 10, color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB', textAlign: 'center' }]}>{label.coverage}</Text>}
         </View>
-      </Marker>)}
-    </MapView>
+      </View>)}
+    </View>
     {failure && <View style={styles.warning}><Text style={styles.notice}>The map could not update. Check your connection.</Text>
       <Pressable accessibilityRole="button" onPress={onRetry} style={styles.retry}><Text style={styles.notice}>Retry map</Text></Pressable>
     </View>}

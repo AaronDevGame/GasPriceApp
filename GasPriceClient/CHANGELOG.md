@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Let mouse, touch and zoom gestures pass through map price cards on web and native maps. Keep cards display-only until their click interaction is introduced; map boundaries remain selectable.
+
 ### Added
 - Show DOE reported, Estimated and Outdated labels on map prices, disclose estimates in broader-area ranges, and show the original report, applied adjustments and sources when a city is selected. Label local area estimates and DOE company lists explicitly.
 
