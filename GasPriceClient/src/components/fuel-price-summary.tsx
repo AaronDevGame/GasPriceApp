@@ -35,7 +35,7 @@ export function DoePriceSummary({ report }: { report: DoeFuelPriceFeed }) {
       currency: 'PHP', unit: 'liter' };
   };
   return <ThemedView type="backgroundElement" style={styles.card}>
-    <ThemedText type="smallBold">DOE reported price ranges</ThemedText>
+    <ThemedText type="smallBold">DOE reported</ThemedText>
     <ThemedText type="small" themeColor="textSecondary">{report.scope === 'province' || !report.city ? 'Province' : 'City'}-level company ranges · {report.weekStart} to {report.weekEnd}</ThemedText>
     <PriceGrid prices={{ diesel: range('DIESEL'), gasoline91: range('RON 91'), gasoline95: range('RON 95') }} />
     <ThemedText type="small" themeColor="textSecondary">Reported company ranges, not individual station prices.</ThemedText>

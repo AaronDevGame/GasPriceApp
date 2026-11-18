@@ -4,6 +4,28 @@ import type { MapSnapshot, Point, PriceRange, Viewport } from './types';
 
 export const rangeText = (value: PriceRange | null) => value
   ? `₱${value.minPrice.toFixed(2)}–₱${value.maxPrice.toFixed(2)}/L` : '—';
+export const reportDate = (value: string) => new Date(`${value}T00:00:00+08:00`).toLocaleDateString('en-PH', {
+  month: 'short', day: 'numeric', timeZone: 'Asia/Manila',
+});
+export function adjustmentSummaries(adjustments: NonNullable<import('./types').CityPrices['adjustments']>) {
+  const groups = new Map<string, { fuel: string; date: string; amount: number; companies: Set<string> }>();
+  for (const change of adjustments) {
+    const key = `${change.fuel}:${change.effectiveDate}:${change.changePerLiter}`;
+    if (!groups.has(key)) groups.set(key, { fuel: change.fuel, date: change.effectiveDate, amount: change.changePerLiter, companies: new Set() });
+    groups.get(key)!.companies.add(change.oilCompany ?? 'All companies');
+  }
+  return [...groups.values()].sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
+}
+export function priceLabel(price: ReturnType<typeof areaPrices>) {
+  if (!price.reported) return 'No recent report';
+  if (price.report) {
+    const report = price.report;
+    if (report.priceKind === 'estimated') return `Estimated${report.asOf ? ` · ${reportDate(report.asOf)}` : ''}`;
+    const dates = report.weekStart && report.weekEnd ? `${reportDate(report.weekStart)}–${reportDate(report.weekEnd)}` : report.weekEnd ? reportDate(report.weekEnd) : '';
+    return `DOE reported${dates ? ` · ${dates}` : ''}${report.isOutdated ? ' · Outdated' : ''}`;
+  }
+  return `${price.estimated ? 'Includes estimates' : 'DOE reported'}${price.outdated ? ' · Outdated reports' : ''}`;
+}
 export type MapLabel = { id: string; coverage: string; price: ReturnType<typeof areaPrices>; anchor: Point; x: number; y: number; width: number; height: number; fontSize: number; name: string };
 // Search the part of the city's bounding box where a full label can fit on screen.
 function* candidates(city: MapArea, viewport: Viewport, width: number, height: number): Generator<Point> {
@@ -45,10 +67,10 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null): Map
   for (const { area, price } of sorted) {
     const name = area.name;
     const fontSize = 11;
-    const coverage = level === 'city' ? (price.complete ? '' : 'Incomplete') :
-      `${price.reported}/${price.total} cities reporting${price.complete ? '' : ' · incomplete'}`;
-    const height = coverage ? 78 : 62;
-    const longestLine = Math.max(name.length, rangeText(price.gasoline).length, rangeText(price.diesel).length, coverage.length);
+    const coverage = [priceLabel(price), level === 'city' ? (price.complete ? '' : 'Incomplete') :
+      `${price.reported}/${price.total} cities with prices${price.complete ? '' : ' · incomplete'}`].filter(Boolean).join('\n');
+    const height = 62 + coverage.split('\n').length * 16;
+    const longestLine = Math.max(name.length, rangeText(price.gasoline).length, rangeText(price.diesel).length, ...coverage.split('\n').map(line => line.length));
     const width = Math.min(viewport.width - 16, Math.max(130, longestLine * fontSize * 0.64 + 18));
     const positions = [...candidates(area, viewport, width, height)];
     const position = positions.find(([x, y]) => !placed.some(other =>

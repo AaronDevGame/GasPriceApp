@@ -11,7 +11,7 @@ import { mapCache } from './cache';
 import MapRenderer from './map-renderer';
 import { areaPrices, levelNames, mapLevel, mapLevelButtons, zoomForLevel, visibleAreas } from './hierarchy';
 import { cameraCenter } from './geometry';
-import { rangeText } from './labels';
+import { adjustmentSummaries, priceLabel, rangeText, reportDate } from './labels';
 import { mapAreaForLocation, locationForMapArea } from '@/fuel/selection';
 import type { Coordinates, DoePriceLocation } from '@/fuel/api';
 import type { MapSnapshot, Viewport, ZoomFocus } from './types';
@@ -145,17 +145,31 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
     <View style={styles.status}>
       {selection && prices && <View style={styles.selection}>
         <ThemedText type="smallBold">{selection.name}</ThemedText>
+        <ThemedText type="smallBold">{priceLabel(prices)}</ThemedText>
         <ThemedText type="small">RON 91 {rangeText(prices.gasoline)} · Diesel {rangeText(prices.diesel)}</ThemedText>
-        {level !== 'city' && <ThemedText type="small">{prices.reported} of {prices.total} cities / municipalities reporting</ThemedText>}
+        {prices.report?.weekStart && prices.report.weekEnd && <ThemedText type="small" themeColor="textSecondary">
+          DOE report: {reportDate(prices.report.weekStart)}–{reportDate(prices.report.weekEnd)}
+        </ThemedText>}
+        {prices.report?.priceKind === 'estimated' && <>
+          <ThemedText type="small">Original DOE reported: RON 91 {rangeText(prices.report.reportedGasoline ?? null)} · Diesel {rangeText(prices.report.reportedDiesel ?? null)}</ThemedText>
+          {adjustmentSummaries(prices.report.adjustments ?? []).map((change, i) => <ThemedText key={i} type="small" themeColor="textSecondary">
+            {reportDate(change.date)} · {change.fuel === 'gasoline' ? 'RON 91' : 'Diesel'} {change.amount >= 0 ? '+' : '−'}₱{Math.abs(change.amount).toFixed(2)}/L · {[...change.companies].join(', ')}
+          </ThemedText>)}
+          <ThemedText type="small" themeColor="textSecondary">Estimated from the DOE baseline and confirmed effective adjustments. Actual station prices may differ.</ThemedText>
+        </>}
+        {prices.report?.isOutdated && <ThemedText type="small" themeColor="textSecondary">Last DOE-reported prices. A complete set of confirmed adjustments is unavailable; current pump prices may differ.</ThemedText>}
+        {[...new Set([...(prices.report?.sourceUrls ?? []), ...(prices.report?.adjustments ?? []).flatMap(change => change.sourceUrls)])]
+          .map((url, i) => <Pressable key={url} accessibilityRole="link" onPress={() => void Linking.openURL(url)}><ThemedText type="small" themeColor="textSecondary">{i === 0 ? 'View DOE report' : `Adjustment source ${i}`} ↗</ThemedText></Pressable>)}
+        {level !== 'city' && <ThemedText type="small">{prices.reported} of {prices.total} cities / municipalities with prices · {prices.estimated} estimated · {prices.outdated} outdated</ThemedText>}
       </View>}
       {snapshot.loading && !foregroundRefreshing && <View style={styles.loading}><ActivityIndicator size="small" /><ThemedText type="small">Updating map…</ThemedText></View>}
       {!authenticated && !authLoading && <ThemedText type="small">Tap Reconnect above to load city prices.</ThemedText>}
-      {noPrices && <ThemedText type="small">No current city prices are available in this view.</ThemedText>}
+      {noPrices && <ThemedText type="small">No city reports from the last 30 days are available in this view.</ThemedText>}
       {snapshot.error && <View style={styles.error}><ThemedText type="small" accessibilityRole="alert">{snapshot.error}</ThemedText>
         <Pressable accessibilityRole="button" onPress={() => controller.current?.retry()} style={styles.retry}><ThemedText type="smallBold">Retry</ThemedText></Pressable></View>}
       {/* Fuel descriptions belong outside the map; overlays show the location above the two ranges. */}
       <ThemedText type="small" themeColor="textSecondary">Top: gasoline RON 91 · Bottom: diesel · PHP per liter · — unavailable</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">Area ranges combine the lowest–highest reported city prices, not averages. Coverage varies; individual station prices vary.</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">DOE reported = original report prices. Estimated = DOE baseline plus confirmed adjustments. Outdated = report ended over 7 days ago. Reports over 30 days old are hidden. Area ranges combine city minima and maxima; station prices vary.</ThemedText>
       <Pressable accessibilityRole="link" accessibilityLabel="Boundary source and license" onPress={() => void Linking.openURL('https://github.com/faeldon/philippines-json-maps')}>
         <ThemedText style={styles.attribution}>Boundaries: NAMRIA / PSA through OCHA COD-AB · CC BY 3.0 IGO · James Faeldon · MIT. GasPriceApp regrouped city boundaries, normalized ring orientation, and merged and simplified area outlines.</ThemedText>
       </Pressable>

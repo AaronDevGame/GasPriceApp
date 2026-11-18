@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Show DOE reported, Estimated and Outdated labels on map prices, disclose estimates in broader-area ranges, and show the original report, applied adjustments and sources when a city is selected. Label local area estimates and DOE company lists explicitly.
+
 ### Changed
 - Center the detected city outline evenly when location lookup resolves, using GPS as the fallback. Remove the nationwide eastward camera offset from native city/area centering.
 - Add Nationwide, Island groups, Regions, Provinces and Cities map navigation buttons. Keep the active level synchronized with manual zoom; tapping a level changes zoom around the current view, while Nationwide restores the Philippines overview.

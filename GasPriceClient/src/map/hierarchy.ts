@@ -62,6 +62,10 @@ export function areaPrices(area: MapArea, snapshot: Pick<MapSnapshot, 'prices'>)
     const values = reports.flatMap(report => report[grade] ? [report[grade]!] : []);
     return values.length ? { minPrice: Math.min(...values.map(v => v.minPrice)), maxPrice: Math.max(...values.map(v => v.maxPrice)), currency: 'PHP', unit: 'liter' } : null;
   };
-  return { gasoline: range('gasoline'), diesel: range('diesel'), reported: reports.filter(p => p.gasoline || p.diesel).length,
+  const values = reports.filter(p => p.gasoline || p.diesel);
+  return { gasoline: range('gasoline'), diesel: range('diesel'), reported: values.length,
+    estimated: values.filter(p => p.priceKind === 'estimated').length,
+    outdated: values.filter(p => p.isOutdated).length,
+    report: area.members.length === 1 ? reports[0] : undefined,
     total: area.members.length, complete: reports.length === area.members.length };
 }
