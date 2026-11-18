@@ -1,18 +1,23 @@
 import { StyleSheet, View, type ColorValue } from 'react-native';
 
-export type AppIconName = 'overview' | 'fuel' | 'news' | 'changes';
+export type AppIconName = 'overview' | 'fuel' | 'news' | 'changes' | 'location';
 
 /** Small cross-platform line icons without a font or native dependency. */
 export function AppIcon({ name, color = '#9DA9BA' }: { name: AppIconName; color?: ColorValue }) {
   const line = { borderColor: color };
   return <View style={styles.frame} accessible={false}>
-    {name === 'overview' ? <View style={styles.grid}>{[0, 1, 2, 3].map(n => <View key={n} style={[styles.square, line]} />)}</View>
+    {name === 'location' ? <><View style={[styles.crosshairHorizontal, { backgroundColor: color }]} /><View style={[styles.crosshairVertical, { backgroundColor: color }]} /><View style={[styles.locationRing, line]} /><View style={[styles.locationDot, { backgroundColor: color }]} /></>
+      : name === 'overview' ? <View style={styles.grid}>{[0, 1, 2, 3].map(n => <View key={n} style={[styles.square, line]} />)}</View>
       : name === 'changes' ? <View style={styles.bars}>{[8, 15, 21].map(height => <View key={height} style={[styles.bar, { height, backgroundColor: color }]} />)}</View>
       : name === 'news' ? <View style={[styles.paper, line]}>{[0, 1, 2].map(n => <View key={n} style={[styles.rule, { backgroundColor: color }]} />)}</View>
       : <><View style={[styles.pump, line]}><View style={[styles.window, line]} /><View style={[styles.rule, { backgroundColor: color }]} /></View><View style={[styles.hose, line]} /></>}
   </View>;
 }
 const styles = StyleSheet.create({
+  crosshairHorizontal: { position: 'absolute', width: 24, height: 2 },
+  crosshairVertical: { position: 'absolute', width: 2, height: 24 },
+  locationRing: { position: 'absolute', width: 17, height: 17, borderWidth: 2, borderRadius: 9, backgroundColor: '#1A2029' },
+  locationDot: { width: 7, height: 7, borderRadius: 4 },
   frame: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   grid: { width: 21, height: 21, flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
   square: { width: 9, height: 9, borderWidth: 1.6, borderRadius: 2 },

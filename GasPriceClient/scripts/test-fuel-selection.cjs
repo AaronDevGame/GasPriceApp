@@ -8,7 +8,7 @@ const modules = new Map();
 function compile(name, overrides = {}) {
   if (!Object.keys(overrides).length && modules.has(name)) return modules.get(name);
   const exports = {};
-  const filename = path.join(root, name + (name.endsWith('screen') ? '.tsx' : '.ts'));
+  const filename = path.join(root, name + (fs.existsSync(path.join(root, name + '.tsx')) ? '.tsx' : '.ts'));
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
@@ -39,7 +39,7 @@ fake.cities = [fake.cities[0], { ...fake.cities[0], id: 'duplicate' }];
 assert.equal(selection.mapAreaForLocation(fake, cebu), null, 'Ambiguous names must not choose an arbitrary boundary');
 console.log('PASS geographic matching: city aliases, Metro Manila, provinces, wrong provinces and ambiguous names');
 
-function harness() {
+function harness(options = {}) {
   let cursor = 0, dirty = false, tree, foreground;
   const cells = [], pendingEffects = [], calls = [];
   const auth = { session: { state: 'authenticated' }, loading: false, restore: async () => { calls.push('restore'); } };
@@ -52,8 +52,9 @@ function harness() {
   const equal = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
   const memo = (fn, deps) => { const i = cursor++; if (!cells[i] || !equal(cells[i].deps, deps)) cells[i] = { deps, value: fn() }; return cells[i].value; };
   const react = {
-    useState: initial => { const i = cursor++; if (!(i in cells)) cells[i] = typeof initial === 'function' ? initial() : initial;
+    useState: initial => { const i = cursor++; if (!(i in cells)) cells[i] = options.snapshot && initial?.index === null && 'viewport' in initial ? options.snapshot : typeof initial === 'function' ? initial() : initial;
       return [cells[i], value => { const next = typeof value === 'function' ? value(cells[i]) : value; if (!Object.is(next, cells[i])) { cells[i] = next; dirty = true; } }]; },
+    useMemo: memo, useImperativeHandle: () => {},
     useRef: current => memo(() => ({ current }), []), useCallback: (fn, deps) => memo(() => fn, deps),
     useEffect: (fn, deps) => { const i = cursor++; if (!cells[i] || !equal(cells[i].deps, deps)) pendingEffects.push(() => { cells[i]?.cleanup?.(); cells[i] = { deps, cleanup: fn() }; }); },
   };
@@ -61,7 +62,9 @@ function harness() {
     doeLocationLabel: location => location.city || location.province, doeCoverageLabel: report => report.city || report.province };
   const components = new Proxy({}, { get: (_, name) => name });
   const overrides = {
-    react, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'Fragment' },
+    react, 'expo-router': { useFocusEffect: () => {} },
+    './controller': { MapController: class {} }, './cache': { mapCache: { setSession: () => {} } }, './map-renderer': { __esModule: true, default: 'MapRenderer' }, '@/auth/foreground': { subscribeToForeground: () => () => {} },
+    'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'Fragment' },
     'react-native': { ...components, View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', TextInput: 'TextInput', Platform: { OS: 'web' }, StyleSheet: { create: v => v } },
     'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
     '@/auth/auth-provider': { useAuth: () => auth }, '@/auth/http': { errorMessage: () => 'Offline' },
@@ -70,9 +73,9 @@ function harness() {
     '@/hooks/use-foreground-refresh': { useForegroundRefresh: fn => { foreground = fn; } },
     '@/map/fuel-map': { __esModule: true, default: 'FuelMap' },
   };
-  for (const name of ['mobile-header', 'themed-text', 'refreshable-scroll-view', 'themed-view', 'local-price-board', 'fuel-price-summary', 'dashboard-action', 'fuel-news-headline']) overrides['@/components/' + name] = components;
-  const Screen = compile('fuel/fuel-prices-screen', overrides).default;
-  const render = () => { dirty = false; cursor = 0; tree = Screen(); while (pendingEffects.length) pendingEffects.shift()(); };
+  for (const name of ['mobile-header', 'themed-text', 'refreshable-scroll-view', 'themed-view', 'local-price-board', 'fuel-price-summary', 'dashboard-action', 'fuel-news-headline', 'app-icon']) overrides['@/components/' + name] = components;
+  const Screen = compile(options.snapshot ? 'map/fuel-map' : 'fuel/fuel-prices-screen', overrides).default;
+  const render = () => { dirty = false; cursor = 0; tree = Screen(options.props); while (pendingEffects.length) pendingEffects.shift()(); };
   const settle = async () => { for (let i = 0; i < 30; i++) { if (dirty || !tree) render(); await Promise.resolve(); } assert(!dirty, 'Screen must settle'); };
   const nodes = () => { const out = []; const visit = n => { if (Array.isArray(n)) return n.forEach(visit); if (!n || typeof n !== 'object') return; out.push(n); visit(n.props?.children); }; visit(tree); return out; };
   const button = text => nodes().find(n => n.type === 'Pressable' && nodesText(n).includes(text));
@@ -119,5 +122,32 @@ function harness() {
   const beforeRefresh = local.calls.filter(value => value?.city).length;
   local.foreground(); await local.settle();
   assert.equal(local.calls.filter(value => value?.city).length, beforeRefresh + 1, 'One DOE browse per refresh');
+  const mapProps = { userCoordinates: null, onReturnToLocation: () => { returned++; } };
+  let returned = 0;
+  const mapHarness = harness({ props: mapProps, snapshot: { index, cities: [], features: [], prices: new Map(), viewport: null, loading: false, error: null } });
+  await mapHarness.settle();
+  const locationButton = () => mapHarness.nodes().find(n => n.props?.accessibilityLabel === 'Return to my location');
+  assert.equal(locationButton().props.disabled, true, 'No permission/fix leaves location control disabled');
+  mapProps.userCoordinates = { latitude: 14.43, longitude: 120.94 };
+  mapHarness.render(); await mapHarness.settle();
+  assert.equal(locationButton().props.disabled, false);
+  const camera = () => mapHarness.nodes().find(n => n.type === 'MapRenderer').props.locationFocus;
+  assert.equal(camera().latitude, 14.43);
+  const firstFocus = camera();
+  mapHarness.render(); await mapHarness.settle();
+  assert.equal(camera(), firstFocus, 'Unrelated renders must not recenter a panned map');
+  locationButton().props.onPress(); await mapHarness.settle();
+  assert.equal(camera().request, 1, 'Recenter works even when the area and coordinates are unchanged');
+  locationButton().props.onPress(); await mapHarness.settle();
+  assert.equal(camera().request, 2);
+  assert.equal(returned, 2);
+  mapProps.userCoordinates = { latitude: 51.5, longitude: -0.1 };
+  mapHarness.render(); await mapHarness.settle();
+  assert.equal(locationButton().props.disabled, true, 'Do not move the Philippines map outside its coverage');
+  assert.equal(camera(), null);
+  mapProps.userCoordinates = null;
+  mapHarness.render(); await mapHarness.settle();
+  assert.equal(locationButton().props.disabled, true, 'A cleared location disables the control');
+  console.log('PASS map location: disabled before fix, enabled at Imus, stable while panning, repeat recenter and out-of-coverage handling');
   console.log('PASS merged screen: shared area/grade, view persistence, stale response protection, deduplicated refresh, GPS race and reconnect');
 })().catch(error => { console.error(error); process.exitCode = 1; });

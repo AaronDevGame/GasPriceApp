@@ -209,7 +209,14 @@ export default function FuelPricesScreen() {
                 <ThemedText type="smallBold">{value === 'map' ? 'Map' : 'Company list'}</ThemedText>
               </Pressable>)}</View>
             <View style={mode === 'list' ? styles.hidden : undefined}>
-              <FuelMap ref={map} location={selected} locations={feed?.locations ?? []} onLocationChange={choose}
+              <FuelMap ref={map} location={historyVisible && fuel.localItem ? localLocation(fuel.localItem, null) ?? selected : selected} userCoordinates={fuel.userCoordinates}
+                onReturnToLocation={() => {
+                  if (!fuel.localItem) return;
+                  const local = localLocation(fuel.localItem, fuel.doePrices);
+                  if (local && (!selected || !sameLocation(local, selected))) choose(local);
+                  setHistoryVisible(true);
+                  followLocal.current = true;
+                }} locations={feed?.locations ?? []} onLocationChange={choose}
                 grade={grade} active={mode === 'map'} managedRefresh foregroundRefreshing={refreshing || mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
             </View>
             {mode === 'list' && report && <>

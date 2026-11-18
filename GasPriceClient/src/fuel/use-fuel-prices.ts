@@ -14,6 +14,7 @@ export function useFuelPrices() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationNote, setLocationNote] = useState('Use your location to see prices near you.');
+  const [userCoordinates, setUserCoordinates] = useState<Coordinates | null>(null);
   const coordinates = useRef<Coordinates | undefined>(undefined);
   const version = useRef(0);
   const running = useRef(false);
@@ -35,15 +36,18 @@ export function useFuelPrices() {
     setLocationNote('Waiting for location permission…');
     let position: Coordinates | null;
     try { position = await requestLocation(); } catch (failure) {
-      if (ticket === version.current) setLocationNote(locationErrorMessage(failure));
+      if (ticket === version.current) { setUserCoordinates(null); coordinates.current = undefined; setLocationNote(locationErrorMessage(failure)); }
       return;
     }
     if (ticket !== version.current) return;
     if (!position) {
+      setUserCoordinates(null);
+      coordinates.current = undefined;
       setLocationNote('Location access is blocked. Check your browser and device location permissions to use your location.');
       return;
     }
     coordinates.current = position;
+    setUserCoordinates(position);
     setLocationNote('Location received. Updating prices near you…');
     try {
       const next = await refreshLocation(position);
@@ -119,7 +123,7 @@ export function useFuelPrices() {
     cancel();
     await logout();
   };
-  return { localItem, doePrices, updates, historyError,
+  return { localItem, doePrices, updates, historyError, userCoordinates,
     busy: busy || authLoading, error: authError ?? error,
     locationNote, authenticated, refresh, useLocation, signOut };
 }

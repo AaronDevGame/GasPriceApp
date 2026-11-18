@@ -29,7 +29,9 @@ export type MapSnapshot = {
   prices: ReadonlyMap<string, CityPrices>; viewport: Viewport | null;
   loading: boolean; detail: boolean; error: string | null;
 };
+export type LocationFocus = { latitude: number; longitude: number; request: number };
 export type MapRendererProps = {
+  locationFocus?: LocationFocus | null;
   snapshot: MapSnapshot; selected: string | null; focusBounds?: Bounds | null; active?: boolean;
   onMove(): void; onIdle(viewport: Viewport): void; onSelect(id: string): void;
 };

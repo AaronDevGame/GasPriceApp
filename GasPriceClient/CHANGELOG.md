@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Add a left-side map location button that activates after a successful location fix and returns to the detected area. Center the map as soon as coordinates arrive, including when local price lookup fails.
 - Restore the latest news headline and news retry message to the top of Fuel Prices, above the page title and area selector.
 - Merge Overview and Fuel Prices into the Fuel Prices home tab, leaving News and Weekly Changes as the other tabs. Share city/province selection across DOE summaries, map and company comparisons, preserve view selections, label local estimates separately, collapse recent updates, keep the news headline above prices, and redirect existing `/fuel-prices` links to home.
 - Enable web pull-to-refresh outside the Fuel Prices map canvas. Reuse the map refresh and top spinner while preserving camera, selection and gestures inside the interactive map.

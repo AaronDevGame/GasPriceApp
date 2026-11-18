@@ -4,6 +4,7 @@ import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-n
 
 import { useAuth } from '@/auth/auth-provider';
 import { subscribeToForeground } from '@/auth/foreground';
+import { AppIcon } from '@/components/app-icon';
 import { ThemedText } from '@/components/themed-text';
 import { MapController } from './controller';
 import { mapCache } from './cache';
@@ -11,14 +12,16 @@ import MapRenderer from './map-renderer';
 import { areaPrices, levelNames, mapLevel, visibleAreas } from './hierarchy';
 import { rangeText } from './labels';
 import { mapAreaForLocation, locationForMapArea } from '@/fuel/selection';
-import type { DoePriceLocation } from '@/fuel/api';
+import type { Coordinates, DoePriceLocation } from '@/fuel/api';
 import type { MapSnapshot, Viewport } from './types';
 
 const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: true, detail: false, error: null };
 export type FuelMapHandle = { refresh(): Promise<void> };
 
-export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange, location, locations = [], onLocationChange, grade, active = true, managedRefresh = false }: {
+export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange, location, userCoordinates, onReturnToLocation, locations = [], onLocationChange, grade, active = true, managedRefresh = false }: {
   location?: DoePriceLocation | null;
+  userCoordinates?: Coordinates | null;
+  onReturnToLocation?(): void;
   locations?: DoePriceLocation[];
   onLocationChange?(location: DoePriceLocation): void;
   grade?: string;
@@ -32,6 +35,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const authenticated = session?.state === 'authenticated';
   const [snapshot, setSnapshot] = useState(empty);
   const [mapSelection, setMapSelection] = useState<{ id: string; targetId: string | undefined } | null>(null);
+  const [locationRequest, setLocationRequest] = useState(0);
   const controller = useRef<MapController | null>(null);
   const lastViewport = useRef<Viewport | null>(null);
   const refreshRequest = useRef<Promise<void> | null>(null);
@@ -75,6 +79,13 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const target = useMemo(() => snapshot.index && locationProvince !== undefined
     ? mapAreaForLocation(snapshot.index, { city: locationCity ?? '', province: locationProvince }) : null,
   [snapshot.index, locationCity, locationProvince]);
+  const latitude = userCoordinates?.latitude;
+  const longitude = userCoordinates?.longitude;
+  const indexBounds = snapshot.index?.bbox;
+  const canLocate = latitude !== undefined && longitude !== undefined && Number.isFinite(latitude) && Number.isFinite(longitude) &&
+    !!indexBounds && longitude >= indexBounds[0] && longitude <= indexBounds[2] && latitude >= indexBounds[1] && latitude <= indexBounds[3];
+  const locationFocus = useMemo(() => canLocate ? { latitude: latitude!, longitude: longitude!, request: locationRequest } : null,
+    [canLocate, latitude, longitude, locationRequest]);
   const targetId = target?.id;
   const selected = mapSelection && mapSelection.targetId === targetId ? mapSelection.id : targetId ?? null;
   useEffect(() => {
@@ -98,8 +109,15 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
     <ThemedText type="small" themeColor="textSecondary">Select a reported city or province to update the company list. Broader areas show map ranges only.</ThemedText>
     <ThemedText type="smallBold">{levelNames[level]} · Zoom in for more detail</ThemedText>
     <View style={styles.canvas}>
-      {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} focusBounds={target?.bbox} active={active} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :
+      {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} focusBounds={target?.bbox} locationFocus={locationFocus} active={active} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :
         <View style={styles.initial}><ActivityIndicator /><ThemedText>Loading Philippine map…</ThemedText></View>}
+      <Pressable accessibilityRole="button" accessibilityLabel="Return to my location"
+        accessibilityHint={canLocate ? 'Center the map on your detected location.' : userCoordinates ? 'Your detected location is outside the Philippine map.' : 'Allow location access using Use my location above to enable this button.'}
+        accessibilityState={{ disabled: !canLocate }} disabled={!canLocate}
+        onPress={() => { setLocationRequest(value => value + 1); onReturnToLocation?.(); }}
+        style={[styles.locationButton, canLocate ? styles.locationButtonEnabled : styles.locationButtonDisabled]}>
+        <AppIcon name="location" color={canLocate ? '#76B4FF' : '#7B8798'} />
+      </Pressable>
     </View>
     <View style={styles.status}>
       {selection && prices && <View style={styles.selection}>
@@ -125,6 +143,8 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   </View>;
 }
 const styles = StyleSheet.create({
+  locationButton: { position: 'absolute', left: 12, top: 12, width: 48, height: 48, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A2029', zIndex: 20 },
+  locationButtonEnabled: { borderColor: '#76B4FF' }, locationButtonDisabled: { borderColor: '#495569', opacity: 0.7 },
   selection: { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#D38B00', gap: 4 },
   wrapper: { gap: 10 }, canvas: { height: 560, minHeight: 380, borderRadius: 14, overflow: 'hidden', backgroundColor: '#202832' },
   initial: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }, status: { gap: 8 },

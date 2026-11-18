@@ -123,6 +123,7 @@ async function settle(h) {
   console.log('PASS foreground provider: no blocking loading, duplicate-return coalescing, cleanup and offline screen preservation');
   const granted = harness(); granted.load('fuel/use-fuel-prices').useFuelPrices(); granted.effects[0](); await settle(granted);
   assert.equal(granted.calls[0], 'permission');
+  assert.equal(JSON.stringify(granted.states[7].value), JSON.stringify({ latitude: 10.3, longitude: 123.8 }), 'Expose the successful location fix to the map');
   assert.ok(!granted.calls.some(call => call.url === '/fuel-prices/featured'));
   const ai = granted.calls.find(call => call.url === '/ai/fuel-prices');
   assert.equal(ai.init.method, 'POST'); assert.equal(ai.init.body, JSON.stringify({ latitude: 10.3, longitude: 123.8 }));
@@ -145,6 +146,7 @@ async function settle(h) {
   for (const options of [{ denied: true }, { gpsFailure: true }, { aiFailure: true }]) {
     const h = harness(options); h.load('fuel/use-fuel-prices').useFuelPrices(); h.effects[0](); await settle(h);
     assert.equal(h.states[0].value, null);
+    assert.equal(h.states[7].value !== null, !!options.aiFailure, 'Map coordinates survive price lookup failure, but not permission/GPS failure');
     if (options.aiFailure) assert.ok(h.states[6].value.includes('location was received'));
     if (options.denied) assert.ok(h.states[6].value.includes('access is blocked'));
     if (!options.aiFailure) assert.ok(!h.calls.some(call => call.url === '/ai/fuel-prices'));
