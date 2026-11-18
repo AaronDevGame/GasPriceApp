@@ -69,7 +69,7 @@ Moving invalidates pending debounce work and the view generation. Shared in-flig
 
 ## Price labels
 
-Price cards are currently display-only: mouse, touch and wheel input passes through to the map, including drags starting over a card. Web cards use the noninteractive overlay layer; native cards use an absolute-positioned overlay with pointer events disabled instead of native markers. Select areas through their boundaries. Future card click interactions must distinguish taps from drags without blocking map gestures.
+Price cards are currently display-only: mouse, touch and wheel input passes through to the map, including drags starting over a card. Web cards use the float pane above boundary fills and outlines, with pointer events disabled on the container and cards; native cards use an absolute-positioned overlay with pointer events disabled instead of native markers. Select areas through their boundaries. Future card click interactions must distinguish taps from drags without blocking map gestures.
 
 Map cards identify original ranges as **DOE reported**, calculated ranges as **Estimated**, and original reports over seven days old as **Outdated**. Reports older than 30 days are hidden. Estimates use only complete confirmed effective adjustment coverage on the backend, separately for each company and fuel. Selected-city details preserve the original DOE range and reporting period, list applied adjustments, and link their sources. Broader-area cards say **Includes estimates** whenever their ranges contain estimates and disclose outdated reports. Local summary cards remain a separate area-estimate feed and explicitly say **Estimated**; company lists say **DOE reported**.
 

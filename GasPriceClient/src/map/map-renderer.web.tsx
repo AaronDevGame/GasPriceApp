@@ -15,7 +15,8 @@ function createLabels() {
         labels: MapLabel[] = [];
         selected: string | null = null;
         private root = document.createElement('div');
-        onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.overlayLayer.appendChild(this.root); }
+        // Keep cards above polygon fills/outlines while all gestures pass through.
+        onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.floatPane.appendChild(this.root); }
         draw() {
           const projection = this.getProjection();
           if (!projection) return;

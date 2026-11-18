@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- Draw web map price cards above boundary fills and highlighted outlines while preserving mouse/touch gesture pass-through.
 - Let mouse, touch and zoom gestures pass through map price cards on web and native maps. Keep cards display-only until their click interaction is introduced; map boundaries remain selectable.
 
 ### Added
