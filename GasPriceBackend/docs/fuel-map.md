@@ -76,20 +76,23 @@ Use existing native bearer + `X-App-Instance-Id`, or browser cookie auth + valid
 
 **RON 91 was explicitly confirmed for gasoline.** Never substitute RON 95/97/100 or merge them. Ordinary DIESEL excludes DIESEL PLUS. Province/region rows are never spread across city polygons. `scope: "city"` identifies the requested/result granularity; an unavailable result asserts no price for that city. Unavailable results have null ranges and null report/source dates, not zero prices. Unknown city IDs reject the whole request with 400; known cities without prices succeed with an unavailable item.
 
-One asynchronous, no-tracking database query reads eligible DOE rows for the requested geographic province keys and two exact grades. In-memory deterministic crosswalking/grouping follows; there are no per-city queries, imports, AI calls, network downloads or geocoding calls. Normal authentication also performs its existing guest lookup. Existing DOE indexes are reused.
+Bounded-date asynchronous, no-tracking queries read DOE rows for the requested geographic province keys and two exact grades, stored adjustment notices and confirmed news. In-memory deterministic crosswalking/grouping follows; there are no per-city queries, imports, AI calls, network downloads or geocoding calls. Normal authentication also performs its existing guest lookup. Existing DOE indexes are reused.
 
 ## Price freshness and aggregation policy
 
-Policy identifier: `doe-week-end-within-7-days-v1`.
+Policy identifier: `doe-reported-or-confirmed-estimate-30-days-v2`.
 
 - Determine today's calendar date in Asia/Manila, with UTC API timestamps.
-- Accept stored reports whose start is not in the future and end is at least today minus seven days; reject inverted coverage or coverage longer than seven days.
+- Accept stored reports whose start is not in the future and end is at least today minus 30 days; reject inverted coverage or coverage longer than seven days. Original reports over seven days past their end are marked outdated.
 - Reject future fetch timestamps, invalid/nonpositive ranges, blank company names and non-HTTPS/non-DOE source URLs.
 - Match exact city coverage first. A newer provincial report never becomes a city value.
 - Select one report identity (week start/end, source URL and report ID), newest week first, then week end, latest fetch and deterministic URL tie-break. Do not fill a missing grade from another report/week.
 - Within that report, keep the latest observation per company/grade. Return minimum company minimum and maximum company maximum, separately per grade.
 - Return `partial` when only one grade exists and `unavailable` when neither exists. Missing grades never borrow values.
-- Cache validity is **five minutes**, including unavailable results, capped by the Philippine midnight at which the report becomes ineligible. The feed expires when its earliest item expires. This is a refresh interval, not a claim that weekly prices were observed five minutes ago.
+- Additive item fields: `priceKind` (`doe_reported`, `estimated`, `unavailable`), `isOutdated`, `asOf`, `reportedGasoline`, `reportedDiesel`, and `adjustments`. Original report week/source fields retain their meaning. The existing `gasoline`/`diesel` ranges are the displayed values; `reportedGasoline`/`reportedDiesel` always preserve the unmodified baseline.
+- Estimates shift each company/grade separately before combining city minima/maxima. Use only structured exact confirmed changes from stored DOE notices or confirmed, nonsuperseded news; historical confirmed articles remain usable after editorial expiry. Never extract amounts from prose or use forecasts. Match company notices only to that company; national news may apply to all companies. Merge duplicate event sources without applying a change twice; conflicting amounts or times prevent estimation.
+- Baseline date is the row's printed `monitoringEnd` when available, otherwise report `weekEnd` (assumed end-of-report baseline). Only later effective dates count, preventing repeat application of adjustments already in the baseline. Require an explicit change, including zero, for every intervening weekly Tuesday; also apply any confirmed intervening non-Tuesday events. Date-only changes become effective at 06:00 Philippine time. Before an explicit effective time, do not apply the change. If any company/grade lacks coverage, keep the entire city's original DOE ranges, with the outdated flag when applicable. Weekly ranges are observations across a period, so calculated prices remain estimates rather than current station quotes.
+- Cache validity is **five minutes**, including unavailable results, capped by the next Philippine midnight, any upcoming confirmed effective time, and the report's 30-day cutoff. The feed expires when its earliest item expires. This is a refresh interval, not a claim that weekly prices were observed five minutes ago.
 - HTTP prices are `no-store`; authorized future clients may use the explicit per-item application cache expiry. No server price cache delays newly imported rows.
 
 ## Verification

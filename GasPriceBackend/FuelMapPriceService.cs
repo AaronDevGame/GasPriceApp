@@ -4,7 +4,15 @@ public sealed record FuelMapRange(decimal MinPrice, decimal MaxPrice, string Cur
 public sealed record FuelMapCityPrices(string CityId, string Scope, string Status, string GasolineGrade,
     FuelMapRange? Gasoline, FuelMapRange? Diesel, DateOnly? WeekStart, DateOnly? WeekEnd,
     DateOnly? MonitoringStart, DateOnly? MonitoringEnd, string[] SourceUrls, DateTime? FetchedAtUtc,
-    DateTime ExpiresAtUtc);
+    DateTime ExpiresAtUtc)
+{
+    public string PriceKind { get; init; } = "unavailable";
+    public bool IsOutdated { get; init; }
+    public DateOnly? AsOf { get; init; }
+    public FuelMapRange? ReportedGasoline { get; init; }
+    public FuelMapRange? ReportedDiesel { get; init; }
+    public FuelMapAdjustment[] Adjustments { get; init; } = [];
+}
 public sealed record FuelMapPriceFeed(string BoundaryVersion, string GasolineGrade, string DieselGrade,
     DateTime GeneratedAtUtc, DateTime ExpiresAtUtc, string FreshnessPolicy, IReadOnlyList<FuelMapCityPrices> Items);
 
@@ -13,7 +21,7 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
     public const string GasolineGrade = "RON 91";
     public const string DieselGrade = "DIESEL";
     public const int MaxCities = 2000;
-    public const string FreshnessPolicy = "doe-week-end-within-7-days-v1";
+    public const string FreshnessPolicy = "doe-reported-or-confirmed-estimate-30-days-v2";
 
     public async Task<FuelMapPriceFeed> ReadAsync(IReadOnlyList<string> cityIds, CancellationToken cancellationToken)
     {
@@ -28,17 +36,25 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
         if (keys.Any(key => key.Contains("MAGUINDANAO", StringComparison.Ordinal))) keys.UnionWith(DoeLocationMatcher.ProvinceKeyCandidates("Maguindanao"));
         var rows = await db.DoeFuelPrices.AsNoTracking().Where(row => keys.Contains(row.ProvinceKey) &&
             (row.FuelGrade == GasolineGrade || row.FuelGrade == DieselGrade) &&
-            (row.City != "" || row.CityKey != "") && row.WeekStart <= today && row.WeekEnd >= today.AddDays(-7))
+            (row.City != "" || row.CityKey != "") && row.WeekStart <= today && row.WeekEnd >= today.AddDays(-30))
             .ToListAsync(cancellationToken);
-        return BuildFeed(cityIds, rows, geography, now);
+        var from = today.AddDays(-37);
+        var notices = await db.FuelAdjustments.AsNoTracking().Where(row =>
+            row.EffectiveDatePhilippines >= from && row.EffectiveDatePhilippines <= today.AddDays(1))
+            .ToArrayAsync(cancellationToken);
+        var news = await db.FuelNews.AsNoTracking().Where(row => row.Category == "adjustment" &&
+            row.Status == "confirmed" && row.SupersededById == null && row.UpdatedAtUtc >= FuelMapEstimates.StartUtc(from))
+            .ToArrayAsync(cancellationToken);
+        return BuildFeed(cityIds, rows, geography, now, FuelMapEstimates.Evidence(notices, news, now));
     }
 
     public static FuelMapPriceFeed BuildFeed(IReadOnlyList<string> cityIds, IEnumerable<DoeFuelPrice> rows,
-        FuelMapGeography geography, DateTime now)
+        FuelMapGeography geography, DateTime now, FuelMapAdjustment[]? adjustments = null)
     {
         var today = PhilippineDate(now);
         var wanted = cityIds.ToHashSet(StringComparer.Ordinal);
-        var eligible = rows.Where(row => row.WeekStart <= today && row.WeekEnd >= today.AddDays(-7) &&
+        adjustments ??= [];
+        var eligible = rows.Where(row => row.WeekStart <= today && row.WeekEnd >= today.AddDays(-30) &&
                 row.WeekEnd >= row.WeekStart && row.WeekEnd <= row.WeekStart.AddDays(7) &&
                 row.FetchedAtUtc <= now && row.MinPricePerLiter > 0 && row.MaxPricePerLiter >= row.MinPricePerLiter &&
                 row.MaxPricePerLiter <= 999999.99m &&
@@ -49,7 +65,9 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
             .GroupBy(item => item.City!.Id).ToDictionary(group => group.Key, group => group.Select(item => item.Row).ToArray());
         var items = cityIds.Select(id =>
         {
-            var expiry = now.AddMinutes(5);
+            // Re-evaluate at Philippine midnight and at confirmed effective-time boundaries.
+            var expiry = new[] { now.AddMinutes(5), FuelMapEstimates.StartUtc(today.AddDays(1)) }
+                .Concat(adjustments.Where(item => item.EffectiveAtUtc > now).Select(item => item.EffectiveAtUtc)).Min();
             if (!eligible.TryGetValue(id, out var candidates))
                 return new FuelMapCityPrices(id, "city", "unavailable", GasolineGrade, null, null,
                     null, null, null, null, [], null, expiry);
@@ -61,15 +79,17 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
             var selected = report.GroupBy(row => DoeLocationMatcher.Normalize(row.OilCompany) + "|" + row.FuelGrade)
                 .Select(group => group.OrderByDescending(row => row.FetchedAtUtc)
                     .ThenByDescending(row => row.Id).First()).ToArray();
-            FuelMapRange? Range(string grade)
+            FuelMapRange? Range(DoeFuelPrice[] source, string grade)
             {
-                var values = selected.Where(row => row.FuelGrade == grade).ToArray();
+                var values = source.Where(row => row.FuelGrade == grade).ToArray();
                 return values.Length == 0 ? null : new(values.Min(row => row.MinPricePerLiter), values.Max(row => row.MaxPricePerLiter));
             }
-            var gasoline = Range(GasolineGrade);
-            var diesel = Range(DieselGrade);
-            // Eligibility ends at the Philippine midnight after WeekEnd + 7 days.
-            var eligibleUntil = report.Key.WeekEnd.AddDays(8).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddHours(-8);
+            var reportedGasoline = Range(selected, GasolineGrade);
+            var reportedDiesel = Range(selected, DieselGrade);
+            var estimate = FuelMapEstimates.Estimate(selected, adjustments, today, now);
+            var gasoline = estimate.HasValue ? Range(estimate.Value.Rows, GasolineGrade) : reportedGasoline;
+            var diesel = estimate.HasValue ? Range(estimate.Value.Rows, DieselGrade) : reportedDiesel;
+            var eligibleUntil = FuelMapEstimates.StartUtc(report.Key.WeekEnd.AddDays(31));
             expiry = new[] { expiry, eligibleUntil }.Min();
             DateOnly? Common(Func<DoeFuelPrice, DateOnly?> field)
             {
@@ -79,7 +99,14 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
             return new FuelMapCityPrices(id, "city", gasoline is not null && diesel is not null ? "available" : "partial",
                 GasolineGrade, gasoline, diesel, report.Key.WeekStart, report.Key.WeekEnd,
                 Common(row => row.MonitoringStart), Common(row => row.MonitoringEnd),
-                [report.Key.SourceUrl], selected.Max(row => row.FetchedAtUtc), expiry);
+                [report.Key.SourceUrl], selected.Max(row => row.FetchedAtUtc), expiry)
+            {
+                PriceKind = estimate.HasValue ? "estimated" : "doe_reported",
+                IsOutdated = !estimate.HasValue && report.Key.WeekEnd < today.AddDays(-7),
+                AsOf = estimate.HasValue ? today : report.Key.WeekEnd,
+                ReportedGasoline = reportedGasoline, ReportedDiesel = reportedDiesel,
+                Adjustments = estimate?.Applied ?? []
+            };
         }).ToArray();
         return new(FuelMapGeography.Version, GasolineGrade, DieselGrade, now,
             items.Min(item => item.ExpiresAtUtc), FreshnessPolicy, items);

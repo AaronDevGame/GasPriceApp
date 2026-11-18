@@ -60,7 +60,7 @@ Check(feed.Items[0].Gasoline?.MinPrice == 58 && feed.Items[0].Diesel?.MinPrice =
     feed.Items[0].Status == "available" && feed.Items[1].Status == "unavailable" &&
     feed.Items.All(item => item.Scope == "city"), "Grade isolation and no provincial/neighbor fallback");
 Check(FuelMapPriceService.BuildFeed(["1380600000"], [Row()], geo, now).Items[0].Status == "partial", "Missing grade remains partial");
-var old = Row(); old.WeekStart = today.AddDays(-20); old.WeekEnd = today.AddDays(-14);
+var old = Row(); old.WeekStart = today.AddDays(-40); old.WeekEnd = today.AddDays(-34);
 Check(FuelMapPriceService.BuildFeed(["1380600000"], [old], geo, now).Items[0].Status == "unavailable", "Expired rows excluded");
 var previous = Row(grade: "DIESEL"); previous.WeekStart = today.AddDays(-3); previous.WeekEnd = today.AddDays(-1);
 Check(FuelMapPriceService.BuildFeed(["1380600000"], [Row(), previous], geo, now).Items[0].Diesel is null, "Do not combine report weeks");
@@ -73,12 +73,72 @@ Check(FuelMapPriceService.BuildFeed(["1380600000"], [Row(), secondCompany], geo,
 var legacy = Row(city: ""); legacy.CityKey = "MANILA";
 Check(geo.Resolve(legacy)?.Id == "1380600000" && geo.Resolve(Row(city: "Cebu City", province: "Cebu"))?.Id == "0730600000" &&
     geo.Resolve(Row(city: "Cotabato City", province: "Maguindanao"))?.Id == "1908703000", "Legacy city keys, HUC and historical province aliases");
-var cutoff = Row(); cutoff.WeekStart = today.AddDays(-13); cutoff.WeekEnd = today.AddDays(-7);
+var cutoff = Row(); cutoff.WeekStart = today.AddDays(-36); cutoff.WeekEnd = today.AddDays(-30);
 var nearMidnight = today.ToDateTime(new TimeOnly(15, 59), DateTimeKind.Utc);
 var cutoffFeed = FuelMapPriceService.BuildFeed(["1380600000"], [cutoff], geo, nearMidnight);
 Check(cutoffFeed.ExpiresAtUtc == today.ToDateTime(new TimeOnly(16, 0), DateTimeKind.Utc), "Expiry capped at Philippine eligibility midnight");
 Check(FuelMapPriceService.BuildFeed(["1380600000"], [cutoff], geo, nearMidnight.AddMinutes(2)).Items[0].Status == "unavailable", "Midnight freshness transition");
 Console.WriteLine("PASS city identity, grades, scope, report selection, aggregation and freshness fixtures");
+
+var estimateNow = new DateTime(2026, 11, 18, 8, 0, 0, DateTimeKind.Utc);
+var estimateToday = new DateOnly(2026, 11, 18);
+var baseline = new[] { Row("Imus City", "Cavite", min: 60, max: 65), Row("Imus City", "Cavite", "DIESEL", 50, 55) };
+foreach (var row in baseline)
+{
+    row.WeekStart = new(2026, 11, 3); row.WeekEnd = new(2026, 11, 9);
+    row.FetchedAtUtc = estimateNow.AddDays(-9);
+}
+FuelMapAdjustment Change(string fuel, int day, decimal amount, string? company = null) =>
+    new(fuel, company, new(2026, 11, day), new(2026, 11, day, 0, 0, 0, DateTimeKind.Utc), amount, ["https://doe.gov.ph/notice.pdf"]);
+var changes = new[] { Change("gasoline", 10, 2), Change("gasoline", 17, -1), Change("diesel", 10, -2), Change("diesel", 17, 3) };
+FuelMapCityPrices Estimated(params FuelMapAdjustment[] supplied) =>
+    FuelMapPriceService.BuildFeed([imusId], baseline, geo, estimateNow, supplied).Items[0];
+var calculated = Estimated(changes);
+Check(calculated.PriceKind == "estimated" && !calculated.IsOutdated && calculated.AsOf == estimateToday &&
+    calculated.Gasoline is { MinPrice: 61, MaxPrice: 66 } && calculated.Diesel is { MinPrice: 51, MaxPrice: 56 } &&
+    calculated.ReportedGasoline?.MinPrice == 60 && calculated.WeekEnd == new DateOnly(2026, 11, 9),
+    "Estimate applies signed per-fuel adjustments and preserves original report prices/dates");
+Check(Estimated(changes.Concat(changes).ToArray()).Gasoline?.MinPrice == 61, "Duplicate sources do not double count changes");
+Check(Estimated(changes.Where(c => c.EffectiveDate.Day != 10).ToArray()).PriceKind == "doe_reported" &&
+    Estimated().IsOutdated, "Missing weekly evidence keeps original outdated DOE prices");
+Check(Estimated(changes.Append(Change("gasoline", 17, 9)).ToArray()).PriceKind == "doe_reported",
+    "Conflicting confirmed amounts prevent estimation");
+Check(Estimated(changes.Select(c => c with { OilCompany = "Another company" }).ToArray()).PriceKind == "doe_reported",
+    "A different company's notices cannot update a city observation");
+Check(Estimated(changes.Select(c => c with { ChangePerLiter = 0 }).ToArray()).PriceKind == "estimated",
+    "Explicit zero changes provide weekly coverage");
+var otherCompanyRow = Row("Imus City", "Cavite", min: 40, max: 45);
+otherCompanyRow.WeekStart = baseline[0].WeekStart; otherCompanyRow.WeekEnd = baseline[0].WeekEnd;
+otherCompanyRow.FetchedAtUtc = baseline[0].FetchedAtUtc; otherCompanyRow.OilCompany = "Other";
+var companyChanges = changes.Select(c => c with { OilCompany = "Fixture" }).Concat(new[] {
+    Change("gasoline", 10, 5, "Other"), Change("gasoline", 17, 2, "Other") }).ToArray();
+var companyFeed = FuelMapPriceService.BuildFeed([imusId], baseline.Append(otherCompanyRow), geo, estimateNow, companyChanges).Items[0];
+Check(companyFeed.Gasoline is { MinPrice: 47, MaxPrice: 66 },
+    "Company-specific changes are applied before combining the city range");
+Check(Estimated(changes.Concat(changes.Select(c => c with { OilCompany = "Fixture" })).ToArray()).Adjustments.Length == 4,
+    "National and company corroboration yields one applied change per company/fuel/date");
+var futureChange = Change("gasoline", 24, 10);
+Check(Estimated(changes.Append(futureChange).ToArray()).Gasoline?.MinPrice == 61, "Future adjustments are excluded");
+var duringReport = Change("gasoline", 3, 10);
+Check(Estimated(changes.Append(duringReport).ToArray()).Gasoline?.MinPrice == 61,
+    "Changes within the report period are not counted again");
+var nearEffective = FuelMapPriceService.BuildFeed([imusId], baseline, geo,
+    new DateTime(2026, 11, 16, 23, 58, 0, DateTimeKind.Utc), changes).Items[0];
+Check(nearEffective.ExpiresAtUtc == new DateTime(2026, 11, 17, 0, 0, 0, DateTimeKind.Utc),
+    "Map cache expires at a confirmed effective time");
+var newsArticle = new FuelNewsContent("fixture-change", "fixture-topic", "adjustment", "confirmed", "Fixture", "Fixture", "Fixture",
+    new(2026, 11, 17), null, estimateNow.AddDays(-1), [new("gasoline", null, 1, 1, "confirmed")],
+    [new("Fixture", "https://example.com/confirmed", estimateNow.AddDays(-2))]);
+var newsRow = new FuelNews { Category = "adjustment", Status = "confirmed", PublishedAtUtc = estimateNow.AddDays(-2),
+    UpdatedAtUtc = estimateNow.AddDays(-2), ContentJson = JsonSerializer.Serialize(newsArticle, FuelNewsValidation.Json) };
+Check(FuelMapEstimates.Evidence([], [newsRow], estimateNow) is [{ ChangePerLiter: 1 }],
+    "Expired confirmed news remains historical adjustment evidence");
+newsRow.ContentJson = JsonSerializer.Serialize(newsArticle with { Status = "forecast" }, FuelNewsValidation.Json);
+Check(FuelMapEstimates.Evidence([], [newsRow], estimateNow).Length == 0, "Forecast articles cannot supply estimates");
+newsRow.ContentJson = JsonSerializer.Serialize(newsArticle, FuelNewsValidation.Json);
+newsRow.SupersededById = Guid.NewGuid();
+Check(FuelMapEstimates.Evidence([], [newsRow], estimateNow).Length == 0, "Superseded news cannot supply estimates");
+Console.WriteLine("PASS map estimate baselines, signed changes, provenance, missing/conflicting evidence and effective-time expiry");
 
 const string installation = "4cb21d7c-932a-4796-9615-d7b05cfe7fab";
 var auth = new AuthService();
@@ -90,6 +150,15 @@ using (var scope = app.Services.CreateScope())
         CreatedAt = now, LastLoginAt = now, AccessTokenHash = auth.HashSecret(token), AccessTokenExpiresAt = now.AddHours(1) });
     db.DoeFuelPrices.AddRange(sample);
     db.DoeFuelPrices.AddRange(imusRows);
+    var tanza = new[] { Row("Tanza", "Cavite"), Row("Tanza", "Cavite", "DIESEL", 50, 55) };
+    foreach (var row in tanza) { row.WeekStart = today.AddDays(-15); row.WeekEnd = today.AddDays(-9); }
+    db.DoeFuelPrices.AddRange(tanza);
+    for (var day = today.AddDays(-8); day <= today; day = day.AddDays(1))
+        if (day.DayOfWeek == DayOfWeek.Tuesday)
+            db.FuelAdjustments.Add(new FuelAdjustment { WeekStart = day, WeekEnd = day.AddDays(6),
+                OilCompany = "Fixture", EffectiveDatePhilippines = day,
+                EffectiveAtUtc = FuelMapEstimates.StartUtc(day), GasolineChangePerLiter = 1, DieselChangePerLiter = -1,
+                SourceUrl = "https://doe.gov.ph/notice.pdf", FetchedAtUtc = now.AddMinutes(-1) });
     await db.SaveChangesAsync();
 }
 await app.StartAsync();
@@ -143,6 +212,17 @@ try
         items[2].GetProperty("status").GetString() == "available" &&
         items[2].GetProperty("diesel").GetProperty("minPrice").GetDecimal() == 58,
         "Map batch accepts Imus DOE reports served by the importer's approved CDN");
+    Check(items[2].GetProperty("priceKind").GetString() == "doe_reported" &&
+        items[2].GetProperty("reportedGasoline").GetProperty("minPrice").GetDecimal() == 58,
+        "HTTP exposes DOE reported identity and unmodified baseline");
+    var tanzaId = geo.Cities.Values.Single(city => city.Name == "Tanza" && city.GroupName == "Cavite").Id;
+    using var estimateResponse = await Post(Body(tanzaId));
+    using var estimateJson = JsonDocument.Parse(await estimateResponse.Content.ReadAsStringAsync());
+    var estimatedItem = estimateJson.RootElement.GetProperty("data").GetProperty("items")[0];
+    Check(estimateResponse.StatusCode == HttpStatusCode.OK && estimatedItem.GetProperty("priceKind").GetString() == "estimated" &&
+        estimatedItem.GetProperty("adjustments").GetArrayLength() > 0 &&
+        estimatedItem.GetProperty("reportedGasoline").GetProperty("minPrice").GetDecimal() == 58,
+        "HTTP queries stored confirmed notices and returns estimates with baseline and evidence");
     foreach (var body in new[] { "{", "[]", "{}", Body(), Body("9999999999"), Body("138060000"),
         Body(Enumerable.Repeat("1380600000", 2001).ToArray()), new string(' ', 32769),
         Body("1380600000").Replace("\"cityIds\":", "\"extra\":0,\"cityIds\":"),
