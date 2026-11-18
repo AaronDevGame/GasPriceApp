@@ -88,7 +88,7 @@ export function useFuelPrices() {
     void run(async ticket => {
       if (ticket !== version.current || prompted.current) return;
       prompted.current = true;
-      // Give the Overview screen a chance to render before the OS/browser prompt.
+      // Give the Fuel Prices screen a chance to render before the OS/browser prompt.
       await new Promise(resolve => setTimeout(resolve, 300));
       if (ticket === version.current) await locate(ticket);
     });

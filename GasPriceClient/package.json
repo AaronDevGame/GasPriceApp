@@ -51,7 +51,8 @@
     "test:auth": "node scripts/test-auth.cjs",
     "test:fuel": "node scripts/test-fuel-flow.cjs",
     "test:advice": "node scripts/test-fuel-advice.cjs",
-    "test:map": "node scripts/test-map.cjs"
+    "test:map": "node scripts/test-map.cjs",
+    "test:fuel-selection": "node scripts/test-fuel-selection.cjs"
   },
   "private": true
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
 
@@ -10,12 +10,20 @@ import { mapCache } from './cache';
 import MapRenderer from './map-renderer';
 import { areaPrices, levelNames, mapLevel, visibleAreas } from './hierarchy';
 import { rangeText } from './labels';
+import { mapAreaForLocation, locationForMapArea } from '@/fuel/selection';
+import type { DoePriceLocation } from '@/fuel/api';
 import type { MapSnapshot, Viewport } from './types';
 
 const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: true, detail: false, error: null };
 export type FuelMapHandle = { refresh(): Promise<void> };
 
-export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange }: {
+export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange, location, locations = [], onLocationChange, grade, active = true, managedRefresh = false }: {
+  location?: DoePriceLocation | null;
+  locations?: DoePriceLocation[];
+  onLocationChange?(location: DoePriceLocation): void;
+  grade?: string;
+  active?: boolean;
+  managedRefresh?: boolean;
   ref?: Ref<FuelMapHandle>;
   foregroundRefreshing?: boolean;
   onForegroundRefreshChange?(refreshing: boolean): void;
@@ -23,7 +31,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const { session, loading: authLoading } = useAuth();
   const authenticated = session?.state === 'authenticated';
   const [snapshot, setSnapshot] = useState(empty);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [mapSelection, setMapSelection] = useState<{ id: string; targetId: string | undefined } | null>(null);
   const controller = useRef<MapController | null>(null);
   const lastViewport = useRef<Viewport | null>(null);
   const refreshRequest = useRef<Promise<void> | null>(null);
@@ -53,16 +61,32 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
     void next.start().then(() => { if (lastViewport.current) next.idle(lastViewport.current, true); });
     // Refresh cached expiries even while the map remains stationary, plus on foreground return.
     const interval = setInterval(next.refresh, 15000);
-    const foreground = subscribeToForeground(() => { void refresh(); });
+    const foreground = managedRefresh ? () => {} : subscribeToForeground(() => { void refresh(); });
     return () => {
       clearInterval(interval); foreground(); unsubscribe(); next.dispose();
       controller.current = null; refreshRequest.current = null;
       onForegroundRefreshChange?.(false);
     };
-  }, [authenticated, refresh, onForegroundRefreshChange]));
+  }, [authenticated, refresh, onForegroundRefreshChange, managedRefresh]));
   const onIdle = useCallback((viewport: Viewport) => { lastViewport.current = viewport; controller.current?.idle(viewport); }, []);
   const onMove = useCallback(() => controller.current?.move(), []);
-  const onSelect = useCallback((id: string) => { setSelected(id); controller.current?.select(id); }, []);
+  const locationCity = location?.city;
+  const locationProvince = location?.province;
+  const target = useMemo(() => snapshot.index && locationProvince !== undefined
+    ? mapAreaForLocation(snapshot.index, { city: locationCity ?? '', province: locationProvince }) : null,
+  [snapshot.index, locationCity, locationProvince]);
+  const targetId = target?.id;
+  const selected = mapSelection && mapSelection.targetId === targetId ? mapSelection.id : targetId ?? null;
+  useEffect(() => {
+    if (targetId) controller.current?.select(targetId);
+  }, [targetId]);
+  const onSelect = useCallback((id: string) => {
+    setMapSelection({ id, targetId }); controller.current?.select(id);
+    if (!snapshot.index || !snapshot.viewport) return;
+    const area = visibleAreas(snapshot.index, snapshot.viewport).find(value => value.id === id);
+    const next = area && locationForMapArea(area, locations);
+    if (next) onLocationChange?.(next);
+  }, [snapshot.index, snapshot.viewport, locations, onLocationChange, targetId]);
   const level = snapshot.index && snapshot.viewport ? mapLevel(snapshot.index, snapshot.viewport) : 'country';
   const areas = snapshot.index && snapshot.viewport ? visibleAreas(snapshot.index, snapshot.viewport) : [];
   const selection = areas.find(area => area.id === selected);
@@ -70,9 +94,11 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const noPrices = authenticated && !snapshot.loading && !snapshot.error && snapshot.prices.size > 0 &&
     [...snapshot.prices.values()].every(price => price.status === 'unavailable');
   return <View style={styles.wrapper}>
+    {grade === 'RON 95' && <ThemedText type="small" themeColor="textSecondary">The map shows RON 91 and diesel. Choose Company list for RON 95 reports.</ThemedText>}
+    <ThemedText type="small" themeColor="textSecondary">Select a reported city or province to update the company list. Broader areas show map ranges only.</ThemedText>
     <ThemedText type="smallBold">{levelNames[level]} · Zoom in for more detail</ThemedText>
     <View style={styles.canvas}>
-      {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :
+      {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} focusBounds={target?.bbox} active={active} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :
         <View style={styles.initial}><ActivityIndicator /><ThemedText>Loading Philippine map…</ThemedText></View>}
     </View>
     <View style={styles.status}>
@@ -82,7 +108,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
         {level !== 'city' && <ThemedText type="small">{prices.reported} of {prices.total} cities / municipalities reporting</ThemedText>}
       </View>}
       {snapshot.loading && !foregroundRefreshing && <View style={styles.loading}><ActivityIndicator size="small" /><ThemedText type="small">Updating map…</ThemedText></View>}
-      {!authenticated && !authLoading && <ThemedText type="small">Reconnect from Overview to load city prices.</ThemedText>}
+      {!authenticated && !authLoading && <ThemedText type="small">Tap Reconnect above to load city prices.</ThemedText>}
       {noPrices && <ThemedText type="small">No current city prices are available in this view.</ThemedText>}
       {snapshot.error && <View style={styles.error}><ThemedText type="small" accessibilityRole="alert">{snapshot.error}</ThemedText>
         <Pressable accessibilityRole="button" onPress={() => controller.current?.retry()} style={styles.retry}><ThemedText type="smallBold">Retry</ThemedText></Pressable></View>}

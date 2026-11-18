@@ -8,8 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 
 const destinations = [
-  { name: 'index', href: '/', title: 'Overview', icon: 'overview' },
-  { name: 'fuel-prices', href: '/fuel-prices', title: 'Fuel Prices', icon: 'fuel' },
+  { name: 'index', href: '/', title: 'Fuel Prices', icon: 'fuel' },
   { name: 'news', href: '/news', title: 'News', icon: 'news' },
   { name: 'weekly-changes', href: '/weekly-changes', title: 'Weekly Changes', icon: 'changes' },
 ] as const;
@@ -58,6 +57,7 @@ export default function TabLayout() {
       })}</View>
     </View>
   </View> : undefined}>
+    <Tabs.Screen name="fuel-prices" options={{ href: null }} />
     {destinations.map(item => <Tabs.Screen key={item.name} name={item.name} options={{
       title: item.title, tabBarAccessibilityLabel: item.title,
       tabBarIcon: ({ color }) => <AppIcon name={item.icon} color={color} />,

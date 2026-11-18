@@ -1,6 +1,8 @@
 # Fuel price map
 
-The Fuel Prices screen defaults to a map, with the existing company list available through its switch. Other screens and existing price feeds are unchanged. Default view fits the whole Philippines; browsing does not request location permission or call AI/geocoding.
+Fuel Prices is the merged home tab, with a shared city/province selector, local estimate and DOE summaries, and a Map / Company list switch. The map stays mounted across view changes to preserve its camera and map selection. Selecting a reported city or province updates the shared area; nationwide, island and region selections remain map-only aggregations. Selecting an area in search or using location focuses its matching boundary when available. Ambiguous names are never matched to another province.
+
+The home page retains its automatic foreground location permission request after authentication. Map browsing itself does not request location or call AI/geocoding. With no selected area, the map fits the Philippines. The map feed remains RON 91 and diesel only; RON 95 selection is preserved for the company list and an explicit note explains map coverage. Pull-to-refresh and foreground refresh use the page's shared top indicator.
 
 ## Required backend deployment
 

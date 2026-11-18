@@ -111,9 +111,14 @@ the same HTTPS origin and API route handlers.
 On launch the app restores or silently creates a guest session without asking for
 any name or input. Native protected calls use Bearer plus `X-App-Instance-Id`;
 browser secrets remain in HttpOnly cookies with CSRF protection on mutations.
-The Overview page requests foreground location permission after authentication
+The Fuel Prices home page requests foreground location permission after authentication
 (Expo on native; browser geolocation on web). Featured nationwide prices are
-currently hidden, and Overview does not call `GET /fuel-prices/featured`.
+currently hidden, and Fuel Prices does not call `GET /fuel-prices/featured`.
+Navigation has three tabs: Fuel Prices, News and Weekly Changes. The former
+`/fuel-prices` URL redirects to the merged home page. Area selection is shared
+between the price summary, map and company list; fuel grade and sort choice
+survive view changes. Recent local estimate updates are collapsible below prices,
+and the latest news headline follows the price content.
 On permission grant, latitude/longitude are sent to `POST /ai/fuel-prices`, then
 its resolved city/province/region are passed to `GET /fuel-prices` for the local
 result. The general cache entries from that response are not shown. When DOE

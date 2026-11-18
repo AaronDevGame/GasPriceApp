@@ -30,6 +30,6 @@ export type MapSnapshot = {
   loading: boolean; detail: boolean; error: string | null;
 };
 export type MapRendererProps = {
-  snapshot: MapSnapshot; selected: string | null;
+  snapshot: MapSnapshot; selected: string | null; focusBounds?: Bounds | null; active?: boolean;
   onMove(): void; onIdle(viewport: Viewport): void; onSelect(id: string): void;
 };

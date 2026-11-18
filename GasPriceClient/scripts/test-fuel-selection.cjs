@@ -1,0 +1,123 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const ts = require('typescript');
+const root = path.resolve(__dirname, '../src');
+const modules = new Map();
+function compile(name, overrides = {}) {
+  if (!Object.keys(overrides).length && modules.has(name)) return modules.get(name);
+  const exports = {};
+  const filename = path.join(root, name + (name.endsWith('screen') ? '.tsx' : '.ts'));
+  const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
+  } }).outputText;
+  vm.runInNewContext(code, { exports, console, URLSearchParams, setTimeout, clearTimeout,
+    require: spec => {
+      if (spec in overrides) return overrides[spec];
+      const target = spec.startsWith('@/') ? spec.slice(2) : path.posix.join(path.posix.dirname(name), spec);
+      return compile(target);
+    },
+  }, { filename });
+  if (!Object.keys(overrides).length) modules.set(name, exports);
+  return exports;
+}
+const selection = compile('fuel/selection');
+const index = require('../../GasPriceBackend/Geography/ph-2026q3-v1/index.json');
+const manila = { city: 'Manila', province: 'Metro Manila' };
+const cebu = { city: 'Cebu City', province: 'Cebu' };
+const cavite = { city: '', province: 'Cavite', scope: 'province' };
+for (const location of [manila, cebu, cavite]) {
+  const area = selection.mapAreaForLocation(index, location);
+  assert(area, `Map must resolve ${location.city || location.province}`);
+  assert(selection.sameLocation(selection.locationForMapArea(area, [manila, cebu, cavite]), location));
+}
+assert.equal(selection.mapAreaForLocation(index, { city: 'Cebu City', province: 'Cavite' }), null);
+assert.equal(selection.mapAreaForLocation(index, { city: '', province: 'Metro Manila' }), null, 'NCR is not an administrative province');
+const fake = { ...index, cities: [index.cities.find(c => c.name === 'City of Cebu')] };
+fake.cities = [fake.cities[0], { ...fake.cities[0], id: 'duplicate' }];
+assert.equal(selection.mapAreaForLocation(fake, cebu), null, 'Ambiguous names must not choose an arbitrary boundary');
+console.log('PASS geographic matching: city aliases, Metro Manila, provinces, wrong provinces and ambiguous names');
+
+function harness() {
+  let cursor = 0, dirty = false, tree, foreground;
+  const cells = [], pendingEffects = [], calls = [];
+  const auth = { session: { state: 'authenticated' }, loading: false, restore: async () => { calls.push('restore'); } };
+  const fuel = { localItem: null, doePrices: null, busy: false, authenticated: true,
+    locationNote: 'Use your location', updates: [], refresh: async () => { calls.push('local refresh'); }, useLocation: async () => {} };
+  const news = { item: null, reload: async () => { calls.push('news refresh'); } };
+  let response = location => Promise.resolve({ locations: [manila, cebu, cavite], selected: {
+    ...location, scope: location.city ? 'city' : 'province', weekStart: '2026-11-01', weekEnd: '2026-11-07', prices: [],
+  } });
+  const equal = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+  const memo = (fn, deps) => { const i = cursor++; if (!cells[i] || !equal(cells[i].deps, deps)) cells[i] = { deps, value: fn() }; return cells[i].value; };
+  const react = {
+    useState: initial => { const i = cursor++; if (!(i in cells)) cells[i] = typeof initial === 'function' ? initial() : initial;
+      return [cells[i], value => { const next = typeof value === 'function' ? value(cells[i]) : value; if (!Object.is(next, cells[i])) { cells[i] = next; dirty = true; } }]; },
+    useRef: current => memo(() => ({ current }), []), useCallback: (fn, deps) => memo(() => fn, deps),
+    useEffect: (fn, deps) => { const i = cursor++; if (!cells[i] || !equal(cells[i].deps, deps)) pendingEffects.push(() => { cells[i]?.cleanup?.(); cells[i] = { deps, cleanup: fn() }; }); },
+  };
+  const api = { getDoePriceBrowse: location => { calls.push(location ?? 'default'); return response(location ?? manila); },
+    doeLocationLabel: location => location.city || location.province, doeCoverageLabel: report => report.city || report.province };
+  const components = new Proxy({}, { get: (_, name) => name });
+  const overrides = {
+    react, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'Fragment' },
+    'react-native': { ...components, View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', TextInput: 'TextInput', Platform: { OS: 'web' }, StyleSheet: { create: v => v } },
+    'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
+    '@/auth/auth-provider': { useAuth: () => auth }, '@/auth/http': { errorMessage: () => 'Offline' },
+    '@/fuel/api': api, '@/fuel/selection': selection, '@/fuel/use-fuel-prices': { useFuelPrices: () => fuel },
+    '@/news/use-latest-news': { useLatestNews: () => news }, '@/hooks/use-theme': { useTheme: () => ({}) },
+    '@/hooks/use-foreground-refresh': { useForegroundRefresh: fn => { foreground = fn; } },
+    '@/map/fuel-map': { __esModule: true, default: 'FuelMap' },
+  };
+  for (const name of ['mobile-header', 'themed-text', 'refreshable-scroll-view', 'themed-view', 'local-price-board', 'fuel-price-summary', 'dashboard-action', 'fuel-news-headline']) overrides['@/components/' + name] = components;
+  const Screen = compile('fuel/fuel-prices-screen', overrides).default;
+  const render = () => { dirty = false; cursor = 0; tree = Screen(); while (pendingEffects.length) pendingEffects.shift()(); };
+  const settle = async () => { for (let i = 0; i < 30; i++) { if (dirty || !tree) render(); await Promise.resolve(); } assert(!dirty, 'Screen must settle'); };
+  const nodes = () => { const out = []; const visit = n => { if (Array.isArray(n)) return n.forEach(visit); if (!n || typeof n !== 'object') return; out.push(n); visit(n.props?.children); }; visit(tree); return out; };
+  const button = text => nodes().find(n => n.type === 'Pressable' && nodesText(n).includes(text));
+  const nodesText = n => !n ? '' : typeof n === 'string' ? n : Array.isArray(n) ? n.map(nodesText).join('') : nodesText(n.props?.children);
+  return { settle, nodes, button, calls, fuel, auth, render, foreground: () => foreground(), setResponse: fn => { response = fn; } };
+}
+(async () => {
+  const h = harness(); await h.settle();
+  assert.equal(h.calls.length, 1);
+  h.button('Company list').props.onPress(); await h.settle();
+  h.button('Gasoline 95').props.onPress();
+  await h.settle();
+  h.nodes().find(n => n.props?.accessibilityLabel === 'Choose city or province').props.onPress(); await h.settle();
+  h.button('Cebu City').props.onPress(); await h.settle();
+  assert.equal(h.nodes().find(n => n.type === 'FuelMap').props.location.city, 'Cebu City');
+  assert.equal(h.nodes().find(n => n.type === 'FuelMap').props.grade, 'RON 95');
+  const count = h.calls.length;
+  h.button('Map').props.onPress(); await h.settle();
+  h.button('Company list').props.onPress(); await h.settle();
+  assert.equal(h.calls.length, count, 'View changes must not refetch or discard location');
+  assert(h.button('Gasoline 95').props.accessibilityState.selected);
+  let first, second;
+  h.setResponse(location => new Promise(resolve => { if (location.city === 'Manila') first = resolve; else second = resolve; }));
+  h.nodes().find(n => n.type === 'FuelMap').props.onLocationChange(manila); await h.settle();
+  h.nodes().find(n => n.type === 'FuelMap').props.onLocationChange(cebu); await h.settle();
+  second({ locations: [manila, cebu], selected: { ...cebu, prices: [] } }); await h.settle();
+  first({ locations: [manila, cebu], selected: { ...manila, prices: [] } }); await h.settle();
+  assert.equal(h.nodes().find(n => n.type === 'DoePriceSummary').props.report.city, 'Cebu City', 'Stale responses cannot overwrite latest area');
+  h.setResponse(async location => ({ locations: [manila, cebu], selected: { ...location, prices: [] } }));
+  h.foreground(); h.foreground(); await h.settle();
+  assert.equal(h.calls.filter(value => value === 'news refresh').length, 1, 'Foreground refresh deduplicates work');
+  assert.equal(h.nodes().find(n => n.type === 'FuelMap').props.location.city, 'Cebu City');
+  h.fuel.localItem = { area: { city: 'Manila', province: 'Metro Manila', name: 'Manila' } };
+  h.render(); await h.settle();
+  assert.equal(h.nodes().find(n => n.type === 'FuelMap').props.location.city, 'Cebu City', 'Late GPS cannot override manual selection');
+  h.auth.session = null; h.render(); await h.settle();
+  assert(h.nodes().some(n => n.props?.title === 'Reconnect'));
+  const local = harness(); await local.settle();
+  local.fuel.localItem = { area: { city: 'Cebu City', province: 'Cebu', name: 'Cebu City' } };
+  local.render(); await local.settle();
+  assert.equal(local.nodes().find(n => n.type === 'FuelMap').props.location.city, 'Cebu City');
+  assert(local.nodes().some(n => n.type === 'LocalPriceBoard'));
+  assert(local.nodes().some(n => n.type === 'RecentPriceUpdates'));
+  const beforeRefresh = local.calls.filter(value => value?.city).length;
+  local.foreground(); await local.settle();
+  assert.equal(local.calls.filter(value => value?.city).length, beforeRefresh + 1, 'One DOE browse per refresh');
+  console.log('PASS merged screen: shared area/grade, view persistence, stale response protection, deduplicated refresh, GPS race and reconnect');
+})().catch(error => { console.error(error); process.exitCode = 1; });

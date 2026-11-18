@@ -27,7 +27,7 @@ export default function MapRenderer(props: MapRendererProps) {
   }
   return <NativeMap key={attempt} {...props} onRetry={() => setAttempt(value => value + 1)} />;
 }
-function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: MapRendererProps & { onRetry(): void }) {
+function NativeMap({ snapshot, selected, focusBounds, active, onMove, onIdle, onSelect, onRetry }: MapRendererProps & { onRetry(): void }) {
   const index = snapshot.index!;
   const map = useRef<MapView | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -35,6 +35,7 @@ function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: Ma
   const [moving, setMoving] = useState(true);
   const sequence = useRef(0);
   const initialized = useRef(false);
+  const focusedBounds = useRef<Bounds | null>(null);
   const [failure, setFailure] = useState(false);
   const bounds = useMemo(() => cameraBounds(index.bbox), [index]);
   const center = useMemo(() => cameraCenter(index.bbox), [index]);
@@ -83,6 +84,15 @@ function NativeMap({ snapshot, selected, onMove, onIdle, onSelect, onRetry }: Ma
     });
     return () => cancelAnimationFrame(frame);
   }, [ready, size, bounds, center, index, settle]);
+  useEffect(() => {
+    if (!ready || !size.width || active === false || !focusBounds || focusedBounds.current === focusBounds) return;
+    const frame = requestAnimationFrame(() => {
+      const [longitude, latitude] = cameraCenter(focusBounds);
+      map.current?.setCamera({ center: { latitude, longitude }, zoom: Math.min(MAX_ZOOM, fitZoom(focusBounds, size.width, size.height, 36)), pitch: 0, heading: 0 });
+      focusedBounds.current = focusBounds;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [ready, size, focusBounds, active]);
   useEffect(() => () => { ++sequence.current; }, []);
   useEffect(() => {
     if (ready) return;

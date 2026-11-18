@@ -39,6 +39,7 @@ export default function MapRenderer(props: MapRendererProps) {
   const host = useRef<HTMLDivElement | null>(null);
   const latest = useRef(props);
   const map = useRef<google.maps.Map | null>(null);
+  const focusedBounds = useRef<Bounds | null>(null);
   const shapes = useRef<AreaPolygon[]>([]);
   const overlay = useRef<LabelOverlay | null>(null);
   const [moving, setMoving] = useState(true);
@@ -74,7 +75,7 @@ export default function MapRenderer(props: MapRendererProps) {
         rotateControl: false, tilt: 0, heading: 0, gestureHandling: 'greedy',
         styles: [{ featureType: 'poi', stylers: [{ visibility: 'off' }] }, { featureType: 'transit', stylers: [{ visibility: 'off' }] }],
       });
-      map.current = instance;
+      map.current = instance; focusedBounds.current = null;
       const labels = createLabels(id => latest.current.onSelect(id)); labels.setMap(instance); overlay.current = labels;
       listeners.push(instance.addListener('bounds_changed', () => {
         latest.current.onMove(); setMoving(true); labels.labels = []; labels.draw();
@@ -103,6 +104,11 @@ export default function MapRenderer(props: MapRendererProps) {
       if (callbacks.gm_authFailure === authFailure) callbacks.gm_authFailure = previousAuthFailure;
     };
   }, [key, version, retry]);
+  useEffect(() => {
+    if (!ready || !map.current || props.active === false || !props.focusBounds || !host.current?.clientWidth || focusedBounds.current === props.focusBounds) return;
+    map.current.fitBounds(literalBounds(props.focusBounds), 36);
+    focusedBounds.current = props.focusBounds;
+  }, [ready, props.focusBounds, props.active]);
   useEffect(() => {
     if (!ready || !map.current) return;
     shapes.current = props.snapshot.features.map(feature => {
