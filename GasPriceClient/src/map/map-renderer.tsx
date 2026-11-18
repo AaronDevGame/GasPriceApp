@@ -150,11 +150,11 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       {labels.map((label, priority) => <Marker zIndex={labels.length - priority} key={`${label.id}:${label.fontSize}:${label.name}:${rangeText(label.price.gasoline)}:${rangeText(label.price.diesel)}:${label.coverage}:${selected === label.id}`}
         coordinate={coordinate(label.anchor)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}
         onPress={() => onSelect(label.id)} accessibilityLabel={`${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`}>
-        <View style={[styles.label, { width: label.width, height: label.height, borderColor: label.id === selected ? '#FFD166' : '#6CB4F8' }]}>
+        <View style={[styles.label, { width: label.width, height: label.height, borderColor: label.id === selected ? '#FFD166' : '#6CB4F8', borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
           <Text numberOfLines={1} allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{label.name}</Text>
           <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.gasoline)}</Text>
           <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.diesel)}</Text>
-          {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, { fontSize: 10 }]}>{label.coverage}</Text>}
+          {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, { fontSize: 10, color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB', textAlign: 'center' }]}>{label.coverage}</Text>}
         </View>
       </Marker>)}
     </MapView>

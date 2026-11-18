@@ -273,6 +273,18 @@ function harness(overrides = {}) {
   assert.equal(ranges.diesel.minPrice, 50, 'Missing diesel reports do not contribute zero');
   assert.equal(ranges.reported, 2);
   assert.equal(ranges.complete, false);
+  const estimatedPrice = { ...h.feed([imus.id]).items[0], priceKind: 'estimated', asOf: '2026-11-18',
+    weekStart: '2026-11-03', weekEnd: '2026-11-09' };
+  const estimatedRange = hierarchy.areaPrices({ members: [imus] }, { prices: new Map([[imus.id, estimatedPrice]]) });
+  assert.equal(estimatedRange.estimated, 1);
+  assert.match(h.load('labels').priceLabel(estimatedRange), /^Estimated · Nov 18$/);
+  const outdatedRange = hierarchy.areaPrices({ members: [imus] }, { prices: new Map([[imus.id,
+    { ...estimatedPrice, priceKind: 'doe_reported', isOutdated: true }]]) });
+  assert.match(h.load('labels').priceLabel(outdatedRange), /^DOE reported.*Outdated$/);
+  const mixedRange = hierarchy.areaPrices(country, { prices: new Map([
+    [imus.id, estimatedPrice], [manila.id, { ...h.feed([manila.id]).items[0], priceKind: 'doe_reported' }],
+  ]) });
+  assert.equal(h.load('labels').priceLabel(mixedRange), 'Includes estimates', 'Aggregate ranges must disclose estimates');
   const overview = { ...snap, index, detail: false, features: [], viewport: { bounds: index.bbox, width: 1200, height: 560,
     zoom: geometry.fitZoom(index.bbox, 1200, 560, 35) } };
   const countryLabels = placeLabels(overview, null);

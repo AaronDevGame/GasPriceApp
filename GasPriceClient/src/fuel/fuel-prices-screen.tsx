@@ -223,7 +223,7 @@ export default function FuelPricesScreen() {
             {mode === 'list' && report && <>
               <View style={styles.reportHeading}>
                 <ThemedText style={styles.sectionTitle}>{doeCoverageLabel(report)}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">DOE report week · {report.weekStart} to {report.weekEnd}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">DOE reported · {report.weekStart} to {report.weekEnd}</ThemedText>
               </View>
               <Pressable accessibilityRole="button" onPress={() => setSortByPrice(value => !value)}>
                 <ThemedText type="smallBold" style={styles.accent}>Sort: {sortByPrice ? 'Lowest reported price' : 'Company name'} ↕</ThemedText>

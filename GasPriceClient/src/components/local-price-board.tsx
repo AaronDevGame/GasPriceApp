@@ -45,7 +45,7 @@ export function LocalPriceBoard({ item, doePrices }: { item: FeedItem; doePrices
           {details ? <ThemedText type="small" themeColor="textSecondary">{details}</ThemedText> : null}
         </View>
         <ThemedText type="small" themeColor="textSecondary">
-          As of {date}{item.freshness !== 'current' ? ' · Older estimate' : ''}
+          Estimated · As of {date}{item.freshness !== 'current' ? ' · Outdated' : ''}
         </ThemedText>
         <View style={[styles.board, compact && styles.boardCompact]}>
           {fuels.map(fuel => {
@@ -77,7 +77,7 @@ export function LocalPriceBoard({ item, doePrices }: { item: FeedItem; doePrices
         </ThemedText>
       </View>
       <ThemedText type="small" themeColor="textSecondary">
-        {doeCoverageLabel(doePrices)} · Week {doePrices.weekStart} to {doePrices.weekEnd}
+        DOE reported · {doeCoverageLabel(doePrices)} · Week {doePrices.weekStart} to {doePrices.weekEnd}
       </ThemedText>
       <View style={styles.gradeTabs}>
         {availableFuels.map(fuel => <Pressable key={fuel.key} accessibilityRole="button"

@@ -18,6 +18,11 @@ export type PriceRange = { minPrice: number; maxPrice: number; currency: 'PHP'; 
 export type CityPrices = {
   cityId: string; scope: 'city'; status: 'available' | 'partial' | 'unavailable'; gasolineGrade: 'RON 91';
   gasoline: PriceRange | null; diesel: PriceRange | null; expiresAtUtc: string;
+  priceKind?: 'doe_reported' | 'estimated' | 'unavailable'; isOutdated?: boolean;
+  weekStart?: string | null; weekEnd?: string | null; asOf?: string | null;
+  sourceUrls?: string[]; reportedGasoline?: PriceRange | null; reportedDiesel?: PriceRange | null;
+  adjustments?: { fuel: string; oilCompany: string | null; effectiveDate: string; effectiveAtUtc: string;
+    changePerLiter: number; sourceUrls: string[] }[];
 };
 export type PriceFeed = {
   boundaryVersion: string; gasolineGrade: 'RON 91'; dieselGrade: 'DIESEL'; generatedAtUtc: string;
