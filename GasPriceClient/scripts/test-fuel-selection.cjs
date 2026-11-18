@@ -134,6 +134,14 @@ function harness(options = {}) {
   assert.equal(locationButton().props.disabled, false);
   const camera = () => mapHarness.nodes().find(n => n.type === 'MapRenderer').props.locationFocus;
   assert.equal(camera().latitude, 14.43);
+  assert.equal(camera().areaBounds, undefined, 'Use GPS until the city is resolved');
+  mapProps.userLocation = { city: 'Imus', province: 'Cavite' };
+  mapHarness.render(); await mapHarness.settle();
+  const imus = index.cities.find(city => /imus/i.test(city.name));
+  assert.equal(JSON.stringify(camera().areaBounds), JSON.stringify(imus.bbox), 'Once resolved, center the full Imus outline');
+  mapProps.location = cebu;
+  mapHarness.render(); await mapHarness.settle();
+  assert.equal(JSON.stringify(camera().areaBounds), JSON.stringify(imus.bbox), 'Browsing another city must not change the saved home center');
   const firstFocus = camera();
   mapHarness.render(); await mapHarness.settle();
   assert.equal(camera(), firstFocus, 'Unrelated renders must not recenter a panned map');

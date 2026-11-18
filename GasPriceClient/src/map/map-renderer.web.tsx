@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { cameraBounds, cameraCenter, fitZoom, MAX_ZOOM, OVERVIEW_PADDING, OVERVIEW_ZOOM_OFFSET, polygons } from './geometry';
+import { boundsCenter, cameraBounds, cameraCenter, fitZoom, MAX_ZOOM, OVERVIEW_PADDING, OVERVIEW_ZOOM_OFFSET, polygons } from './geometry';
 import { areaIdentity, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
 import { type MapLabel, placeLabels, rangeText } from './labels';
@@ -114,7 +114,8 @@ export default function MapRenderer(props: MapRendererProps) {
   useEffect(() => {
     const point = props.locationFocus;
     if (!ready || !map.current || props.active === false || !point || !host.current?.clientWidth || focusedLocation.current === point) return;
-    map.current.setCenter({ lat: point.latitude, lng: point.longitude });
+    const [lng, lat] = point.areaBounds ? boundsCenter(point.areaBounds) : [point.longitude, point.latitude];
+    map.current.setCenter({ lat, lng });
     map.current.setZoom(12);
     focusedLocation.current = point;
   }, [ready, props.locationFocus, props.active]);

@@ -57,11 +57,15 @@ export function cameraBounds(bounds: Bounds): Bounds {
   return [bounds[0] - longitudeSpan * 0.05, bounds[1] - latitudePadding,
     bounds[2] + longitudeSpan * 0.25, bounds[3] + latitudePadding];
 }
-// Balance north/south margins in Mercator and frame slightly east of the bounds
-// midpoint to visually center the main islands rather than the western offshore extent.
-export function cameraCenter(bounds: Bounds): Point {
+// Center area bounds in the map's Mercator projection, without an east/west offset.
+export function boundsCenter(bounds: Bounds): Point {
   const north = world([bounds[0], bounds[3]])[1], south = world([bounds[2], bounds[1]])[1];
-  return [(bounds[0] + bounds[2]) / 2 + (bounds[2] - bounds[0]) * 0.1, Math.atan(Math.sinh(Math.PI * (1 - north - south))) * 180 / Math.PI];
+  return [(bounds[0] + bounds[2]) / 2, Math.atan(Math.sinh(Math.PI * (1 - north - south))) * 180 / Math.PI];
+}
+// The nationwide overview frames east of its bounds to balance offshore islands.
+export function cameraCenter(bounds: Bounds): Point {
+  const [longitude, latitude] = boundsCenter(bounds);
+  return [longitude + (bounds[2] - bounds[0]) * 0.1, latitude];
 }
 export const midpoint = (b: Bounds): Point => [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
 export function project(point: Point, viewport: Viewport): Point {

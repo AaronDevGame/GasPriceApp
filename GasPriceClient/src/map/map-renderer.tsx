@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
-import { cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, OVERVIEW_PADDING, OVERVIEW_ZOOM_OFFSET, polygons } from './geometry';
+import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, OVERVIEW_PADDING, OVERVIEW_ZOOM_OFFSET, polygons } from './geometry';
 import { areaIdentity, mapLevel } from './hierarchy';
 import { placeLabels, rangeText } from './labels';
 import type { Bounds, MapRendererProps, Point } from './types';
@@ -89,7 +89,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
   useEffect(() => {
     if (!ready || !size.width || active === false || !focusBounds || focusedBounds.current === focusBounds) return;
     const frame = requestAnimationFrame(() => {
-      const [longitude, latitude] = cameraCenter(focusBounds);
+      const [longitude, latitude] = boundsCenter(focusBounds);
       map.current?.setCamera({ center: { latitude, longitude }, zoom: Math.min(MAX_ZOOM, fitZoom(focusBounds, size.width, size.height, 36)), pitch: 0, heading: 0 });
       focusedBounds.current = focusBounds;
     });
@@ -98,7 +98,8 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
   useEffect(() => {
     if (!ready || !size.width || active === false || !locationFocus || focusedLocation.current === locationFocus) return;
     const frame = requestAnimationFrame(() => {
-      map.current?.setCamera({ center: { latitude: locationFocus.latitude, longitude: locationFocus.longitude }, zoom: 12, pitch: 0, heading: 0 });
+      const [longitude, latitude] = locationFocus.areaBounds ? boundsCenter(locationFocus.areaBounds) : [locationFocus.longitude, locationFocus.latitude];
+      map.current?.setCamera({ center: { latitude, longitude }, zoom: 12, pitch: 0, heading: 0 });
       focusedLocation.current = locationFocus;
     });
     return () => cancelAnimationFrame(frame);

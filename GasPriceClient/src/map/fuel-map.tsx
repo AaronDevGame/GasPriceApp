@@ -19,9 +19,10 @@ import type { MapSnapshot, Viewport, ZoomFocus } from './types';
 const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: true, detail: false, error: null };
 export type FuelMapHandle = { refresh(): Promise<void> };
 
-export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange, location, userCoordinates, onReturnToLocation, locations = [], onLocationChange, grade, active = true, managedRefresh = false }: {
+export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange, location, userLocation, userCoordinates, onReturnToLocation, locations = [], onLocationChange, grade, active = true, managedRefresh = false }: {
   location?: DoePriceLocation | null;
   userCoordinates?: Coordinates | null;
+  userLocation?: DoePriceLocation | null;
   onReturnToLocation?(): void;
   locations?: DoePriceLocation[];
   onLocationChange?(location: DoePriceLocation): void;
@@ -81,13 +82,18 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const target = useMemo(() => snapshot.index && locationProvince !== undefined
     ? mapAreaForLocation(snapshot.index, { city: locationCity ?? '', province: locationProvince }) : null,
   [snapshot.index, locationCity, locationProvince]);
+  const userCity = userLocation?.city;
+  const userProvince = userLocation?.province;
+  const userAreaBounds = useMemo(() => snapshot.index && userCity && userProvince
+    ? mapAreaForLocation(snapshot.index, { city: userCity, province: userProvince })?.bbox : undefined,
+    [snapshot.index, userCity, userProvince]);
   const latitude = userCoordinates?.latitude;
   const longitude = userCoordinates?.longitude;
   const indexBounds = snapshot.index?.bbox;
   const canLocate = latitude !== undefined && longitude !== undefined && Number.isFinite(latitude) && Number.isFinite(longitude) &&
     !!indexBounds && longitude >= indexBounds[0] && longitude <= indexBounds[2] && latitude >= indexBounds[1] && latitude <= indexBounds[3];
-  const locationFocus = useMemo(() => canLocate ? { latitude: latitude!, longitude: longitude!, request: locationRequest } : null,
-    [canLocate, latitude, longitude, locationRequest]);
+  const locationFocus = useMemo(() => canLocate ? { latitude: latitude!, longitude: longitude!, request: locationRequest, areaBounds: userAreaBounds } : null,
+    [canLocate, latitude, longitude, locationRequest, userAreaBounds]);
   const targetId = target?.id;
   const selected = mapSelection && mapSelection.targetId === targetId ? mapSelection.id : targetId ?? null;
   useEffect(() => {

@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Center the detected city outline evenly when location lookup resolves, using GPS as the fallback. Remove the nationwide eastward camera offset from native city/area centering.
 - Add Nationwide, Island groups, Regions, Provinces and Cities map navigation buttons. Keep the active level synchronized with manual zoom; tapping a level changes zoom around the current view, while Nationwide restores the Philippines overview.
 - Add a left-side map location button that activates after a successful location fix and returns to the detected area. Center the map as soon as coordinates arrive, including when local price lookup fails.
 - Restore the latest news headline and news retry message to the top of Fuel Prices, above the page title and area selector.

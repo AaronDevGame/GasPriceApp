@@ -197,6 +197,12 @@ function harness(overrides = {}) {
   const navigationBounds = geometry.cameraBounds(index.bbox);
   assert.deepEqual(Array.from(geometry.cameraBounds([110, 5, 130, 25])), [109, 3, 135, 27],
     'Navigation limits west padding to 5% while retaining 25% east and 10% vertical room');
+  for (const areaBounds of [imus.bbox, manila.bbox, index.bbox]) {
+    const center = geometry.world(geometry.boundsCenter(areaBounds));
+    const nw = geometry.world([areaBounds[0], areaBounds[3]]), se = geometry.world([areaBounds[2], areaBounds[1]]);
+    assert(Math.abs(center[0] - (nw[0] + se[0]) / 2) < 1e-10, 'Selected areas have equal horizontal margins');
+    assert(Math.abs(center[1] - (nw[1] + se[1]) / 2) < 1e-10, 'Selected areas have equal vertical margins');
+  }
   const cameraCenter = geometry.world(geometry.cameraCenter(index.bbox));
   const northwest = geometry.world([index.bbox[0], index.bbox[3]]);
   const southeast = geometry.world([index.bbox[2], index.bbox[1]]);

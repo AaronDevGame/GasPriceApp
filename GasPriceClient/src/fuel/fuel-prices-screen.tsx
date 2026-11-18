@@ -210,6 +210,7 @@ export default function FuelPricesScreen() {
               </Pressable>)}</View>
             <View style={mode === 'list' ? styles.hidden : undefined}>
               <FuelMap ref={map} location={historyVisible && fuel.localItem ? localLocation(fuel.localItem, null) ?? selected : selected} userCoordinates={fuel.userCoordinates}
+                userLocation={fuel.localItem ? localLocation(fuel.localItem, null) : null}
                 onReturnToLocation={() => {
                   if (!fuel.localItem) return;
                   const local = localLocation(fuel.localItem, fuel.doePrices);
