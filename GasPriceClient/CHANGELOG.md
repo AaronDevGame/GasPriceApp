@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Add Nationwide, Island groups, Regions, Provinces and Cities map navigation buttons. Keep the active level synchronized with manual zoom; tapping a level changes zoom around the current view, while Nationwide restores the Philippines overview.
 - Add a left-side map location button that activates after a successful location fix and returns to the detected area. Center the map as soon as coordinates arrive, including when local price lookup fails.
 - Restore the latest news headline and news retry message to the top of Fuel Prices, above the page title and area selector.
 - Merge Overview and Fuel Prices into the Fuel Prices home tab, leaving News and Weekly Changes as the other tabs. Share city/province selection across DOE summaries, map and company comparisons, preserve view selections, label local estimates separately, collapse recent updates, keep the news headline above prices, and redirect existing `/fuel-prices` links to home.

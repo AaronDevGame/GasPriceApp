@@ -40,6 +40,7 @@ export default function MapRenderer(props: MapRendererProps) {
   const latest = useRef(props);
   const map = useRef<google.maps.Map | null>(null);
   const focusedBounds = useRef<Bounds | null>(null);
+  const focusedZoom = useRef<MapRendererProps['zoomFocus']>(null);
   const focusedLocation = useRef<MapRendererProps['locationFocus']>(null);
   const shapes = useRef<AreaPolygon[]>([]);
   const overlay = useRef<LabelOverlay | null>(null);
@@ -76,7 +77,7 @@ export default function MapRenderer(props: MapRendererProps) {
         rotateControl: false, tilt: 0, heading: 0, gestureHandling: 'greedy',
         styles: [{ featureType: 'poi', stylers: [{ visibility: 'off' }] }, { featureType: 'transit', stylers: [{ visibility: 'off' }] }],
       });
-      map.current = instance; focusedBounds.current = null; focusedLocation.current = null;
+      map.current = instance; focusedBounds.current = null; focusedLocation.current = null; focusedZoom.current = null;
       const labels = createLabels(id => latest.current.onSelect(id)); labels.setMap(instance); overlay.current = labels;
       listeners.push(instance.addListener('bounds_changed', () => {
         latest.current.onMove(); setMoving(true); labels.labels = []; labels.draw();
@@ -117,6 +118,13 @@ export default function MapRenderer(props: MapRendererProps) {
     map.current.setZoom(12);
     focusedLocation.current = point;
   }, [ready, props.locationFocus, props.active]);
+  useEffect(() => {
+    const focus = props.zoomFocus;
+    if (!ready || !map.current || props.active === false || !focus || !host.current?.clientWidth || focusedZoom.current === focus) return;
+    if (focus.center) map.current.setCenter({ lng: focus.center[0], lat: focus.center[1] });
+    map.current.setZoom(focus.zoom);
+    focusedZoom.current = focus;
+  }, [ready, props.zoomFocus, props.active]);
   useEffect(() => {
     if (!ready || !map.current) return;
     shapes.current = props.snapshot.features.map(feature => {

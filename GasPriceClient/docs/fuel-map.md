@@ -4,6 +4,14 @@ Fuel Prices is the merged home tab, with a shared city/province selector, local 
 
 The home page retains its automatic foreground location permission request after authentication. Map browsing itself does not request location or call AI/geocoding. A location button in the upper-left corner is disabled until a usable Philippine location is received, then turns blue and returns to that saved location without another permission prompt or location lookup. The camera centers as soon as coordinates arrive, even if price lookup fails. With no selected area, the map fits the Philippines. The map feed remains RON 91 and diesel only; RON 95 selection is preserved for the company list and an explicit note explains map coverage. Pull-to-refresh and foreground refresh use the page's shared top indicator.
 
+The geographic level buttons above the map follow its actual zoom: Nationwide,
+Island groups, Regions, Provinces and Cities. They use the same responsive zoom
+bands as boundaries and labels, so manual zoom automatically updates the active
+button. Tapping a level changes zoom around the current center; Nationwide also
+recenters the Philippines overview. Provinces includes independent cities, and
+Cities includes municipalities. Controls become available after the map reports
+its first viewport.
+
 ## Required backend deployment
 
 The client depends on the backend and proxy work committed in `73c4451` and `22a721e` (already in the base of this frontend branch):

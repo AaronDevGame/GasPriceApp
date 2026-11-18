@@ -1,4 +1,4 @@
-import { fitZoom, intersects, midpoint } from './geometry';
+import { fitZoom, intersects, midpoint, MAX_ZOOM } from './geometry';
 import type { Bounds, City, CityPrices, GeographicIndex, MapSnapshot, PriceRange, Viewport } from './types';
 
 export type MapLevel = 'country' | 'island' | 'region' | 'province' | 'city';
@@ -6,6 +6,15 @@ export type MapArea = { id: string; name: string; bbox: Bounds; labelPoint: [num
 export const levelNames: Record<MapLevel, string> = {
   country: 'Nationwide', island: 'Island groups', region: 'Regions', province: 'Provinces / independent cities', city: 'Cities / municipalities',
 };
+export const mapLevelButtons: { level: MapLevel; label: string }[] = [
+  { level: 'country', label: 'Nationwide' }, { level: 'island', label: 'Island groups' },
+  { level: 'region', label: 'Regions' }, { level: 'province', label: 'Provinces' }, { level: 'city', label: 'Cities' },
+];
+// Aim inside each existing zoom band so button navigation and manual zoom agree.
+export function zoomForLevel(index: GeographicIndex, viewport: Pick<Viewport, 'width' | 'height'>, level: MapLevel) {
+  const offsets: Record<MapLevel, number> = { country: 0.15, island: 1.375, region: 2.75, province: 4.25, city: 5.75 };
+  return Math.min(MAX_ZOOM, fitZoom(index.bbox, viewport.width, viewport.height, 35) + offsets[level]);
+}
 // Relative to the national fit so the hierarchy also works on narrow phone screens.
 export function mapLevel(index: GeographicIndex, viewport: Viewport): MapLevel {
   const delta = viewport.zoom - fitZoom(index.bbox, viewport.width, viewport.height, 35);

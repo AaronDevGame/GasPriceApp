@@ -124,7 +124,8 @@ function harness(options = {}) {
   assert.equal(local.calls.filter(value => value?.city).length, beforeRefresh + 1, 'One DOE browse per refresh');
   const mapProps = { userCoordinates: null, onReturnToLocation: () => { returned++; } };
   let returned = 0;
-  const mapHarness = harness({ props: mapProps, snapshot: { index, cities: [], features: [], prices: new Map(), viewport: null, loading: false, error: null } });
+  const mapSnapshot = { index, cities: [], features: [], prices: new Map(), viewport: null, loading: false, error: null };
+  const mapHarness = harness({ props: mapProps, snapshot: mapSnapshot });
   await mapHarness.settle();
   const locationButton = () => mapHarness.nodes().find(n => n.props?.accessibilityLabel === 'Return to my location');
   assert.equal(locationButton().props.disabled, true, 'No permission/fix leaves location control disabled');
@@ -148,6 +149,36 @@ function harness(options = {}) {
   mapProps.userCoordinates = null;
   mapHarness.render(); await mapHarness.settle();
   assert.equal(locationButton().props.disabled, true, 'A cleared location disables the control');
+  const levelButtons = () => mapHarness.nodes().filter(n => n.type === 'Pressable' && n.props?.accessibilityLabel?.startsWith('Show '));
+  assert.equal(levelButtons().length, 5);
+  assert(levelButtons().every(n => n.props.disabled), 'Level controls wait for a usable map viewport');
+  const hierarchy = compile('map/hierarchy');
+  const viewport = { bounds: [120.85, 14.3, 121.05, 14.55], width: 1200, height: 560, zoom: 12 };
+  mapSnapshot.viewport = viewport;
+  mapHarness.render(); await mapHarness.settle();
+  const selectedLevels = () => levelButtons().filter(n => n.props.accessibilityState.selected);
+  assert.equal(selectedLevels().length, 1);
+  assert.equal(selectedLevels()[0].props.accessibilityLabel, 'Show cities', 'Imus city zoom activates Cities');
+  for (const [level, label] of [['province', 'provinces'], ['region', 'regions'], ['island', 'island groups'], ['country', 'nationwide'], ['city', 'cities']]) {
+    const button = levelButtons().find(n => n.props.accessibilityLabel === `Show ${label}`);
+    button.props.onPress(); await mapHarness.settle();
+    const command = mapHarness.nodes().find(n => n.type === 'MapRenderer').props.zoomFocus;
+    assert.equal(hierarchy.mapLevel(index, { ...viewport, zoom: command.zoom }), level);
+    assert.equal(!!command.center, level === 'country', 'Only Nationwide changes the map center');
+    // Model the camera's idle report: active states come from actual zoom, not the last tap.
+    viewport.zoom = command.zoom;
+    mapHarness.render(); await mapHarness.settle();
+    assert.equal(selectedLevels().length, 1);
+    assert.equal(selectedLevels()[0].props.accessibilityLabel, `Show ${label}`);
+  }
+  viewport.zoom = hierarchy.zoomForLevel(index, viewport, 'province');
+  mapHarness.render(); await mapHarness.settle();
+  assert.equal(selectedLevels()[0].props.accessibilityLabel, 'Show provinces', 'Manual zoom-out clears Cities and activates Provinces');
+  mapProps.userCoordinates = { latitude: 14.43, longitude: 120.94 };
+  mapHarness.render(); await mapHarness.settle();
+  locationButton().props.onPress(); await mapHarness.settle();
+  assert.equal(mapHarness.nodes().find(n => n.type === 'MapRenderer').props.zoomFocus, null, 'Returning to location clears the old level command');
+  console.log('PASS map levels: five controls, initial disabled state, city/province zoom synchronization, single active level and button camera commands');
   console.log('PASS map location: disabled before fix, enabled at Imus, stable while panning, repeat recenter and out-of-coverage handling');
   console.log('PASS merged screen: shared area/grade, view persistence, stale response protection, deduplicated refresh, GPS race and reconnect');
 })().catch(error => { console.error(error); process.exitCode = 1; });

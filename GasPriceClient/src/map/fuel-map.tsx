@@ -9,11 +9,12 @@ import { ThemedText } from '@/components/themed-text';
 import { MapController } from './controller';
 import { mapCache } from './cache';
 import MapRenderer from './map-renderer';
-import { areaPrices, levelNames, mapLevel, visibleAreas } from './hierarchy';
+import { areaPrices, levelNames, mapLevel, mapLevelButtons, zoomForLevel, visibleAreas } from './hierarchy';
+import { cameraCenter } from './geometry';
 import { rangeText } from './labels';
 import { mapAreaForLocation, locationForMapArea } from '@/fuel/selection';
 import type { Coordinates, DoePriceLocation } from '@/fuel/api';
-import type { MapSnapshot, Viewport } from './types';
+import type { MapSnapshot, Viewport, ZoomFocus } from './types';
 
 const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: true, detail: false, error: null };
 export type FuelMapHandle = { refresh(): Promise<void> };
@@ -35,6 +36,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const authenticated = session?.state === 'authenticated';
   const [snapshot, setSnapshot] = useState(empty);
   const [mapSelection, setMapSelection] = useState<{ id: string; targetId: string | undefined } | null>(null);
+  const [zoomFocus, setZoomFocus] = useState<ZoomFocus | null>(null);
   const [locationRequest, setLocationRequest] = useState(0);
   const controller = useRef<MapController | null>(null);
   const lastViewport = useRef<Viewport | null>(null);
@@ -92,6 +94,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
     if (targetId) controller.current?.select(targetId);
   }, [targetId]);
   const onSelect = useCallback((id: string) => {
+    setZoomFocus(null);
     setMapSelection({ id, targetId }); controller.current?.select(id);
     if (!snapshot.index || !snapshot.viewport) return;
     const area = visibleAreas(snapshot.index, snapshot.viewport).find(value => value.id === id);
@@ -107,14 +110,28 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   return <View style={styles.wrapper}>
     {grade === 'RON 95' && <ThemedText type="small" themeColor="textSecondary">The map shows RON 91 and diesel. Choose Company list for RON 95 reports.</ThemedText>}
     <ThemedText type="small" themeColor="textSecondary">Select a reported city or province to update the company list. Broader areas show map ranges only.</ThemedText>
-    <ThemedText type="smallBold">{levelNames[level]} · Zoom in for more detail</ThemedText>
+    <View style={styles.levelButtons} accessibilityLabel="Map geographic levels">
+      {mapLevelButtons.map(item => <Pressable key={item.level} accessibilityRole="button"
+        accessibilityLabel={`Show ${item.label.toLowerCase()}`} accessibilityHint={`Zoom the map to ${levelNames[item.level].toLowerCase()} level.`}
+        accessibilityState={{ selected: !!snapshot.viewport && level === item.level, disabled: !snapshot.index || !snapshot.viewport }}
+        disabled={!snapshot.index || !snapshot.viewport}
+        onPress={() => {
+          if (!snapshot.index || !snapshot.viewport) return;
+          setZoomFocus({ zoom: zoomForLevel(snapshot.index, snapshot.viewport, item.level),
+            ...(item.level === 'country' ? { center: cameraCenter(snapshot.index.bbox) } : {}) });
+        }}
+        style={[styles.levelButton, !!snapshot.viewport && level === item.level && styles.levelButtonSelected, !snapshot.viewport && styles.levelButtonDisabled]}>
+        <ThemedText type="smallBold" style={!!snapshot.viewport && level === item.level ? styles.levelButtonTextSelected : undefined}>{item.label}</ThemedText>
+      </Pressable>)}
+    </View>
+    <ThemedText type="small" themeColor="textSecondary">{levelNames[level]} · Zoom or choose a level</ThemedText>
     <View style={styles.canvas}>
-      {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} focusBounds={target?.bbox} locationFocus={locationFocus} active={active} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :
+      {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} focusBounds={target?.bbox} locationFocus={locationFocus} zoomFocus={zoomFocus} active={active} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :
         <View style={styles.initial}><ActivityIndicator /><ThemedText>Loading Philippine map…</ThemedText></View>}
       <Pressable accessibilityRole="button" accessibilityLabel="Return to my location"
         accessibilityHint={canLocate ? 'Center the map on your detected location.' : userCoordinates ? 'Your detected location is outside the Philippine map.' : 'Allow location access using Use my location above to enable this button.'}
         accessibilityState={{ disabled: !canLocate }} disabled={!canLocate}
-        onPress={() => { setLocationRequest(value => value + 1); onReturnToLocation?.(); }}
+        onPress={() => { setZoomFocus(null); setLocationRequest(value => value + 1); onReturnToLocation?.(); }}
         style={[styles.locationButton, canLocate ? styles.locationButtonEnabled : styles.locationButtonDisabled]}>
         <AppIcon name="location" color={canLocate ? '#76B4FF' : '#7B8798'} />
       </Pressable>
@@ -143,6 +160,9 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   </View>;
 }
 const styles = StyleSheet.create({
+  levelButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  levelButton: { minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#495569', borderRadius: 12, justifyContent: 'center' },
+  levelButtonSelected: { borderColor: '#76B4FF', backgroundColor: '#21334B' }, levelButtonTextSelected: { color: '#76B4FF' }, levelButtonDisabled: { opacity: 0.5 },
   locationButton: { position: 'absolute', left: 12, top: 12, width: 48, height: 48, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A2029', zIndex: 20 },
   locationButtonEnabled: { borderColor: '#76B4FF' }, locationButtonDisabled: { borderColor: '#495569', opacity: 0.7 },
   selection: { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#D38B00', gap: 4 },

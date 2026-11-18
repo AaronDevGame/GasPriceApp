@@ -241,6 +241,11 @@ function harness(overrides = {}) {
   const hierarchy = h.load('hierarchy');
   for (const [width, height] of [[400, 600], [1200, 560]]) {
     const base = geometry.fitZoom(index.bbox, width, height, 35);
+    for (const level of ['country', 'island', 'region', 'province', 'city']) {
+      const zoom = hierarchy.zoomForLevel(index, { width, height }, level);
+      assert.equal(hierarchy.mapLevel(index, { bounds: imus.bbox, width, height, zoom }), level, `Level button must reach ${level} at ${width}px`);
+      assert.equal(hierarchy.mapLevel(index, { bounds: imus.bbox, width, height, zoom: Math.round(zoom) }), level, 'Native whole-number zoom must stay within the requested band');
+    }
     for (const [offset, expected] of [[0, 'country'], [1, 'island'], [2.5, 'region'], [4, 'province'], [5.5, 'city']]) {
       assert.equal(hierarchy.mapLevel(index, { bounds: index.bbox, width, height, zoom: base + offset }), expected);
     }
