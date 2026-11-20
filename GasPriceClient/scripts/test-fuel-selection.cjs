@@ -62,8 +62,12 @@ function harness(options = {}) {
     doeLocationLabel: location => location.city || location.province, doeCoverageLabel: report => report.city || report.province };
   const components = new Proxy({}, { get: (_, name) => name });
   const overrides = {
-    react, 'expo-router': { useFocusEffect: () => {} },
-    './controller': { MapController: class {} }, './cache': { mapCache: { setSession: () => {} } }, './map-renderer': { __esModule: true, default: 'MapRenderer' }, '@/auth/foreground': { subscribeToForeground: () => () => {} },
+    react, 'expo-router': { useIsFocused: () => true },
+    './controller': { MapController: class {
+      snapshot = options.snapshot;
+      subscribe() { return () => {}; } setActive() { return false; } setAuthenticated() {} resetPriceRequests() {} async start() {}
+      isActive() { return true; } dispose() {} select() {}
+    } }, './cache': { mapCache: { setSession: () => {} } }, './map-renderer': { __esModule: true, default: 'MapRenderer' }, '@/auth/foreground': { isAppForeground: () => true, subscribeToAppVisibility: () => () => {} },
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'Fragment' },
     'react-native': { ...components, View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', TextInput: 'TextInput', Platform: { OS: 'web' }, StyleSheet: { create: v => v } },
     'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },

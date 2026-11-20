@@ -17,9 +17,9 @@ function harness(overrides = {}) {
   const timers = new Map(), calls = { index: 0, files: [], prices: [] };
   class Clock extends Date { static now() { return now; } }
   const feed = ids => ({ boundaryVersion: index.version, gasolineGrade: 'RON 91', dieselGrade: 'DIESEL',
-    generatedAtUtc: new Date(now).toISOString(), expiresAtUtc: new Date(now + 300000).toISOString(), items: ids.map(cityId => ({
+    generatedAtUtc: new Date(now).toISOString(), expiresAtUtc: new Date(now + 21600000).toISOString(), items: ids.map(cityId => ({
       cityId, scope: 'city', status: 'available', gasolineGrade: 'RON 91', gasoline: { minPrice: 58.2, maxPrice: 62.4, currency: 'PHP', unit: 'liter' },
-      diesel: { minPrice: 50, maxPrice: 55, currency: 'PHP', unit: 'liter' }, expiresAtUtc: new Date(now + 300000).toISOString(),
+      diesel: { minPrice: 50, maxPrice: 55, currency: 'PHP', unit: 'liter' }, expiresAtUtc: new Date(now + 21600000).toISOString(),
     })) });
   const api = {
     index: async () => { calls.index++; return structuredClone(index); },
@@ -50,7 +50,63 @@ function harness(overrides = {}) {
     for (const [key, task] of [...timers]) if (task.at <= now) { timers.delete(key); task.fn(); }
     await flush();
   };
-  return { cache, calls, feed, Controller, load, flush, advance };
+  return { cache, calls, feed, Controller, load, flush, advance, timers, now: () => now };
+}
+// Exercise the actual map component lifecycle with its real cache/controller and fake camera/React.
+function lifecycle(h, initial = {}) {
+  const props = { active: true, ...initial }, cells = [], effects = [], visibility = new Set(), controllers = [];
+  let cursor = 0, dirty = true, tree, focused = true, visible = true, handle, playerId = 1;
+  const equal = (a, b) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
+  const memo = (fn, deps) => { const i = cursor++; if (!cells[i] || !equal(cells[i].deps, deps)) cells[i] = { deps, value: fn() }; return cells[i].value; };
+  const react = {
+    useState(initial) { const i = cursor++; if (!(i in cells)) cells[i] = typeof initial === 'function' ? initial() : initial;
+      return [cells[i], next => { const value = typeof next === 'function' ? next(cells[i]) : next;
+        if (!Object.is(value, cells[i])) { cells[i] = value; dirty = true; } }]; },
+    useRef: value => memo(() => ({ current: value }), []), useMemo: memo,
+    useCallback: (fn, deps) => memo(() => fn, deps), useImperativeHandle: (_ref, create) => { handle = create(); },
+    useEffect(fn, deps) { const i = cursor++; if (!cells[i] || !equal(cells[i].deps, deps)) effects.push(() => {
+      cells[i]?.cleanup?.(); cells[i] = { deps, cleanup: fn() }; }); },
+  };
+  function compile(file) {
+    const exports = {};
+    const code = ts.transpileModule(fs.readFileSync(path.join(root, 'src', file), 'utf8'), { compilerOptions: {
+      module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
+    } }).outputText;
+    vm.runInNewContext(code, { exports, require: requireModule, Date, Map, Set, Promise }); return exports;
+  }
+  function requireModule(spec) {
+    if (spec === 'react') return react;
+    if (spec === 'expo-router') return { useIsFocused: () => focused };
+    if (spec === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) };
+    if (spec === 'react-native') return { View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', Linking: {}, StyleSheet: { create: v => v } };
+    if (spec === '@/auth/auth-provider') return { useAuth: () => ({ session: { state: 'authenticated', playerId } }) };
+    if (spec === '@/auth/foreground') return { isAppForeground: () => visible,
+      subscribeToAppVisibility: fn => { visibility.add(fn); return () => visibility.delete(fn); } };
+    if (spec === '@/components/app-icon') return { AppIcon: 'AppIcon' };
+    if (spec === '@/components/themed-text') return { ThemedText: 'Text' };
+    if (spec === './controller') return { MapController: class extends h.Controller { constructor() { super(h.cache); controllers.push(this); } } };
+    if (spec === './cache') return { mapCache: h.cache };
+    if (spec === './map-renderer') return { __esModule: true, default: 'MapRenderer' };
+    if (spec === '@/fuel/selection') return compile('fuel/selection.ts');
+    return h.load(spec.replace('@/map/', '').replace('./', ''));
+  }
+  const Component = compile('map/fuel-map.tsx').default;
+  const render = () => { cursor = 0; dirty = false; tree = Component(props); while (effects.length) effects.shift()(); };
+  async function settle() {
+    for (let i = 0; i < 80; i++) { if (dirty) render(); await Promise.resolve(); }
+    assert(!dirty, 'Map component should settle without an update loop');
+  }
+  function nodes() { const all = []; const visit = node => { if (Array.isArray(node)) return node.forEach(visit);
+    if (!node || typeof node !== 'object') return; all.push(node); visit(node.props?.children); }; visit(tree); return all; }
+  return { props, controllers, settle, nodes,
+    camera: () => nodes().find(node => node.type === 'MapRenderer'),
+    refresh: () => handle.refresh(),
+    focus(value) { focused = value; dirty = true; },
+    session(value) { playerId = value; dirty = true; },
+    visibility(value) { if (value !== visible) { visible = value; [...visibility].forEach(fn => fn(value)); } },
+    change(next) { Object.assign(props, next); dirty = true; },
+    dispose() { cells.forEach(cell => cell?.cleanup?.()); },
+  };
 }
 (async () => {
   // No viewport exists before MapRenderer mounts: start must publish a warm index
@@ -123,7 +179,7 @@ function harness(overrides = {}) {
   controller.move();
   await h.advance(1);
   assert.equal(h.calls.prices.length, before, 'Movement cancels queued viewport work');
-  await h.advance(300001);
+  await h.advance(21600001);
   assert.equal(h.cache.price(imus.id), undefined, 'Expired prices are not shown');
   controller.idle(viewport, true); await h.advance(0);
   assert(h.calls.prices.length > before && h.cache.price(imus.id));
@@ -173,6 +229,11 @@ function harness(overrides = {}) {
   const partial = new broken.Controller(broken.cache); partial.setAuthenticated(true); await partial.start();
   partial.idle(viewport, true); await broken.advance(0);
   assert(partial.snapshot.error && partial.snapshot.prices.size > 0, 'Boundary failure must not block batch prices');
+  const boundaryAttempts = broken.calls.files.length, priceAttempts = broken.calls.prices.length;
+  partial.idle(viewport, true); await broken.advance(0);
+  assert.equal(broken.calls.files.length, boundaryAttempts, 'Boundary failures cannot retry on every camera event');
+  await broken.advance(60000); assert(broken.calls.files.length > boundaryAttempts);
+  assert.equal(broken.calls.prices.length, priceAttempts, 'Boundary retries reuse valid price data');
   partial.dispose();
   const invalid = harness({ prices: (_version, ids, feed) => ({ ...feed(ids), gasolineGrade: 'RON 95' }) });
   await invalid.cache.loadIndex(); await assert.rejects(invalid.cache.loadPrices([imus]));
@@ -182,6 +243,125 @@ function harness(overrides = {}) {
   await missing.cache.loadIndex(); await missing.cache.loadPrices([imus]); await missing.cache.loadPrices([imus]);
   assert.equal(missing.calls.prices.length, 1, 'Unavailable results are cached too');
   console.log('PASS independent failure recovery, grade/scope validation and unavailable-result caching');
+
+  const sixHours = 21600000;
+  const timed = harness();
+  const timedController = new timed.Controller(timed.cache); timedController.setAuthenticated(true); await timedController.start();
+  timedController.idle(viewport, true); await timed.advance(0);
+  let updates = 0; timedController.subscribe(() => { updates++; });
+  assert.equal(timed.timers.size, 1, 'Stationary view has one deadline timer');
+  const beforeIdle = updates;
+  await timed.advance(15000); await timed.advance(285000);
+  assert.equal(updates, beforeIdle, 'No 15-second cache checks or five-minute price reads');
+  assert.equal(timed.calls.prices.length, 1);
+  await timed.advance(sixHours - 300000);
+  assert.equal(timed.calls.prices.length, 2, 'Automatic read occurs at the six-hour expiry');
+  timedController.dispose(); assert.equal(timed.timers.size, 0);
+
+  const early = harness({ prices: (_v, ids, feed) => {
+    const result = feed(ids); result.items.forEach(item => { item.expiresAtUtc = new Date(early.now() + 120000).toISOString(); }); return result;
+  } });
+  const earlyController = new early.Controller(early.cache); earlyController.setAuthenticated(true); await earlyController.start();
+  earlyController.idle(viewport, true); await early.advance(0); await early.advance(119999);
+  assert.equal(early.calls.prices.length, 1); await early.advance(1); assert.equal(early.calls.prices.length, 2);
+  earlyController.dispose();
+  await missing.advance(300000); await missing.cache.loadPrices([imus]); assert.equal(missing.calls.prices.length, 1);
+  await missing.advance(sixHours - 300000); await missing.cache.loadPrices([imus]); assert.equal(missing.calls.prices.length, 2);
+  console.log('PASS next-expiry scheduling, six-hour available/unavailable caches, earlier deadlines and no idle device polling');
+
+  let fail = false;
+  const backoff = harness({ prices: (_v, ids, feed) => { if (fail) throw new Error('offline'); return feed(ids); } });
+  const retryController = new backoff.Controller(backoff.cache); retryController.setAuthenticated(true); await retryController.start();
+  retryController.idle(viewport, true); await backoff.advance(0); await backoff.advance(2000);
+  fail = true; await retryController.refreshAndWait();
+  assert(backoff.cache.price(imus.id), 'Failed refresh retains unexpired prices');
+  for (const [delay, requests] of [[60000, 3], [120000, 4], [240000, 5]]) {
+    retryController.idle(viewport, true); await backoff.advance(0);
+    await retryController.refreshAndWait();
+    assert.equal(backoff.calls.prices.length, requests - 1, 'Panning/return events cannot bypass failure backoff');
+    await backoff.advance(delay - 1); assert.equal(backoff.calls.prices.length, requests - 1);
+    await backoff.advance(1); assert.equal(backoff.calls.prices.length, requests);
+  }
+  await backoff.advance(300000); assert.equal(backoff.calls.prices.length, 5);
+  retryController.setActive(false); assert.equal(backoff.timers.size, 0);
+  await backoff.advance(sixHours); assert.equal(backoff.calls.prices.length, 5);
+  fail = false; retryController.setActive(true); await retryController.refreshAndWait();
+  assert.equal(backoff.calls.prices.length, 6); retryController.dispose();
+  console.log('PASS bounded 1/2/4-minute then six-hour failure backoff, cached-data retention and suspended retries');
+
+  const live = harness(); const ui = lifecycle(live, { initialLocationPending: true }); await ui.settle();
+  const nationwide = { bounds: index.bbox, zoom: live.load('geometry').fitZoom(index.bbox, 1200, 560, 35), width: 1200, height: 560 };
+  ui.camera().props.onIdle(nationwide); await live.advance(750); await ui.settle();
+  assert.equal(live.calls.prices.length, 1); assert.equal(live.calls.prices[0].length, index.cities.length);
+  await live.advance(2000); ui.visibility(false); await ui.settle();
+  assert.equal(live.timers.size, 0); ui.visibility(true);
+  // The location flow can finish before the async map activation callback resumes.
+  ui.change({ initialLocationPending: false }); await ui.settle(); await live.advance(0); await ui.settle();
+  ui.change({ userCoordinates: { latitude: 14.43, longitude: 120.94 }, userLocation: { city: 'Imus', province: 'Cavite' }, initialLocationPending: false });
+  await ui.settle(); ui.camera().props.onIdle(viewport); await live.advance(750); await ui.settle();
+  assert.equal(live.calls.prices.length, 1, 'Nationwide results cover the initial Imus/location-permission camera change');
+  assert.equal(ui.controllers.length, 1, 'Location changes do not recreate the map controller');
+  await live.advance(2000); ui.visibility(false); await ui.settle();
+  await live.advance(sixHours); await ui.settle(); assert.equal(live.calls.prices.length, 1);
+  ui.visibility(true); ui.focus(false); ui.focus(true); await ui.settle();
+  const manualOverlap = ui.refresh(); await live.flush(); await ui.settle(); await manualOverlap;
+  assert.equal(live.calls.prices.length, 2, 'Overlapping foreground/focus/manual events share one refresh');
+  assert(live.calls.prices[1].includes(imus.id));
+  await live.advance(2000); ui.focus(false); await ui.settle(); assert.equal(live.timers.size, 0);
+  await live.advance(300000); assert.equal(live.calls.prices.length, 2);
+  ui.focus(true); await ui.settle(); assert.equal(live.calls.prices.length, 3, 'Returning to screen bypasses still-valid prices');
+  await live.advance(2000); ui.change({ active: false }); await ui.settle();
+  assert.equal(live.timers.size, 0); ui.visibility(false); ui.visibility(true); await ui.settle(); assert.equal(live.calls.prices.length, 3);
+  ui.change({ active: true }); await ui.settle(); assert.equal(live.calls.prices.length, 4, 'Returning from Company list forces current map prices');
+  ui.dispose(); assert.equal(live.timers.size, 0);
+  console.log('PASS real map lifecycle: permission/local flow, background/tab/focus pause, actual forced return reads and event deduplication');
+
+  const cameraRace = harness(); await cameraRace.cache.loadIndex(); await cameraRace.cache.loadPrices(index.cities);
+  const racing = new cameraRace.Controller(cameraRace.cache); racing.setAuthenticated(true); await racing.start();
+  racing.idle(viewport, true); await cameraRace.advance(0); await cameraRace.advance(2000);
+  const forcedBeforeIdle = racing.refreshAndWait();
+  racing.idle(viewport, true); // Supersede the refresh before its cached index await completes.
+  await cameraRace.advance(0); await forcedBeforeIdle; await cameraRace.flush();
+  assert.equal(cameraRace.calls.prices.length, 2, 'Camera idle cannot downgrade a forced return refresh into cache reuse');
+  racing.dispose();
+  // Refresh the current view but retain other cities for ordinary panning.
+  const retain = harness(); await retain.cache.loadIndex(); await retain.cache.loadPrices([imus, manila]);
+  await retain.advance(2000); await Promise.all([retain.cache.loadPrices([imus], true), retain.cache.loadPrices([imus], true)]);
+  assert.equal(retain.calls.prices.length, 2); assert.deepEqual(retain.calls.prices[1], [imus.id]);
+  await retain.cache.loadPrices([manila]); assert.equal(retain.calls.prices.length, 2);
+  const oldFeed = retain.feed([imus.id]); oldFeed.generatedAtUtc = '2026-11-09T00:00:00Z'; oldFeed.items[0].gasoline.minPrice = 1;
+  // The cache receives an older generated timestamp on a later refresh: it must retain the newer value.
+  const original = retain.cache.price(imus.id).gasoline.minPrice;
+  const old = harness({ prices: (_v, ids, feed) => old.calls.prices.length > 1 ? oldFeed : feed(ids) });
+  await old.cache.loadIndex(); await old.cache.loadPrices([imus]); await old.advance(2000); await old.cache.loadPrices([imus], true);
+  assert.equal(old.cache.price(imus.id).gasoline.minPrice, original);
+  const staleFeed = harness({ prices: (_v, ids, feed) => {
+    const result = feed(ids); result.items.forEach(item => { item.expiresAtUtc = '2026-11-09T00:00:00Z'; }); return result;
+  } });
+  await staleFeed.cache.loadIndex();
+  await assert.rejects(staleFeed.cache.loadPrices([imus]));
+  await assert.rejects(staleFeed.cache.loadPrices([imus]));
+  assert.equal(staleFeed.calls.prices.length, 1, 'Already-expired server results cannot cause immediate request loops');
+  const oldFailure = deferred();
+  const identities = harness({ prices: (_v, ids, feed) => identities.calls.prices.length === 1 ? oldFailure.promise : feed(ids) });
+  identities.cache.setSession('first'); await identities.cache.loadIndex();
+  const firstIdentity = identities.cache.loadPrices([imus]); await identities.flush();
+  identities.cache.setSession('second'); await identities.cache.loadPrices([imus]);
+  oldFailure.reject(new Error('abandoned identity')); await firstIdentity;
+  await identities.advance(2000); await identities.cache.loadPrices([imus], true);
+  assert.equal(identities.calls.prices.length, 3, 'An old-session failure cannot install backoff for the new identity');
+  let unavailableIdentity = true;
+  const sessionFailure = harness({ prices: (_v, ids, feed) => {
+    if (unavailableIdentity) throw new Error('first identity offline'); return feed(ids);
+  } });
+  const identityUI = lifecycle(sessionFailure); await identityUI.settle();
+  identityUI.camera().props.onIdle(viewport); await sessionFailure.advance(750); await identityUI.settle();
+  assert.equal(sessionFailure.calls.prices.length, 1);
+  unavailableIdentity = false; identityUI.session(2); await identityUI.settle();
+  await sessionFailure.advance(0); await identityUI.settle();
+  assert.equal(sessionFailure.calls.prices.length, 2, 'Controller backoff must not carry over to a new identity');
+  identityUI.dispose();
+  console.log('PASS forced in-flight sharing, unaffected city reuse, stale-response/backoff and session isolation');
 
   const geometry = h.load('geometry');
   const polygon = { type: 'Feature', id: 'fixture', geometry: { type: 'Polygon', coordinates: [

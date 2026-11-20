@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useIsFocused } from 'expo-router';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/auth/auth-provider';
-import { subscribeToForeground } from '@/auth/foreground';
+import { isAppForeground, subscribeToAppVisibility } from '@/auth/foreground';
 import { AppIcon } from '@/components/app-icon';
 import { ThemedText } from '@/components/themed-text';
 import { MapController } from './controller';
@@ -19,7 +19,7 @@ import type { MapSnapshot, Viewport, ZoomFocus } from './types';
 const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: true, detail: false, error: null };
 export type FuelMapHandle = { refresh(): Promise<void> };
 
-export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange, location, userLocation, userCoordinates, onReturnToLocation, locations = [], onLocationChange, grade, active = true, managedRefresh = false }: {
+export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange, location, userLocation, userCoordinates, onReturnToLocation, locations = [], onLocationChange, grade, active = true, initialLocationPending = false }: {
   location?: DoePriceLocation | null;
   userCoordinates?: Coordinates | null;
   userLocation?: DoePriceLocation | null;
@@ -28,13 +28,19 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   onLocationChange?(location: DoePriceLocation): void;
   grade?: string;
   active?: boolean;
-  managedRefresh?: boolean;
+  initialLocationPending?: boolean;
   ref?: Ref<FuelMapHandle>;
   foregroundRefreshing?: boolean;
   onForegroundRefreshChange?(refreshing: boolean): void;
 }) {
   const { session, loading: authLoading } = useAuth();
   const authenticated = session?.state === 'authenticated';
+  const focused = useIsFocused();
+  const eligible = active && focused;
+  const eligibility = useRef(eligible);
+  const authState = useRef(authenticated);
+  const locating = useRef(initialLocationPending);
+  const updateActivity = useRef<((visible: boolean) => void) | null>(null);
   const [snapshot, setSnapshot] = useState(empty);
   const [mapSelection, setMapSelection] = useState<{ id: string; targetId: string | undefined } | null>(null);
   const [zoomFocus, setZoomFocus] = useState<ZoomFocus | null>(null);
@@ -44,7 +50,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const refreshRequest = useRef<Promise<void> | null>(null);
   const refresh = useCallback(() => {
     const next = controller.current;
-    if (!next) return Promise.resolve();
+    if (!next?.isActive()) return Promise.resolve();
     if (refreshRequest.current) return refreshRequest.current;
     onForegroundRefreshChange?.(true);
     const request = next.refreshAndWait().finally(() => {
@@ -59,22 +65,43 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   useImperativeHandle(ref, () => ({ refresh }), [refresh]);
   useEffect(() => {
     mapCache.setSession(authenticated ? String(session?.playerId ?? 'authenticated') : null);
+    controller.current?.resetPriceRequests();
   }, [authenticated, session?.playerId]);
-  useFocusEffect(useCallback(() => {
+  useEffect(() => {
     const next = new MapController();
     controller.current = next;
     const unsubscribe = next.subscribe(() => setSnapshot(next.getSnapshot()));
-    next.setAuthenticated(authenticated);
+    next.setActive(eligibility.current && isAppForeground());
+    next.setAuthenticated(authState.current);
     void next.start().then(() => { if (lastViewport.current) next.idle(lastViewport.current, true); });
-    // Refresh cached expiries even while the map remains stationary, plus on foreground return.
-    const interval = setInterval(next.refresh, 15000);
-    const foreground = managedRefresh ? () => {} : subscribeToForeground(() => { void refresh(); });
+    const activity = (visible: boolean) => {
+      if (!next.setActive(eligibility.current && visible)) return;
+      const initialLocationTransition = locating.current;
+      void next.start().then(() => {
+        if (controller.current !== next || !next.isActive() || !next.snapshot.viewport) return;
+        // The initial permission dialog/local-camera transition reuses the Nationwide
+        // batch. Later genuine screen/app returns explicitly refresh current prices.
+        if (initialLocationTransition) next.idle(next.snapshot.viewport, true);
+        else void refresh();
+      });
+    };
+    updateActivity.current = activity;
+    const unsubscribeVisibility = subscribeToAppVisibility(activity);
     return () => {
-      clearInterval(interval); foreground(); unsubscribe(); next.dispose();
-      controller.current = null; refreshRequest.current = null;
+      unsubscribeVisibility(); unsubscribe(); next.dispose();
+      controller.current = null; updateActivity.current = null; refreshRequest.current = null;
       onForegroundRefreshChange?.(false);
     };
-  }, [authenticated, refresh, onForegroundRefreshChange, managedRefresh]));
+  }, [refresh, onForegroundRefreshChange]);
+  useEffect(() => {
+    authState.current = authenticated;
+    controller.current?.setAuthenticated(authenticated);
+  }, [authenticated]);
+  useEffect(() => { locating.current = initialLocationPending; }, [initialLocationPending]);
+  useEffect(() => {
+    eligibility.current = eligible;
+    updateActivity.current?.(isAppForeground());
+  }, [eligible]);
   const onIdle = useCallback((viewport: Viewport) => { lastViewport.current = viewport; controller.current?.idle(viewport); }, []);
   const onMove = useCallback(() => controller.current?.move(), []);
   const locationCity = location?.city;
@@ -132,7 +159,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
     </View>
     <ThemedText type="small" themeColor="textSecondary">{levelNames[level]} · Zoom or choose a level</ThemedText>
     <View style={styles.canvas}>
-      {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} focusBounds={target?.bbox} locationFocus={locationFocus} zoomFocus={zoomFocus} active={active} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :
+      {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} focusBounds={target?.bbox} locationFocus={locationFocus} zoomFocus={zoomFocus} active={eligible && isAppForeground()} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :
         <View style={styles.initial}><ActivityIndicator /><ThemedText>Loading Philippine map…</ThemedText></View>}
       <Pressable accessibilityRole="button" accessibilityLabel="Return to my location"
         accessibilityHint={canLocate ? 'Center the map on your detected location.' : userCoordinates ? 'Your detected location is outside the Philippine map.' : 'Allow location access using Use my location above to enable this button.'}
