@@ -9,6 +9,9 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Label map prices as DOE reported or estimated, retain original reports for up to 30 days with an outdated flag after seven days, and calculate company-specific gasoline/diesel estimates only from complete, nonconflicting confirmed adjustments. Preserve original ranges, dates and adjustment sources; exclude forecasts and future changes.
 
+### Changed
+- Stop idle DOE import database polling. Wake for newly queued imports, check durable jobs on startup, and retain timed checks only for enabled automatic imports, active-job recovery, busy queues, or failures. Keep heartbeats during active imports.
+
 ## [1.14.0] - 2026-11-13
 
 ### Added

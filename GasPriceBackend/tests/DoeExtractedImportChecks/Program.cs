@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging;
 // Offline HTTP/auth/queue checks. No external HTTP clients are registered.
 // Optional real persistence checks use only a disposable localhost database:
 // DOE_TEST_PGPORT=<port> dotnet run --project GasPriceBackend/tests/DoeExtractedImportChecks
+await DoeWorkerIdleChecks.RunAsync();
 ProvincePriceChecks.Run();
 await CodexAuthChecks.RunAsync();
 await FuelAdjustmentChecks.RunAsync();

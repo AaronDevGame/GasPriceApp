@@ -44,7 +44,9 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
 
     public void Wake()
     {
-        if (_wake.CurrentCount == 0) _wake.Release();
+        // Several requests can enqueue work concurrently; one pending signal is enough.
+        try { _wake.Release(); }
+        catch (SemaphoreFullException) { }
     }
 
     public static DoeImportJobStatus ToStatus(DoeImportJob job) => new(
@@ -60,64 +62,91 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // The database retains jobs across restarts. A stale running job can be retried
-        // after its worker has stopped; live imports update their heartbeat during work.
+        // Check durable jobs once on startup, then sleep until work is signaled or
+        // an enabled schedule / existing job needs attention. An idle worker never polls.
         while (!stoppingToken.IsCancellationRequested)
         {
+            DateTime? nextCheck = null;
             try
             {
-                await RecoverStaleAsync(stoppingToken);
-                await ScheduleLatestAsync(stoppingToken);
-                await ProcessQueuedAsync(stoppingToken);
+                nextCheck = await RecoverStaleAsync(stoppingToken);
+                var nextSchedule = await ScheduleLatestAsync(stoppingToken);
+                if (nextSchedule is not null && (nextCheck is null || nextSchedule < nextCheck))
+                    nextCheck = nextSchedule;
+                if (await ProcessQueuedAsync(stoppingToken))
+                {
+                    // Another host owns the active slot. Retry only while queued work exists.
+                    var retryAt = timeProvider.GetUtcNow().UtcDateTime.AddMinutes(1);
+                    if (nextCheck is null || retryAt < nextCheck) nextCheck = retryAt;
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex)
             {
                 logger.LogError(ex, "DOE import worker loop failed.");
+                nextCheck = timeProvider.GetUtcNow().UtcDateTime.AddMinutes(1);
             }
-            try { await _wake.WaitAsync(TimeSpan.FromMinutes(1), stoppingToken); }
+            var delay = nextCheck is { } due
+                ? due - timeProvider.GetUtcNow().UtcDateTime : Timeout.InfiniteTimeSpan;
+            if (nextCheck is not null && delay < TimeSpan.Zero) delay = TimeSpan.Zero;
+            try { await _wake.WaitAsync(delay, stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
         }
     }
 
-    private async Task RecoverStaleAsync(CancellationToken cancellationToken)
+    private async Task<DateTime?> RecoverStaleAsync(CancellationToken cancellationToken)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var cutoff = timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-30);
-        var stale = await db.DoeImportJobs.Where(j => j.Status == "running" &&
-            j.HeartbeatAtUtc < cutoff && j.ActiveSlot == 1).ToListAsync(cancellationToken);
-        foreach (var job in stale)
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var cutoff = now.AddMinutes(-30);
+        var active = await db.DoeImportJobs.Where(j => j.Status == "running" &&
+            j.ActiveSlot == 1).ToListAsync(cancellationToken);
+        DateTime? nextRecovery = null;
+        var changed = false;
+        foreach (var job in active)
         {
+            if (job.HeartbeatAtUtc is not { } heartbeat) continue;
+            if (heartbeat >= cutoff)
+            {
+                var recoveryAt = heartbeat.AddMinutes(30).AddSeconds(1);
+                if (nextRecovery is null || recoveryAt < nextRecovery) nextRecovery = recoveryAt;
+                continue;
+            }
             job.Status = "interrupted";
             job.ActiveSlot = null;
-            job.FinishedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+            job.FinishedAtUtc = now;
             job.Error = "The import stopped before completion. Start a new job to retry.";
             var reports = JsonSerializer.Deserialize<DoeImportReportStatus[]>(job.DetailsJson) ?? [];
             job.DetailsJson = JsonSerializer.Serialize(reports.Select(report =>
                 report.Status == "running"
                     ? report with { Status = "interrupted", Error = job.Error }
                     : report));
+            changed = true;
         }
-        if (stale.Count > 0) await db.SaveChangesAsync(cancellationToken);
+        if (changed) await db.SaveChangesAsync(cancellationToken);
+        return nextRecovery;
     }
 
-    private async Task ScheduleLatestAsync(CancellationToken cancellationToken)
+    private async Task<DateTime?> ScheduleLatestAsync(CancellationToken cancellationToken)
     {
-        if (!configuration.GetValue<bool>("DoeImport:ScheduleEnabled")) return;
+        if (!configuration.GetValue<bool>("DoeImport:ScheduleEnabled")) return null;
 
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var importer = scope.ServiceProvider.GetRequiredService<DoeFuelPriceImporter>();
-        if (!importer.IsConfigured) return;
+        if (!importer.IsConfigured) return null;
         var now = timeProvider.GetUtcNow().UtcDateTime;
         // Serialize automatic scheduling across hosts now that queued jobs do not own the active slot.
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(746302191)", cancellationToken);
+        var latest = await db.DoeImportJobs.AsNoTracking().Where(j => j.Mode == "latest")
+            .MaxAsync(j => (DateTime?)j.CreatedAtUtc, cancellationToken);
+        if (latest is { } created && created + ScheduleInterval > now)
+            return created + ScheduleInterval;
         if (await db.DoeImportJobs.AsNoTracking().AnyAsync(j =>
-            (j.Status == "queued" || j.Status == "running") ||
-            (j.Mode == "latest" && j.CreatedAtUtc > now - ScheduleInterval),
-            cancellationToken)) return;
+            j.Status == "queued" || j.Status == "running", cancellationToken))
+            return now.AddMinutes(1);
         db.DoeImportJobs.Add(new DoeImportJob
         {
             Id = Guid.NewGuid(), Mode = "latest", Status = "queued",
@@ -125,9 +154,10 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
         });
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        return now + ScheduleInterval;
     }
 
-    private async Task ProcessQueuedAsync(CancellationToken cancellationToken)
+    private async Task<bool> ProcessQueuedAsync(CancellationToken cancellationToken)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -138,7 +168,7 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
         foreach (var id in queued)
         {
             if (await db.DoeImportJobs.AsNoTracking().AnyAsync(
-                j => j.ActiveSlot == 1 && j.Id != id, cancellationToken)) return;
+                j => j.ActiveSlot == 1 && j.Id != id, cancellationToken)) return true;
             int claimed;
             try
             {
@@ -153,11 +183,12 @@ public sealed class DoeImportWorker(IServiceScopeFactory scopes,
             catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
             {
                 // Another host claimed the single database-backed worker slot.
-                return;
+                return true;
             }
             if (claimed == 0) continue;
             await RunJobAsync(id, cancellationToken);
         }
+        return false;
     }
 
     private async Task RunJobAsync(Guid id, CancellationToken cancellationToken)
