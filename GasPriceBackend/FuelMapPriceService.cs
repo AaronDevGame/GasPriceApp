@@ -66,7 +66,7 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
         var items = cityIds.Select(id =>
         {
             // Re-evaluate at Philippine midnight and at confirmed effective-time boundaries.
-            var expiry = new[] { now.AddMinutes(5), FuelMapEstimates.StartUtc(today.AddDays(1)) }
+            var expiry = new[] { now.AddHours(6), FuelMapEstimates.StartUtc(today.AddDays(1)) }
                 .Concat(adjustments.Where(item => item.EffectiveAtUtc > now).Select(item => item.EffectiveAtUtc)).Min();
             if (!eligible.TryGetValue(id, out var candidates))
                 return new FuelMapCityPrices(id, "city", "unavailable", GasolineGrade, null, null,

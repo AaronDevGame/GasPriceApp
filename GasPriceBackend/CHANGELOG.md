@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Extend per-city map-price cache validity, including unavailable results, from five minutes to six hours. Preserve earlier expiry at confirmed adjustment effective times, Philippine midnight, and report-validity cutoffs; price calculations and private/no-store HTTP responses remain unchanged.
+
 ## [1.15.0] - 2026-11-20
 
 ### Added
