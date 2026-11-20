@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Refresh fuel advice every six hours while active, immediately on native foreground or browser-tab return, and at expiry/effective-time boundaries. Fetch fresh advice on browser reload; pause automatic requests on inactive screens or hidden/backgrounded apps, share requests by fuel/company, and back off failed refreshes before returning to the six-hour interval.
+
 ## [1.1.0] - 2026-11-20
 
 ### Added

@@ -20,9 +20,9 @@ const fuelNozzles = {
   diesel: require('@/assets/images/fuel-nozzles/diesel-yellow.png'),
 };
 
-function AdviceNotice({ fuel, onOpen }: { fuel: HeaderFuel; onOpen: () => void }) {
+function AdviceNotice({ fuel, onOpen, active }: { fuel: HeaderFuel; onOpen: () => void; active: boolean }) {
   const theme = useTheme();
-  const { advice, loading, error } = useFuelAdvice(fuel, null);
+  const { advice, loading, error } = useFuelAdvice(fuel, null, active);
   const [focused, setFocused] = useState(false);
   const label = fuel === 'gasoline' ? 'Gasoline' : 'Diesel';
   const status = advice?.status;
@@ -96,12 +96,12 @@ function AdvicePanel({ initialFuel, onClose }: { initialFuel: HeaderFuel; onClos
   </SafeAreaView>;
 }
 
-export function FuelAdviceNotices({ compact = false }: { compact?: boolean }) {
+export function FuelAdviceNotices({ compact = false, active = true }: { compact?: boolean; active?: boolean }) {
   const [selectedFuel, setSelectedFuel] = useState<HeaderFuel | null>(null);
   const close = () => setSelectedFuel(null);
   return <View style={[styles.notices, !compact && { flexBasis: 340 }]}>
-    <AdviceNotice fuel="gasoline" onOpen={() => setSelectedFuel('gasoline')} />
-    <AdviceNotice fuel="diesel" onOpen={() => setSelectedFuel('diesel')} />
+    <AdviceNotice active={active} fuel="gasoline" onOpen={() => setSelectedFuel('gasoline')} />
+    <AdviceNotice active={active} fuel="diesel" onOpen={() => setSelectedFuel('diesel')} />
     <Modal visible={selectedFuel !== null} transparent animationType="fade" onRequestClose={close}>
       {selectedFuel && <AdvicePanel initialFuel={selectedFuel} onClose={close} />}
     </Modal>

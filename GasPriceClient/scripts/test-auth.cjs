@@ -233,19 +233,27 @@ const player = { playerName: 'Guest fixture', playerId: 123456789012345 };
   assert.equal(noGuest.calls.length, 0);
   console.log('PASS native: pre-request early renewal, offline credential retention, invalid identity and logout preservation');
 
-  for (const platform of ['ios', 'web']) {
+  for (const platform of ['ios', 'android', 'web']) {
     const lifecycle = harness(platform);
     let returns = 0;
-    const unsubscribe = lifecycle.foreground().subscribeToForeground(() => { returns++; });
+    const adapter = lifecycle.foreground();
+    const visibility = [];
+    assert.equal(adapter.isAppForeground(), true);
+    const unsubscribeVisibility = adapter.subscribeToAppVisibility(visible => visibility.push(visible));
+    const unsubscribe = adapter.subscribeToForeground(() => { returns++; });
     if (platform === 'web') { lifecycle.visibility('hidden'); lifecycle.visibility('visible'); }
-    else { lifecycle.appState('active'); lifecycle.appState('background'); lifecycle.appState('active'); lifecycle.appState('active'); }
+    else { lifecycle.appState('active'); lifecycle.appState('inactive'); lifecycle.appState('background'); lifecycle.appState('active'); lifecycle.appState('active'); }
     assert.equal(returns, 1);
+    assert.deepEqual(visibility, [false, true]);
+    assert.equal(adapter.isAppForeground(), true);
+    unsubscribeVisibility();
     unsubscribe();
     if (platform === 'web') lifecycle.visibility('visible');
     else { lifecycle.appState('background'); lifecycle.appState('active'); }
     assert.equal(returns, 1);
+    assert.deepEqual(visibility, [false, true]);
   }
-  console.log('PASS native/web: foreground detection and listener cleanup');
+  console.log('PASS native/web: foreground/background transitions, duplicate events and listener cleanup');
 
   const web = harness('web');
   let state = 'resumable';

@@ -36,8 +36,18 @@ export function adviceHeadline(advice: FuelAdvice | null, loading: boolean, erro
   }
 }
 
+export function adviceExpiresAt(advice: FuelAdvice) {
+  const evaluated = Date.parse(advice.evaluatedAtUtc);
+  const evidence = [...advice.evidence, ...(advice.forecast ? [advice.forecast] : [])];
+  const deadlines = [Date.parse(advice.validUntilUtc ?? ''), ...evidence.flatMap(item => {
+    const effective = Date.parse(item.effectiveAtUtc ?? '');
+    return [Date.parse(item.validUntilUtc), ...(effective > evaluated ? [effective] : [])];
+  })].filter(Number.isFinite);
+  return Math.min(Infinity, ...deadlines);
+}
+
 export function adviceIsCurrent(advice: FuelAdvice, now: number) {
-  return advice.validUntilUtc === null || Date.parse(advice.validUntilUtc) > now;
+  return adviceExpiresAt(advice) > now;
 }
 
 // Keep price direction independent from the recommendation to buy or wait.

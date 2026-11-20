@@ -15,7 +15,8 @@ const fixture = (overrides = {}) => ({
 });
 function harness() {
   const cells = [], effects = [], timers = new Map(), calls = [], modules = new Map();
-  const foreground = new Set();
+  const visibility = new Set();
+  let visible = true, focused = true;
   let cursor = 0, responder, hook, args = ['gasoline', null], value, now = Date.parse('2026-11-09T21:00:00Z');
   const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
   const react = {
@@ -38,11 +39,13 @@ function harness() {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
     }).outputText;
     vm.runInNewContext(code, { exports, URLSearchParams, Date: Clock,
-      setTimeout(fn, delay) { const id = {}; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id),
+      setTimeout(fn, delay) { const id = {}; timers.set(id, { fn, delay, at: now + delay }); return id; }, clearTimeout: id => timers.delete(id),
       require(name) {
         if (name === 'react') return react;
+        if (name === 'expo-router') return { useIsFocused: () => focused };
         if (name === '@/auth/http') return { ApiError, send: async url => { calls.push(url); return responder(url); } };
-        if (name === '@/auth/foreground') return { subscribeToForeground(fn) { foreground.add(fn); return () => foreground.delete(fn); } };
+        if (name === '@/auth/foreground') return { isAppForeground: () => visible,
+          subscribeToAppVisibility(fn) { visibility.add(fn); return () => visibility.delete(fn); } };
         if (name === './advice') return load('advice');
         if (name === './advice-store') return load('advice-store');
         throw new Error('Unexpected import ' + name);
@@ -52,8 +55,21 @@ function harness() {
   }
   const render = () => { cursor = 0; value = hook(...args); effects.splice(0).forEach(fn => fn()); return value; };
   return { api: load('advice'), store: (...args) => load('advice-store').fuelAdviceStore(...args), calls, timers,
-    respond(fn) { responder = fn; }, start() { hook = load('use-fuel-advice').useFuelAdvice; return render(); }, render,
-    select(...next) { args = next; return render(); }, foreground() { foreground.forEach(fn => fn()); },
+    respond(fn) { responder = fn; }, start(...next) { if (next.length) args = next; hook = load('use-fuel-advice').useFuelAdvice; return render(); }, render,
+    select(...next) { args = next; return render(); },
+    focus(next) { focused = next; return render(); },
+    visibility(next) { if (next !== visible) { visible = next; [...visibility].forEach(fn => fn(next)); } },
+    foreground() { this.visibility(false); this.visibility(true); },
+    async tick(ms) {
+      const target = now + ms;
+      for (let count = 0; count < 1000; count++) {
+        await settle();
+        const [id, timer] = [...timers.entries()].sort((a, b) => a[1].at - b[1].at)[0] ?? [];
+        if (!timer || timer.at > target) { now = target; await settle(); return; }
+        now = Math.max(now, timer.at); timers.delete(id); timer.fn();
+      }
+      throw new Error('Timer loop did not settle');
+    },
     advance(ms) { now += ms; }, fireTimer(delay) { const [id, timer] = [...timers.entries()].find(([, timer]) => delay === undefined || timer.delay === delay) ?? []; assert(timer, `Timer exists: ${delay}`); timers.delete(id); timer.fn(); },
     unmount() { cells.forEach(cell => cell?.cleanup?.()); cells.length = 0; },
   };
@@ -118,56 +134,125 @@ const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(
   assert.equal(flow.calls.length, 2);
   flow.unmount(); otherGasoline(); assert.equal(flow.timers.size, 0);
 
-  const cache = harness(); cache.respond(() => fixture()); cache.start(); await settle();
+  const longAdvice = (overrides = {}) => fixture({ status: 'neutral', reason: 'no_price_change',
+    evidence: [], validUntilUtc: '2026-11-16T22:00:00Z', ...overrides });
+  const sixHours = 6 * 60 * 60 * 1000;
+  const normal = harness(); normal.respond(() => longAdvice()); normal.start(); await settle();
+  assert.equal(normal.calls.length, 1);
+  await normal.tick(300000); assert.equal(normal.calls.length, 1); // No five-minute polling.
+  await normal.tick(sixHours - 300000); assert.equal(normal.calls.length, 2);
+  normal.unmount(); assert.equal(normal.timers.size, 0);
+  const browserReload = harness(); browserReload.respond(() => longAdvice()); browserReload.start(); await settle();
+  assert.equal(browserReload.calls.length, 1); browserReload.unmount(); // Fresh JS/module state on full page reload.
+  console.log('PASS initial/browser-reload fetch and six-hour normal automatic refresh');
+
+  const cache = harness(); cache.respond(() => longAdvice()); cache.start(); await settle();
   const result = cache.render().advice;
-  cache.unmount(); cache.respond(() => { throw new Error('Offline'); });
-  assert.equal(cache.start().advice, result); await settle();
-  cache.foreground(); await settle(); assert.equal(cache.calls.length, 1);
-  assert.equal(cache.render().loading, false); // No checking flicker on remount or fresh foreground.
-  cache.advance(300000); cache.foreground(); await settle();
-  assert.equal(cache.calls.length, 2);
-  assert.equal(cache.render().advice, result); // A refresh failure retains unexpired evidence.
-  assert.equal(cache.render().error, false);
+  cache.unmount(); assert.equal(cache.start().advice, result); await settle();
+  assert.equal(cache.calls.length, 1); // Fresh cached remount does not fetch twice.
+  await cache.tick(10000);
+  cache.respond(() => { throw new Error('Offline'); }); cache.foreground(); await settle();
+  assert.equal(cache.calls.length, 2); // Foreground bypasses the six-hour cache.
+  assert.equal(cache.render().advice, result); assert.equal(cache.render().error, false);
   assert.equal([...cache.timers.values()][0].delay, 60000);
   cache.unmount(); cache.start(); await settle(); assert.equal(cache.calls.length, 2);
   cache.unmount(); assert.equal(cache.timers.size, 0);
 
+  const hidden = harness(); hidden.respond(() => longAdvice()); hidden.start(); await settle();
+  hidden.visibility(false); assert.equal(hidden.timers.size, 0);
+  await hidden.tick(7 * 60 * 60 * 1000); assert.equal(hidden.calls.length, 1);
+  hidden.visibility(true); await settle(); assert.equal(hidden.calls.length, 2);
+  hidden.visibility(true); await settle(); assert.equal(hidden.calls.length, 2); // Duplicate visibility event.
+  hidden.focus(false); // Only local expiry invalidation remains; no automatic HTTP.
+  await hidden.tick(7 * 60 * 60 * 1000); assert.equal(hidden.calls.length, 2);
+  hidden.focus(true); await settle(); assert.equal(hidden.calls.length, 3); hidden.unmount();
+  const initialHidden = harness(); initialHidden.visibility(false); initialHidden.respond(() => longAdvice());
+  initialHidden.start(); await settle(); assert.equal(initialHidden.calls.length, 0);
+  initialHidden.visibility(true); await settle(); assert.equal(initialHidden.calls.length, 1); initialHidden.unmount();
+  const inactive = harness(); inactive.respond(() => longAdvice()); inactive.start('gasoline', null, false);
+  await settle(); inactive.foreground(); await inactive.tick(sixHours); assert.equal(inactive.calls.length, 0);
+  inactive.select('gasoline', null, true); await settle(); assert.equal(inactive.calls.length, 1); inactive.unmount();
+  console.log('PASS pause in background/hidden tabs and unfocused/inactive screens; immediate visible/foreground return');
+
+  const lateFocus = harness(); lateFocus.respond(() => longAdvice()); lateFocus.start(); await settle();
+  await lateFocus.tick(5000); lateFocus.focus(false); lateFocus.foreground(); await settle();
+  assert.equal(lateFocus.calls.length, 1); // A return event must not fetch for an inactive route.
+  lateFocus.focus(true); await settle(); assert.equal(lateFocus.calls.length, 2); lateFocus.unmount();
+
+  const overlap = harness(); overlap.respond(() => longAdvice()); overlap.start(); await settle();
+  const extra = overlap.store('gasoline', null).subscribe(() => {});
+  await overlap.tick(5000);
+  let resolveReturn;
+  overlap.respond(() => new Promise(resolve => { resolveReturn = resolve; }));
+  overlap.foreground(); overlap.focus(false); overlap.focus(true); overlap.foreground(); await settle();
+  assert.equal(overlap.calls.length, 2);
+  resolveReturn(longAdvice()); await settle(); assert.equal(overlap.calls.length, 2);
+  extra(); overlap.unmount();
+
+  const queued = harness(); let resolveFirst;
+  queued.respond(() => new Promise(resolve => { resolveFirst = resolve; })); queued.start(); await settle();
+  const cancelDiesel = queued.store('diesel', null).subscribe(() => {}); cancelDiesel();
+  resolveFirst(longAdvice()); await settle(); assert.equal(queued.calls.length, 1); queued.unmount();
+  const pacing = harness(); pacing.respond(url => longAdvice({ fuelType: url.includes('diesel') ? 'diesel' : 'gasoline' }));
+  pacing.start(); await settle(); pacing.select('diesel', null); await settle();
+  pacing.visibility(false); await pacing.tick(1100); assert.equal(pacing.calls.length, 1);
+  pacing.visibility(true); await settle(); assert.equal(pacing.calls.length, 2); pacing.unmount();
+  console.log('PASS overlapping foreground/focus/cards deduplicate; queued requests skip inactive/backgrounded consumers');
+
   const slow = harness(); slow.respond(() => fixture()); slow.start(); await settle();
   let failRefresh;
   slow.respond(() => new Promise((resolve, reject) => { failRefresh = reject; }));
-  slow.advance(300000); slow.foreground(); await settle();
+  await slow.tick(300000); slow.foreground(); await settle();
   assert.equal(slow.render().advice.status, 'wait');
-  slow.advance(3300000); slow.fireTimer(3300000);
-  assert.equal(slow.render().advice, null); // A hanging refresh cannot extend advice validity.
-  failRefresh(new Error('Offline')); await settle();
-  assert.equal(slow.render().error, true); slow.unmount();
+  await slow.tick(3300000);
+  assert.equal(slow.render().advice, null); // Hanging requests cannot extend validity.
+  failRefresh(new Error('Offline')); await settle(); assert.equal(slow.render().error, true); slow.unmount();
 
-  const company = harness(); company.respond(() => fixture()); company.start(); await settle();
-  company.respond(() => fixture({ oilCompany: 'Fixture Company' }));
+  const company = harness(); company.respond(() => longAdvice()); company.start(); await settle();
+  company.respond(() => longAdvice({ oilCompany: 'Fixture Company' }));
   assert.equal(company.select('gasoline', 'Fixture Company').advice, null);
-  await settle(); company.advance(1100); company.fireTimer(1100); await settle();
+  await company.tick(1100);
   assert.equal(company.render().advice.oilCompany, 'Fixture Company');
   assert.equal(company.select('gasoline', null).advice.oilCompany, null);
   assert.equal(company.calls.length, 2); company.unmount();
 
-  const expiry = harness(); expiry.advance(3599000);
-  expiry.respond(() => fixture()); expiry.start(); await settle(); expiry.render();
-  assert.equal([...expiry.timers.values()][0].delay, 1000);
-  expiry.advance(1000);
-  expiry.respond(() => fixture({ status: 'gas_now', reason: 'rollback_effective', validUntilUtc: '2026-11-16T22:00:00Z' }));
-  expiry.fireTimer(); await settle(); assert.equal(expiry.render().advice, null);
-  assert.equal(expiry.render().loading, true); // Expired advice is hidden even while queued.
-  expiry.advance(100); expiry.fireTimer(100); await settle();
-  assert.equal(expiry.render().advice.status, 'gas_now'); expiry.unmount();
-  const failure = harness(); failure.respond(() => { throw new Error('Offline'); });
-  failure.start(); await settle();
+  for (const effectiveOnly of [false, true]) {
+    const expiry = harness(); expiry.advance(3599000);
+    expiry.respond(() => fixture(effectiveOnly ? { validUntilUtc: '2026-11-16T22:00:00Z',
+      evidence: [{ ...fixture().evidence[0], validUntilUtc: '2026-11-16T22:00:00Z' }] } : {}));
+    expiry.start(); await settle(); expiry.render();
+    assert.equal([...expiry.timers.values()][0].delay, 1000);
+    expiry.respond(() => longAdvice({ status: 'gas_now', reason: 'rollback_effective', evaluatedAtUtc: effective }));
+    await expiry.tick(1000);
+    assert.equal(expiry.render().advice, null); assert.equal(expiry.render().loading, true);
+    await expiry.tick(100); assert.equal(expiry.render().advice.status, 'gas_now'); expiry.unmount();
+  }
+  const pausedExpiry = harness(); pausedExpiry.respond(() => fixture()); pausedExpiry.start(); await settle();
+  pausedExpiry.visibility(false); await pausedExpiry.tick(3600000);
+  assert.equal(pausedExpiry.render().advice, null);
+  pausedExpiry.respond(() => longAdvice({ evaluatedAtUtc: effective }));
+  pausedExpiry.visibility(true); await settle(); assert.ok(pausedExpiry.render().advice); pausedExpiry.unmount();
+  const passiveHeader = harness(); passiveHeader.respond(() => fixture()); passiveHeader.start(); await settle();
+  let invalidations = 0;
+  const detachHeader = passiveHeader.store('gasoline', null).subscribe(() => { invalidations++; }, false);
+  passiveHeader.focus(false); const beforeExpiry = invalidations;
+  await passiveHeader.tick(3600000);
+  assert.equal(passiveHeader.calls.length, 1); assert.equal(passiveHeader.render().advice, null);
+  assert.ok(invalidations > beforeExpiry); // Cached header invalidates locally while requests are paused.
+  detachHeader(); passiveHeader.unmount();
+  console.log('PASS fuel/company isolation, failed-refresh retention, expiry/effective boundaries and passive-header invalidation');
+
+  const failure = harness(); failure.respond(() => { throw new Error('Offline'); }); failure.start(); await settle();
   assert.equal(failure.render().error, true); assert.equal(failure.render().advice, null);
-  assert.equal([...failure.timers.values()][0].delay, 60000); failure.unmount();
-  const expired = harness(); expired.advance(3600000);
-  expired.respond(() => fixture()); expired.start(); await settle();
-  assert.equal(expired.render().advice, null);
-  assert.equal([...expired.timers.values()][0].delay, 60000);
-  expired.unmount(); expired.start(); await settle();
-  assert.equal(expired.calls.length, 1); expired.unmount();
-  console.log('PASS shared pending requests, paced cross-fuel requests, selection isolation, cached remounts, foreground freshness, failed-refresh retention, validity boundaries and cleanup');
+  for (const [delay, calls] of [[60000, 2], [120000, 3], [240000, 4]]) {
+    assert.equal([...failure.timers.values()][0].delay, delay);
+    await failure.tick(delay - 1); assert.equal(failure.calls.length, calls - 1);
+    await failure.tick(1); assert.equal(failure.calls.length, calls);
+  }
+  assert.equal([...failure.timers.values()][0].delay, sixHours);
+  failure.unmount(); failure.start(); await settle(); assert.equal(failure.calls.length, 4); failure.unmount();
+  const expired = harness(); expired.advance(3600000); expired.respond(() => fixture()); expired.start(); await settle();
+  assert.equal(expired.render().advice, null); assert.equal([...expired.timers.values()][0].delay, 60000);
+  expired.unmount(); expired.start(); await settle(); assert.equal(expired.calls.length, 1); expired.unmount();
+  console.log('PASS bounded retries at 1/2/4 minutes then six hours, expired-response backoff and cleanup');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -40,7 +40,7 @@ export default function TabLayout() {
           <View><ThemedText style={styles.brandName}>GasPrice</ThemedText><ThemedText style={styles.country}>PHILIPPINES</ThemedText></View>
         </View>
       </Link>
-      <FuelAdviceNotices />
+      <FuelAdviceNotices active={state.routes[state.index].name === 'index'} />
       <View style={styles.links}>{destinations.map(item => {
         const route = state.routes.find(r => r.name === item.name);
         const selected = state.routes[state.index].name === item.name;
