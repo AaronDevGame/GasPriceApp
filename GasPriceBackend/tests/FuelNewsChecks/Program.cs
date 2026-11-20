@@ -35,7 +35,8 @@ db.Guests.Add(new Guest { AppInstanceId = owner, PlayerId = 987654321012345, Pla
 db.FuelNewsSubscriptions.Add(new FuelNewsSubscription { AppInstanceId = owner,
     PushToken = "ExpoPushToken[news-test-fixture-123456]", Enabled = true, IncludeForecasts = false, UpdatedAtUtc = clock.Now });
 await db.SaveChangesAsync();
-var service = new FuelNewsService(db, clock);
+var notifications = new FuelNewsNotificationSignal();
+var service = new FuelNewsService(db, clock, notifications);
 var date = DateOnly.FromDateTime(clock.Now.AddHours(8)).AddDays(2);
 var topic = "test-adjustment-" + date.ToString("yyyy-MM-dd");
 var forecast = new FuelNewsContent(topic + "-forecast", topic, "adjustment", "forecast",
@@ -77,7 +78,7 @@ Console.WriteLine("PASS stored DOE consistency and rejected-import atomicity");
 
 var handler = new FakePush();
 var worker = new FuelNewsNotificationWorker(services.GetRequiredService<IServiceScopeFactory>(), new FakeClients(handler),
-    new ConfigurationBuilder().Build(), clock, NullLogger<FuelNewsNotificationWorker>.Instance);
+    new ConfigurationBuilder().Build(), clock, NullLogger<FuelNewsNotificationWorker>.Instance, notifications);
 await worker.ProcessAsync(default);
 db.ChangeTracker.Clear();
 var deliveries = await db.FuelNewsDeliveries.Where(d => d.NewsId == saved.Item.Id).OrderBy(d => d.Revision).ToListAsync();
@@ -93,7 +94,7 @@ Console.WriteLine("PASS obsolete-revision cancellation, persisted tickets, and r
 // Create a fresh topic to exercise transient send failures and DeviceNotRegistered receipts.
 var another = material with { ImportKey = "test-second-confirmed", TopicKey = "test-second-topic",
     ExpiresAtUtc = clock.Now.AddDays(1) };
-var other = await new FuelNewsService(db, clock).ImportAsync(new(another, null), default);
+var other = await new FuelNewsService(db, clock, notifications).ImportAsync(new(another, null), default);
 handler.FailNext = true;
 await worker.ProcessAsync(default);
 db.ChangeTracker.Clear();
@@ -115,7 +116,7 @@ currentSubscription.UpdatedAtUtc = clock.Now;
 await db.SaveChangesAsync();
 var rotating = material with { ImportKey = "test-rotating-confirmed", TopicKey = "test-rotating-topic",
     ExpiresAtUtc = clock.Now.AddDays(1) };
-await new FuelNewsService(db, clock).ImportAsync(new(rotating, null), default);
+await new FuelNewsService(db, clock, notifications).ImportAsync(new(rotating, null), default);
 await worker.ProcessAsync(default);
 clock.Now = clock.Now.AddMinutes(1);
 currentSubscription.PushToken = "ExpoPushToken[rotated-valid-token-fixture]";
@@ -176,6 +177,8 @@ try
     Console.WriteLine("PASS native subscription opt-in/out, confirmed-only defaults, authentication and token ownership");
 }
 finally { await app.StopAsync(); }
+
+await NotificationWorkerChecks.RunAsync(connection, material, owner);
 
 static void Check(bool success, string message) { if (!success) throw new Exception(message); }
 sealed class TestClock(DateTime now) : TimeProvider

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 public sealed class FuelNewsConflictException(string message) : Exception(message);
 
-public sealed class FuelNewsService(AppDbContext db, TimeProvider clock)
+public sealed class FuelNewsService(AppDbContext db, TimeProvider clock, FuelNewsNotificationSignal notifications)
 {
     public async Task<FuelNewsImportResult> ImportAsync(FuelNewsImport request, CancellationToken ct)
     {
@@ -60,10 +60,12 @@ public sealed class FuelNewsService(AppDbContext db, TimeProvider clock)
         // Text/source-only corrections do not cause another notification.
         var material = oldArticle is null || oldArticle.EffectiveDatePhilippines != a.EffectiveDatePhilippines ||
             oldArticle.EffectiveAtUtc != a.EffectiveAtUtc || !oldArticle.Adjustments.SequenceEqual(a.Adjustments);
+        var deliveriesAdded = false;
         if (a.Category == "adjustment" && material)
         {
             var subscribers = await db.FuelNewsSubscriptions.AsNoTracking().Where(s => s.Enabled &&
                 (a.Status == "confirmed" || s.IncludeForecasts)).ToListAsync(ct);
+            deliveriesAdded = subscribers.Count > 0;
             foreach (var subscriber in subscribers)
                 db.FuelNewsDeliveries.Add(new FuelNewsDelivery { Id = Guid.NewGuid(), NewsId = item.Id,
                     Revision = item.Revision, AppInstanceId = subscriber.AppInstanceId, Status = "queued",
@@ -71,6 +73,8 @@ public sealed class FuelNewsService(AppDbContext db, TimeProvider clock)
         }
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        // Wake only after the outbox transaction is committed and visible to worker scopes.
+        if (deliveriesAdded) notifications.Wake();
         return new(isNew ? "imported" : "updated", FuelNewsValidation.View(item, now));
     }
 

@@ -48,6 +48,7 @@ internal static class McpChecks
                 "Host=127.0.0.1;Port=1;Database=unused;Username=unused;Password=unused;Timeout=1"));
             var clock = new TestClock(DateTime.UtcNow);
             builder.Services.AddSingleton<TimeProvider>(clock);
+            builder.Services.AddSingleton<FuelNewsNotificationSignal>();
             builder.Services.AddScoped<FuelNewsService>();
             builder.Services.AddFuelNewsMcp(builder.Configuration);
             // In-memory issuer configuration: no live OAuth account, production key or database.

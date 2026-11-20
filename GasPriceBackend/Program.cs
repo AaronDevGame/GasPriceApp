@@ -12,6 +12,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddBrowserAuthentication();
 builder.Services.AddFuelNewsMcp(builder.Configuration);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton<FuelNewsNotificationSignal>();
 builder.Services.AddScoped<FuelNewsService>();
 builder.Services.AddSingleton<FuelMapGeography>();
 builder.Services.AddScoped<FuelMapPriceService>();

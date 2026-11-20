@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 
 public sealed class FuelNewsSubscription
@@ -91,25 +92,66 @@ public static partial class FuelNewsSubscriptionEndpoints
         ? ApiResults.BadRequest(player.Error, id) : ApiResults.Unauthorized(player.Error, id);
 }
 
+// Signals are coalesced and retained even if publication races with the worker going to sleep.
+// This is local to a server instance; committed outbox rows remain the source of truth.
+public sealed class FuelNewsNotificationSignal
+{
+    private readonly Channel<bool> _wake = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
+    {
+        FullMode = BoundedChannelFullMode.DropWrite,
+        SingleReader = true
+    });
+
+    public void Wake() => _wake.Writer.TryWrite(true);
+
+    public async Task WaitAsync(DateTime? nextAttemptAtUtc, TimeProvider clock, CancellationToken ct)
+    {
+        if (nextAttemptAtUtc is null)
+        {
+            await _wake.Reader.ReadAsync(ct);
+            return;
+        }
+        var delay = nextAttemptAtUtc.Value - clock.GetUtcNow().UtcDateTime;
+        if (delay <= TimeSpan.Zero) return;
+        // Bound very distant deadlines to the timer's supported range; no database query is
+        // needed until the actual deadline (unless a new delivery signals earlier work).
+        while (delay > TimeSpan.Zero)
+        {
+            using var timeout = new CancellationTokenSource(
+                delay > TimeSpan.FromDays(1) ? TimeSpan.FromDays(1) : delay, clock);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+            try { await _wake.Reader.ReadAsync(linked.Token); return; }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+            delay = nextAttemptAtUtc.Value - clock.GetUtcNow().UtcDateTime;
+        }
+    }
+}
+
 // A persistent outbox retries transient failures and polls Expo receipts. Delivery is at least once:
 // a host crash after Expo accepts a send but before SaveChanges may repeat a notification.
 public sealed class FuelNewsNotificationWorker(IServiceScopeFactory scopes, IHttpClientFactory clients,
-    IConfiguration configuration, TimeProvider clock, ILogger<FuelNewsNotificationWorker> logger) : BackgroundService
+    IConfiguration configuration, TimeProvider clock, ILogger<FuelNewsNotificationWorker> logger,
+    FuelNewsNotificationSignal signal) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!configuration.GetValue<bool>("FuelNews:PushEnabled")) return;
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await ProcessAsync(stoppingToken); }
+            DateTime? nextAttempt;
+            try { nextAttempt = await ProcessAsync(stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
-            catch (Exception ex) { logger.LogWarning("Fuel news push processing failed ({Type}).", ex.GetType().Name); }
-            try { await Task.Delay(TimeSpan.FromSeconds(30), clock, stoppingToken); }
+            catch (Exception ex)
+            {
+                logger.LogWarning("Fuel news push processing failed ({Type}).", ex.GetType().Name);
+                nextAttempt = clock.GetUtcNow().UtcDateTime.AddSeconds(30);
+            }
+            try { await signal.WaitAsync(nextAttempt, clock, stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
         }
     }
 
-    public async Task ProcessAsync(CancellationToken ct)
+    public async Task<DateTime?> ProcessAsync(CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -117,7 +159,14 @@ public sealed class FuelNewsNotificationWorker(IServiceScopeFactory scopes, IHtt
         await db.Database.OpenConnectionAsync(ct);
         await using var command = db.Database.GetDbConnection().CreateCommand();
         command.CommandText = "SELECT pg_try_advisory_lock(746302193)";
-        if (!Equals(await command.ExecuteScalarAsync(ct), true)) return;
+        if (!Equals(await command.ExecuteScalarAsync(ct), true))
+        {
+            // A local publication may have woken this host while another host is sending.
+            // Do not discard that wake: retry contention only while durable work exists.
+            var pending = await NextAttemptAsync(db, ct);
+            var retryAt = clock.GetUtcNow().UtcDateTime.AddSeconds(30);
+            return pending is { } due && due < retryAt ? retryAt : pending;
+        }
         try
         {
             var now = clock.GetUtcNow().UtcDateTime;
@@ -203,6 +252,9 @@ public sealed class FuelNewsNotificationWorker(IServiceScopeFactory scopes, IHtt
                 }
             }
             await db.SaveChangesAsync(ct);
+            // Read after saving every result, including batches larger than 50. If more
+            // deliveries are already due, the hosted loop immediately processes the next batch.
+            return await NextAttemptAsync(db, ct);
         }
         finally
         {
@@ -211,6 +263,11 @@ public sealed class FuelNewsNotificationWorker(IServiceScopeFactory scopes, IHtt
             await db.Database.CloseConnectionAsync();
         }
     }
+
+    private static Task<DateTime?> NextAttemptAsync(AppDbContext db, CancellationToken ct) =>
+        db.FuelNewsDeliveries.AsNoTracking()
+            .Where(d => d.Status == "queued" || d.Status == "ticketed")
+            .MinAsync(d => (DateTime?)d.NextAttemptAtUtc, ct);
 
     private static void Retry(FuelNewsDelivery delivery, DateTime now, string error, bool transient)
     {
