@@ -218,7 +218,7 @@ export default function FuelPricesScreen() {
                   setHistoryVisible(true);
                   followLocal.current = true;
                 }} locations={feed?.locations ?? []} onLocationChange={choose}
-                grade={grade} active={mode === 'map'} managedRefresh foregroundRefreshing={refreshing || mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
+                grade={grade} active={mode === 'map'} initialLocationPending={fuel.busy && !fuel.localItem} foregroundRefreshing={refreshing || mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
             </View>
             {mode === 'list' && report && <>
               <View style={styles.reportHeading}>
