@@ -6,10 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-11-20
+
 ### Added
 - Label map prices as DOE reported or estimated, retain original reports for up to 30 days with an outdated flag after seven days, and calculate company-specific gasoline/diesel estimates only from complete, nonconflicting confirmed adjustments. Preserve original ranges, dates and adjustment sources; exclude forecasts and future changes.
 
 ### Changed
+- Bump project and API version to `1.15.0`.
 - Import verified valid DOE company cells as partial reports when individual source cells need review. Retain private review ledgers and receipt sidecars, prevent unresolved cells from being marked complete, and include unresolved-cell counts in scheduled summaries.
 - Stop idle DOE import database polling. Wake for newly queued imports, check durable jobs on startup, and retain timed checks only for enabled automatic imports, active-job recovery, busy queues, or failures. Keep heartbeats during active imports.
 
