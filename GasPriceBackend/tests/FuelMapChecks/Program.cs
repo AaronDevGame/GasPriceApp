@@ -59,6 +59,21 @@ var feed = FuelMapPriceService.BuildFeed(["1380600000", "1380200000"], sample, g
 Check(feed.Items[0].Gasoline?.MinPrice == 58 && feed.Items[0].Diesel?.MinPrice == 50 &&
     feed.Items[0].Status == "available" && feed.Items[1].Status == "unavailable" &&
     feed.Items.All(item => item.Scope == "city"), "Grade isolation and no provincial/neighbor fallback");
+var cacheNow = today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+var sixHourFeed = FuelMapPriceService.BuildFeed(["1380600000", "1380200000"], sample, geo, cacheNow);
+Check(sixHourFeed.Items.All(item => item.ExpiresAtUtc == cacheNow.AddHours(6)) &&
+    sixHourFeed.Items[0].Status == "available" && sixHourFeed.Items[1].Status == "unavailable" &&
+    sixHourFeed.ExpiresAtUtc == cacheNow.AddHours(6), "Available and unavailable city results cache for six hours");
+var partialCache = FuelMapPriceService.BuildFeed(["1380600000"], [Row()], geo, cacheNow);
+Check(partialCache.ExpiresAtUtc == cacheNow.AddHours(6), "Partial city results use the same cache lifetime");
+var upcoming = new FuelMapAdjustment("gasoline", null, today, cacheNow.AddHours(2), 1, ["https://doe.gov.ph/notice.pdf"]);
+Check(FuelMapPriceService.BuildFeed(["1380600000", "1380200000"], sample, geo, cacheNow, [upcoming])
+    .Items.All(item => item.ExpiresAtUtc == upcoming.EffectiveAtUtc), "Confirmed effective times cap available and unavailable caches");
+var beforeMidnight = today.ToDateTime(new TimeOnly(14, 0), DateTimeKind.Utc);
+Check(FuelMapPriceService.BuildFeed(["1380600000", "1380200000"], sample, geo, beforeMidnight)
+    .Items.All(item => item.ExpiresAtUtc == today.ToDateTime(new TimeOnly(16, 0), DateTimeKind.Utc)),
+    "Philippine midnight caps all cache statuses before six hours");
+Console.WriteLine("PASS six-hour map cache policy for available/partial/unavailable results and earlier effective/midnight boundaries");
 Check(FuelMapPriceService.BuildFeed(["1380600000"], [Row()], geo, now).Items[0].Status == "partial", "Missing grade remains partial");
 var old = Row(); old.WeekStart = today.AddDays(-40); old.WeekEnd = today.AddDays(-34);
 Check(FuelMapPriceService.BuildFeed(["1380600000"], [old], geo, now).Items[0].Status == "unavailable", "Expired rows excluded");

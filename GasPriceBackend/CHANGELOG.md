@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Wake fuel-news push delivery processing after committed outbox writes instead of polling an empty database. Recover pending sends/receipts on startup and schedule retries/receipt checks at their stored deadlines; retain cross-host advisory locking. Wake signals are local: all publisher instances must run the enabled worker, and a crash between commit and signaling requires startup or another wake to rediscover durable work.
+- Extend per-city map-price cache validity, including unavailable results, from five minutes to six hours. Preserve earlier expiry at confirmed adjustment effective times, Philippine midnight, and report-validity cutoffs; price calculations and private/no-store HTTP responses remain unchanged.
 
 ## [1.15.0] - 2026-11-20
 
