@@ -8,7 +8,7 @@ Native build caches and local signing files are ignored. Before generating nativ
 
 ## Releases and Cloudflare web hosting
 
-The frontend is version `1.0.5`; release notes live in [CHANGELOG.md](CHANGELOG.md).
+The frontend is version `1.1.0`; release notes live in [CHANGELOG.md](CHANGELOG.md).
 Keep the version synchronized in `package.json`, `package-lock.json`, and `app.json`.
 Backend versions and release notes are maintained independently in `GasPriceBackend/`.
 
