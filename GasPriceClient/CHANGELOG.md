@@ -2,14 +2,19 @@
 
 ## [Unreleased]
 
-### Fixed
-- Draw web map price cards above boundary fills and highlighted outlines while preserving mouse/touch gesture pass-through.
-- Let mouse, touch and zoom gestures pass through map price cards on web and native maps. Keep cards display-only until their click interaction is introduced; map boundaries remain selectable.
+## [1.1.0] - 2026-11-20
 
 ### Added
 - Show DOE reported, Estimated and Outdated labels on map prices, disclose estimates in broader-area ranges, and show the original report, applied adjustments and sources when a city is selected. Label local area estimates and DOE company lists explicitly.
+- Add touch pull-to-refresh on web for Overview, News, Weekly Changes and the Fuel Prices company list, with pull/release feedback and in-place data updates. Preserve map, nested scrolling and native refresh gestures.
+- Add clickable gasoline and diesel adjustment summaries in the desktop header and above mobile Overview news, with red increase / green decrease arrows, separate refuel or wait badges, confirmation and Philippine effective times, and detailed advice with sources.
+- Select an island group, region, province, or independent city by tapping its boundary or price card on the Fuel Prices map. The selected area shows a gold outline and its fuel price ranges.
+- Add a Philippines-only Fuel Prices map with Google Maps adapters for Android, iOS and web, a City of Manila default, constrained camera and overview zoom, selectable city polygons and collision-aware RON 91 gasoline/diesel range labels. Batch visible-city prices after 750 ms, reuse session boundary/price caches across panning and selection, handle expiry and stale requests, preserve attribution and retain the company list behind a Map/List switch. Configure platform-restricted keys through ignored environment files.
+- Add a theme-aware “Should I gas up?” Overview card backed by `/fuel-advice`, with fuel/company selection, green/amber/gray recommendations, API explanations, confirmed 40-liter impact examples, Philippine effective times and source links. Refresh at validity boundaries, on foreground, and with dashboard refresh; keep forecast and default-time labels explicit.
+- Show province-level DOE ranges in local company comparisons and the Fuel Prices selector, with explicit coverage labels instead of presenting provincial prices as city-specific.
 
 ### Changed
+- Bump the Expo client version to `1.1.0`.
 - Center the detected city outline evenly when location lookup resolves, using GPS as the fallback. Remove the nationwide eastward camera offset from native city/area centering.
 - Add Nationwide, Island groups, Regions, Provinces and Cities map navigation buttons. Keep the active level synchronized with manual zoom; tapping a level changes zoom around the current view, while Nationwide restores the Philippines overview.
 - Add a left-side map location button that activates after a successful location fix and returns to the detected area. Center the map as soon as coordinates arrive, including when local price lookup fails.
@@ -26,19 +31,11 @@
 - Restore the compact desktop header height and show each adjustment date to the left of its refueling badge; keep effective-time and default-time details in the expanded advice.
 - Hide city reporting counts in City view map labels and selected-city details, and shorten labels to fit the remaining content.
 - Replace overlapping city cards with a zoom-based hierarchy: nationwide, island groups, regions, provinces / independent cities, then cities / municipalities. Start with the Philippines overview, aggregate unexpired city report ranges with coverage counts, highlight selected areas, and suppress colliding cards.
-
-### Added
-- Add touch pull-to-refresh on web for Overview, News, Weekly Changes and the Fuel Prices company list, with pull/release feedback and in-place data updates. Preserve map, nested scrolling and native refresh gestures.
-- Add clickable gasoline and diesel adjustment summaries in the desktop header and above mobile Overview news, with red increase / green decrease arrows, separate refuel or wait badges, confirmation and Philippine effective times, and detailed advice with sources.
-- Select an island group, region, province, or independent city by tapping its boundary or price card on the Fuel Prices map. The selected area shows a gold outline and its fuel price ranges.
-- Add a Philippines-only Fuel Prices map with Google Maps adapters for Android, iOS and web, a City of Manila default, constrained camera and overview zoom, selectable city polygons and collision-aware RON 91 gasoline/diesel range labels. Batch visible-city prices after 750 ms, reuse session boundary/price caches across panning and selection, handle expiry and stale requests, preserve attribution and retain the company list behind a Map/List switch. Configure platform-restricted keys through ignored environment files.
-- Add a theme-aware “Should I gas up?” Overview card backed by `/fuel-advice`, with fuel/company selection, green/amber/gray recommendations, API explanations, confirmed 40-liter impact examples, Philippine effective times and source links. Refresh at validity boundaries, on foreground, and with dashboard refresh; keep forecast and default-time labels explicit.
-- Show province-level DOE ranges in local company comparisons and the Fuel Prices selector, with explicit coverage labels instead of presenting provincial prices as city-specific.
-
-### Changed
 - Move detailed refueling advice from Overview into a dismissible panel opened by the shared Gasoline and Diesel header notices, with the clicked fuel selected. Remove the dashboard introduction and keep mobile access above the tabs.
 
 ### Fixed
+- Draw web map price cards above boundary fills and highlighted outlines while preserving mouse/touch gesture pass-through.
+- Let mouse, touch and zoom gestures pass through map price cards on web and native maps. Keep cards display-only until their click interaction is introduced; map boundaries remain selectable.
 - Make web pull-to-refresh accept ordinary text and SVG touch targets, capture gestures before child handlers and claim slow downward pulls before browser scrolling takes over. Keep buttons, links, inputs and nested scroll areas interactive.
 - Restore flat green gasoline and yellow diesel nozzle icons and the “Effective” date prefix in the shared desktop and mobile header notices after switching away from the older summary component.
 - Resolve committed merge markers in the tab layout, Overview and advice card so the web export builds; retain shared header notices without duplicating Overview advice.
