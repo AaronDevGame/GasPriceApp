@@ -90,3 +90,43 @@ DOE_TEST_PGPORT=55432 dotnet run --project GasPriceBackend/tests/DoeExtractedImp
 ```
 
 Offline checks run a local HTTP server with captured job writes, the real auth/rate-limit middleware and no network clients. Optional PostgreSQL checks use only database `gasprice_doe_submitted_test`, apply migrations, and clear its import/price/report/research-cache tables. Never point them at production.
+
+## Source cells that need review
+
+After inspecting **every page and eligible company cell**, omit individually invalid/unreadable source cells, retain their exact printed evidence, and submit the whole PDF's verified valid rows with `complete: false`. Do not send zero, manufacture a second endpoint, or treat an invalid mixed range such as `81.00–0.00` as `81.00–81.00`. Blank/No LFRO/all-zero unavailable cells alone are not unresolved eligible prices. Unreadable whole pages or ambiguous locality/company alignment still block a verified submission.
+
+Keep review evidence outside the REST body; unknown request properties remain rejected. Supply a private review file to the repository helper:
+
+```bash
+python3 GasPriceBackend/scripts/doe_task.py submit PAYLOAD_FILE --receipt NEW_RECEIPT_FILE --review-file REVIEW_FILE
+python3 GasPriceBackend/scripts/doe_task.py poll JOB_UUID --receipt EXISTING_RECEIPT_FILE
+```
+
+Review file schema (the known source issue, not a price row):
+
+```json
+{
+  "sourceUrl": "https://d24qbtp4vooyzi.cloudfront.net/api/media/file/North%20Luzon%20Liquid%20Fuels%20Price%20Monitoring%20Report%20for%2017-23%20November%202026.pdf?prefix=dev%2Fmedia",
+  "weekStart": "2026-11-17",
+  "weekEnd": "2026-11-23",
+  "rowErrors": [{
+    "id": "p8-pangasinan-lingayen-flying-v-diesel",
+    "status": "unresolved",
+    "pageNumber": 8,
+    "province": "Pangasinan",
+    "city": "Lingayen",
+    "oilCompany": "FLYING V",
+    "fuelGrade": "DIESEL",
+    "printedValues": ["81.00", "0.00"],
+    "error": "Mixed nonzero/zero range; zero is outside PHP 1–300 and the missing endpoint cannot be inferred."
+  }]
+}
+```
+
+The helper stores a canonical source/coverage-keyed ledger in `.doe-task-state/report-reviews/`, copies review evidence to `RECEIPT.review.json` before submission, and preserves `RECEIPT.terminal.json` and `RECEIPT.summary.json` after polling. The original accepted job receipt is retained for recovery. Resolve a cell explicitly with `status: resolved` and an evidence-based `resolution` note; retain prior issue IDs/history. A supplied review file cannot silently remove older cells. The helper automatically reloads the ledger on subsequent submissions, rejects `complete: true` while unresolved cells exist, and rejects rows for unresolved locality/company/grade keys. Inspect source revisions and prior payloads before resolving issues; changing an ID is not a resolution.
+
+`check` includes local `localReviews` plus each saved report's `needsReview` count and `canSkip` flag. A saved partial report or unresolved ledger is never already complete. For unchanged partial data and reviews, retain/reuse the known terminal job instead of creating identical daily submissions; re-extract and upsert when source evidence or valid rows change. Always check known receipts/jobs before POST. After partial submission, verify both terminal `completed_with_gaps`/result `partial` and the saved report's coverage, `partial` status and valid row count. The helper retains its nonzero exit for partial jobs; that is an explicit gap result, not permission to retry the POST.
+
+The backend already persists report `partial` status and durable job result JSON with `rowErrors`/`rowsSkipped`. Externally omitted source cells never reach its row validator, so those backend fields can remain empty/zero even when local `Needs review` is positive. Preserve backend fields unchanged and keep omitted-cell evidence separately. **No backend change or deployment is required for this desktop task-state persistence.** To persist the detailed evidence in the backend database as well, a future API change would need a validated optional review collection on `DoeExtractedImportRequest`, mapping into durable job `ResultJson`/`DetailsJson` (and exposing reviews on report reads). Existing JSON job fields could store it without a new table; a durable report-level review property/table would require an EF migration. This run does not deploy that extension.
+
+Every result summary uses `Region | Coverage | Added | Updated | Needs review`, with the unresolved-cell count and details below (PDF page, province, city, company, fuel grade, printed values, reason). Keep date/access/deployment blockers separate from cell counts. In particular, leave Visayas's November 17–23 printed dates unchanged; skipping a source cell does not bypass monitoring-date validation.
