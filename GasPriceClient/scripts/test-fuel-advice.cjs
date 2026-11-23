@@ -92,7 +92,7 @@ const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(
   assert.equal(api.adviceImpact(fixture({ evidence: [{ ...fixture().evidence[0], minChangePerLiter: -3 }] })), null);
   assert.match(api.adviceHeadline(fixture({ status: 'gas_now', reason: 'increase_upcoming' })), /before the increase/);
   assert.match(api.adviceHeadline(fixture({ status: 'gas_now', reason: 'rollback_effective' })), /Good time/);
-  assert.match(api.adviceHeadline(fixture({ status: 'unknown', reason: 'forecast_only' })), /Awaiting/);
+  assert.equal(api.adviceHeadline(fixture({ status: 'unknown', reason: 'forecast_only' })), 'Price change not yet confirmed');
   assert.equal(api.adviceIsCurrent(fixture(), Date.parse(effective)), false);
   assert.match(api.adviceTime(fixture().evidence[0]), /6:00.*PHT/);
   const decrease = api.adviceSummary(fixture(), false, false);
@@ -111,7 +111,15 @@ const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(
     forecast: { ...fixture().evidence[0], confirmationStatus: 'forecast', minChangePerLiter: -2, maxChangePerLiter: -1 } }), false, false);
   assert.equal(forecast.amount, '₱1.00–2.00/L');
   assert.match(forecast.timing, /^Estimated/);
-  assert.equal(forecast.action, 'Await confirmation');
+  assert.equal(forecast.action, 'Price drop not yet confirmed');
+  for (const [min, max, label] of [[-2.9, -2.6, 'Price drop not yet confirmed'],
+    [1, 2, 'Price increase not yet confirmed'], [-1, 1, 'Price change not yet confirmed'],
+    [0, 0, 'Price change not yet confirmed']]) {
+    const advice = fixture({ status: 'unknown', reason: 'forecast_only', evidence: [],
+      forecast: { ...fixture().evidence[0], confirmationStatus: 'forecast', minChangePerLiter: min, maxChangePerLiter: max } });
+    assert.equal(api.adviceSummary(advice, false, false).action, label);
+    assert.equal(api.adviceHeadline(advice, false, false), label);
+  }
   assert.equal(api.adviceSummary(null, false, true).action, 'Temporarily unavailable');
   assert.equal(api.adviceSummary(null, true, false).amount, '—');
   console.log('PASS summary price direction independent of action, forecast ranges, conflicting sources and unavailable states');

@@ -33,7 +33,7 @@ export function FuelAdviceSummary({ inHeader = false }: { inHeader?: boolean }) 
       const result = results[fuel];
       const summary = adviceSummary(result.advice, result.loading, result.error);
       const accent = result.advice?.status === 'gas_now' ? theme.advicePositive
-        : result.advice?.status === 'wait' ? theme.adviceWait : theme.textSecondary;
+        : result.advice?.status === 'wait' || result.advice?.reason === 'forecast_only' ? theme.adviceWait : theme.textSecondary;
       const directionColor = summary.direction === 'up' ? theme.priceIncrease
         : summary.direction === 'down' ? theme.advicePositive : theme.textSecondary;
       const arrow = summary.direction === 'up' ? '↑' : summary.direction === 'down' ? '↓' : summary.direction === 'flat' ? '↔' : '';

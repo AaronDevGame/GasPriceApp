@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FuelAdviceCard } from '@/components/fuel-advice-card';
 import { ThemedText } from '@/components/themed-text';
-import { adviceImpact, type AdviceFuel } from '@/fuel/advice';
+import { adviceSummary, type AdviceFuel } from '@/fuel/advice';
 import { useFuelAdvice } from '@/fuel/use-fuel-advice';
 import { getDoePriceBrowse } from '@/fuel/api';
 import { useAuth } from '@/auth/auth-provider';
@@ -26,16 +26,14 @@ function AdviceNotice({ fuel, onOpen, active }: { fuel: HeaderFuel; onOpen: () =
   const [focused, setFocused] = useState(false);
   const label = fuel === 'gasoline' ? 'Gasoline' : 'Diesel';
   const status = advice?.status;
-  const color = status === 'gas_now' ? theme.advicePositive : status === 'wait' ? theme.adviceWait : theme.textSecondary;
-  const impact = advice ? adviceImpact(advice) : null;
-  const change = impact ? `${advice!.evidence[0].minChangePerLiter < 0 ? '↓' : '↑'} ₱${impact.amount.toFixed(2)}/L` : null;
+  const color = status === 'gas_now' ? theme.advicePositive
+    : status === 'wait' || advice?.reason === 'forecast_only' ? theme.adviceWait : theme.textSecondary;
+  const summary = adviceSummary(advice, loading, error);
+  const arrow = summary.direction === 'down' ? '↓' : summary.direction === 'up' ? '↑' : summary.direction === 'flat' ? '↔' : '';
+  const change = summary.direction !== 'none' ? `${arrow} ${summary.amount}`.trim() : null;
   const notice = !advice ? loading ? 'Checking…' : error ? 'Tap to retry' : 'View advice'
-    : status === 'gas_now' ? 'Gas up now' : status === 'wait' ? 'Wait for rollback' : status === 'neutral' ? 'No rush to fill' : 'View update';
-  const date = advice?.evidence[0]?.effectiveDatePhilippines;
-  const dateLabel = date ? new Date(`${date}T12:00:00+08:00`).toLocaleDateString('en-PH', {
-    month: 'short', day: 'numeric', timeZone: 'Asia/Manila',
-  }) : null;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${change ?? ''} ${dateLabel ? `Effective ${dateLabel}. ` : ''}${notice}. Open refueling advice`}
+    : status === 'gas_now' ? 'Gas up now' : status === 'wait' ? 'Wait for rollback' : status === 'neutral' ? 'No rush to fill' : summary.action;
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${change ?? ''} ${summary.timing ? `${summary.timing}. ` : ''}${notice}. Open refueling advice`}
     accessibilityHint="Opens Should I gas up with this fuel selected"
     onPress={onOpen} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
     style={({ hovered, pressed }) => [styles.notice, { backgroundColor: theme.backgroundElement,
@@ -50,7 +48,7 @@ function AdviceNotice({ fuel, onOpen, active }: { fuel: HeaderFuel; onOpen: () =
       <ThemedText themeColor="textSecondary" style={styles.chevron}>›</ThemedText>
     </View>
     <View style={styles.noticeRow}>
-      {dateLabel && <ThemedText type="small" themeColor="textSecondary">Effective {dateLabel}</ThemedText>}
+      {!!summary.timing && <ThemedText type="small" themeColor="textSecondary">{summary.timing}</ThemedText>}
       <ThemedText type="smallBold" style={{ color }}>{notice}</ThemedText>
     </View>
   </Pressable>;

@@ -19,7 +19,8 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
   const [showCompanies, setShowCompanies] = useState(false);
   const [showDetails, setShowDetails] = useState(initiallyShowDetails);
   const status = advice?.status ?? 'unknown';
-  const accent = status === 'gas_now' ? theme.advicePositive : status === 'wait' ? theme.adviceWait : theme.textSecondary;
+  const accent = status === 'gas_now' ? theme.advicePositive
+    : status === 'wait' || advice?.reason === 'forecast_only' ? theme.adviceWait : theme.textSecondary;
   const impact = advice ? adviceImpact(advice) : null;
   const evidence = advice?.evidence[0];
   const options = [...new Set([...companies, ...(oilCompany ? [oilCompany] : [])])].sort((a, b) => a.localeCompare(b));

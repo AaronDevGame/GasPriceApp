@@ -26,13 +26,20 @@ export async function getFuelAdvice(fuelType: AdviceFuel, oilCompany: string | n
   return advice;
 }
 
+function forecastLabel(advice: FuelAdvice) {
+  const forecast = advice.forecast;
+  if (forecast && forecast.maxChangePerLiter < 0) return 'Price drop not yet confirmed';
+  if (forecast && forecast.minChangePerLiter > 0) return 'Price increase not yet confirmed';
+  return 'Price change not yet confirmed';
+}
+
 export function adviceHeadline(advice: FuelAdvice | null, loading: boolean, error: boolean) {
   if (!advice) return loading ? 'Checking fuel advice…' : error ? 'Advice temporarily unavailable' : 'No current advice available';
   switch (advice.status) {
     case 'gas_now': return advice.reason === 'increase_upcoming' ? 'Gas up before the increase' : 'Good time to gas up';
     case 'wait': return 'Wait for the rollback';
     case 'neutral': return 'No clear advantage to filling up now';
-    default: return advice.reason === 'forecast_only' ? 'Awaiting a confirmed update' : 'No clear recommendation yet';
+    default: return advice.reason === 'forecast_only' ? forecastLabel(advice) : 'No clear recommendation yet';
   }
 }
 
@@ -56,7 +63,7 @@ export function adviceSummary(advice: FuelAdvice | null, loading: boolean, error
     : advice.status === 'gas_now' ? 'Gas up now'
     : advice.status === 'wait' ? 'Wait if you can'
     : advice.reason === 'conflicting_adjustments' ? 'Check sources'
-    : advice.reason === 'forecast_only' ? 'Await confirmation'
+    : advice.reason === 'forecast_only' ? forecastLabel(advice)
     : advice.reason === 'no_price_change' ? 'No price change' : 'No clear advantage';
   const confirmed = advice?.reason !== 'conflicting_adjustments' && advice?.evidence.length
     && advice.evidence.every(e => e.confirmationStatus === 'confirmed'
