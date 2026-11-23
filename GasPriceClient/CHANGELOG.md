@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-11-23
+
+### Changed
+- Bump the Expo client version to `1.1.2` in the app configuration, package manifest, and lockfile. This release changes version metadata only.
+
 ## [1.1.1] - 2026-11-21
 
 ### Changed
