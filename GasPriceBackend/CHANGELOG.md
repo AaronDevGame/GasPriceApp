@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Return latest applied confirmed adjustment context through `currentAdjustments` in fuel advice, including company-specific DOE records in the nationwide view while preserving their company names and sources. Keep forecasts and nationwide buying advice separate; expired or newer applied events block older rollback context.
+
 ## [1.15.2] - 2026-11-23
 
 ### Changed

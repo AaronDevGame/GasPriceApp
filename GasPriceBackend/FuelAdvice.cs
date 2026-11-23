@@ -22,7 +22,10 @@ public sealed record FuelAdviceEvidence(
 public sealed record FuelAdviceResponse(
     string FuelType, string? OilCompany, FuelAdviceStatus Status, string Reason,
     string Message, DateTime EvaluatedAtUtc, DateTime? ValidUntilUtc,
-    IReadOnlyList<FuelAdviceEvidence> Evidence, FuelAdviceEvidence? Forecast);
+    IReadOnlyList<FuelAdviceEvidence> Evidence, FuelAdviceEvidence? Forecast)
+{
+    public IReadOnlyList<FuelAdviceEvidence> CurrentAdjustments { get; init; } = [];
+}
 
 public sealed class FuelAdviceService(AppDbContext db, TimeProvider clock)
 {
@@ -53,28 +56,31 @@ public sealed class FuelAdviceService(AppDbContext db, TimeProvider clock)
             }
         }
 
-        // DOE notices are company-specific confirmed adjustments. Do not generalize one company's prices.
-        if (oilCompany is not null)
+        // Keep DOE company reports separate from nationwide buying advice.
+        var company = oilCompany?.ToLowerInvariant();
+        var rows = await db.FuelAdjustments.AsNoTracking()
+            .Where(a => a.EffectiveDatePhilippines >= from && a.EffectiveDatePhilippines <= to &&
+                        (company == null || a.OilCompany.ToLower() == company)).ToListAsync(ct);
+        var currentEvidence = new List<FuelAdviceEvidence>(evidence);
+        foreach (var row in rows)
         {
-            var company = oilCompany.ToLowerInvariant();
-            var rows = await db.FuelAdjustments.AsNoTracking()
-                .Where(a => a.EffectiveDatePhilippines >= from && a.EffectiveDatePhilippines <= to &&
-                            a.OilCompany.ToLower() == company).ToListAsync(ct);
-            foreach (var row in rows)
+            var amount = fuelType switch
             {
-                var amount = fuelType switch
-                {
-                    "gasoline" => row.GasolineChangePerLiter,
-                    "diesel" => row.DieselChangePerLiter,
-                    _ => row.KeroseneChangePerLiter
-                };
-                if (amount is null) continue;
-                evidence.Add(new("confirmed", row.EffectiveDatePhilippines, row.EffectiveAtUtc,
-                    amount.Value, amount.Value, row.OilCompany, null, row.Id, [row.SourceUrl],
-                    FuelAdviceCalculator.StartUtc(row.EffectiveDatePhilippines).AddDays(8)));
-            }
+                "gasoline" => row.GasolineChangePerLiter,
+                "diesel" => row.DieselChangePerLiter,
+                _ => row.KeroseneChangePerLiter
+            };
+            if (amount is null) continue;
+            var report = new FuelAdviceEvidence("confirmed", row.EffectiveDatePhilippines, row.EffectiveAtUtc,
+                amount.Value, amount.Value, row.OilCompany, null, row.Id, [row.SourceUrl],
+                FuelAdviceCalculator.StartUtc(row.EffectiveDatePhilippines).AddDays(8));
+            currentEvidence.Add(report);
+            if (oilCompany is not null) evidence.Add(report);
         }
-        return FuelAdviceCalculator.Calculate(fuelType, oilCompany, now, evidence);
+        return FuelAdviceCalculator.Calculate(fuelType, oilCompany, now, evidence) with
+        {
+            CurrentAdjustments = FuelAdviceCalculator.CurrentAdjustments(now, currentEvidence)
+        };
     }
 }
 
@@ -152,6 +158,31 @@ public static class FuelAdviceCalculator
                 ? Result(FuelAdviceStatus.GasNow, "increase_upcoming", "A confirmed price increase is coming. Refuel before it takes effect.", until)
                 : Result(FuelAdviceStatus.Neutral, "increase_effective", "The price increase is already effective. No clear price advantage to refueling now.", until);
         return Result(FuelAdviceStatus.Neutral, "no_price_change", "No fuel-price change is confirmed for this adjustment.", until);
+    }
+
+    // Context only: these reports retain their company scope and never turn a forecast into confirmed advice.
+    public static IReadOnlyList<FuelAdviceEvidence> CurrentAdjustments(DateTime now,
+        IEnumerable<FuelAdviceEvidence> evidence)
+    {
+        var confirmed = evidence.Where(e => e.ConfirmationStatus == "confirmed")
+            .Select(e => e.EffectiveAtUtc.HasValue ? e : e with
+            {
+                EffectiveAtUtc = StartUtc(e.EffectiveDatePhilippines).AddHours(6),
+                IsEffectiveTimeDefaulted = true
+            }).ToArray();
+        var latest = confirmed.Where(e => e.EffectiveAtUtc <= now)
+            .GroupBy(e => e.EffectiveDatePhilippines).OrderByDescending(g => g.Key).FirstOrDefault();
+        if (latest is null) return [];
+        var nextEffective = confirmed.Where(e => e.EffectiveAtUtc > now)
+            .Select(e => e.EffectiveAtUtc!.Value).DefaultIfEmpty(DateTime.MaxValue).Min();
+        var rows = latest.Select(e => e with
+        {
+            ValidUntilUtc = Min(nextEffective, Min(e.ValidUntilUtc, e.EffectiveAtUtc!.Value.AddDays(7)))
+        }).ToArray();
+        // Do not revive older decreases when the latest applied event is expired or incomplete.
+        if (rows.Any(e => e.ValidUntilUtc <= now) ||
+            confirmed.Any(e => e.EffectiveDatePhilippines == latest.Key && e.EffectiveAtUtc > now)) return [];
+        return rows.OrderBy(e => e.OilCompany).ThenBy(e => e.AdjustmentId).ToArray();
     }
 
     private static DateTime Min(DateTime left, DateTime right) => left < right ? left : right;

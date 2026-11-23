@@ -122,6 +122,26 @@ internal static class FuelAdviceChecks
         var json = JsonSerializer.Serialize(applied, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Check(JsonDocument.Parse(json).RootElement.GetProperty("status").GetString() == "gas_now", "Stable snake-case JSON enum");
         Check(RouteRegistry.Public.Any(r => r.Route == ApiRoutes.FuelAdvice && r.Method == "GET"), "Route registry");
+        var companyRollback = rollback with { OilCompany = "Fixture Company", NewsId = null, AdjustmentId = 1 };
+        var current = FuelAdviceCalculator.CurrentAdjustments(effective, [companyRollback, forecast]);
+        Check(current.Count == 1 && current[0].OilCompany == "Fixture Company" && current[0].MinChangePerLiter == -2,
+            "Current DOE context retains company scope and excludes forecasts");
+        Check(FuelAdviceCalculator.CurrentAdjustments(effective, [companyRollback, next])[0].ValidUntilUtc == next.EffectiveAtUtc,
+            "Current context expires when a newer confirmed adjustment takes effect");
+        Check(FuelAdviceCalculator.CurrentAdjustments(effective.AddTicks(-1), [companyRollback]).Count == 0,
+            "Upcoming decrease is not current");
+        Check(FuelAdviceCalculator.CurrentAdjustments(effective.AddDays(7), [companyRollback]).Count == 0,
+            "Current context expires after seven days");
+        var currentIncrease = FuelAdviceCalculator.CurrentAdjustments(effective.AddDays(2), [companyRollback, next]);
+        Check(currentIncrease.Count == 1 && currentIncrease[0].MinChangePerLiter > 0,
+            "Latest applied increase replaces prior decrease context");
+        Check(FuelAdviceCalculator.CurrentAdjustments(effective.AddDays(2),
+            [companyRollback, next with { ValidUntilUtc = effective.AddDays(2) }]).Count == 0,
+            "Expired newer context blocks older rollback");
+        Check(FuelAdviceCalculator.CurrentAdjustments(effective, [companyRollback, increase]).Count == 2,
+            "Mixed company directions retained for consumer validation");
+        Check(FuelAdviceCalculator.CurrentAdjustments(effective, [dateOnly])[0].IsEffectiveTimeDefaulted,
+            "Current context uses the six AM date-only default");
         Console.WriteLine("PASS fuel advice timing, expiry, forecasts, conflicts, event priority, JSON and route checks");
     }
 }

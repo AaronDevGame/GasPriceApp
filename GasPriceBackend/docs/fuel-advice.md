@@ -111,6 +111,15 @@ The nullable `forecast` contains one upcoming forecast for context, never a
 guarantee. There can be several confirmed evidence entries; each links to either
 a news article or an existing DOE adjustment. All returned timestamps are UTC.
 
+`currentAdjustments` separately contains the latest applied confirmed date's reports,
+including DOE company reports when viewing nationwide advice. Each report keeps its
+company and source; this does not imply all Philippine companies made that change.
+Forecasts and future changes are excluded. Date-only reports use 06:00 Philippine
+time. Context expires within seven days (or at source expiry); an expired latest
+event blocks falling back to an older decrease. Clients may show positive current
+decrease context only when all returned amounts are agreed, negative, and current,
+and no confirmed upcoming rollback or conflicting recommendation takes priority.
+
 Frontend UI integration is separate: when adding a caller using the Expo shared
 transport, include `/fuel-advice` in its API path allowlist.
 
