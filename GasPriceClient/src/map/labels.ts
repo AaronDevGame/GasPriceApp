@@ -2,6 +2,16 @@ import { pointAtPixel, project } from './geometry';
 import { areaPrices, mapLevel, visibleAreas, type MapArea } from './hierarchy';
 import type { MapSnapshot, Point, PriceRange, Viewport } from './types';
 
+export const mapLabelColors = {
+  unselected: {
+    background: 'rgba(8, 22, 38, 0.22)',
+    gradient: 'linear-gradient(145deg, rgba(10, 24, 41, 0.86) 0%, rgba(16, 36, 56, 0.64) 48%, rgba(36, 67, 91, 0.12) 100%)',
+    border: '#6CB4F8',
+  },
+  selected: { background: '#115442', border: '#69E0B3' },
+  textShadow: '#071322',
+};
+
 export const rangeText = (value: PriceRange | null) => value
   ? `₱${value.minPrice.toFixed(2)}–₱${value.maxPrice.toFixed(2)}/L` : '—';
 export const reportDate = (value: string) => new Date(`${value}T00:00:00+08:00`).toLocaleDateString('en-PH', {

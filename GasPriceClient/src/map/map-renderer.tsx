@@ -5,7 +5,7 @@ import MapView, { Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-map
 
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, polygons } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
-import { placeLabels, rangeText } from './labels';
+import { mapLabelColors, placeLabels, rangeText } from './labels';
 import type { Bounds, MapRendererProps, Point } from './types';
 
 const coordinate = ([longitude, latitude]: Point) => ({ latitude, longitude });
@@ -155,11 +155,13 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       {labels.map((label, priority) => <View accessible key={`${label.id}:${label.fontSize}:${label.name}:${rangeText(label.price.gasoline)}:${rangeText(label.price.diesel)}:${label.coverage}:${selected === label.id}`}
         style={{ position: 'absolute', left: label.x - label.width / 2, top: label.y - label.height / 2, zIndex: labels.length - priority }}
         accessibilityLabel={`${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`}>
-        <View style={[styles.label, { width: label.width, height: label.height, borderColor: label.id === selected ? '#FFD166' : '#6CB4F8', borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
+        <View style={[styles.label, label.id === selected ? styles.selectedLabel : styles.unselectedLabel,
+          { width: label.width, height: label.height, borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
           <Text numberOfLines={1} allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{label.name}</Text>
           <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.gasoline)}</Text>
           <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.diesel)}</Text>
-          {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, { fontSize: 10, color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB', textAlign: 'center' }]}>{label.coverage}</Text>}
+          {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, styles.coverage,
+            label.id !== selected && { color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB' }]}>{label.coverage}</Text>}
         </View>
       </View>)}
     </View>
@@ -171,7 +173,12 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
 const styles = StyleSheet.create({
   fill: { flex: 1 }, unavailable: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   notice: { color: '#E8EDF5', textAlign: 'center' }, warning: { position: 'absolute', top: 10, left: 12, right: 12, padding: 10, backgroundColor: '#243142' },
-  label: { height: 46, paddingVertical: 5, borderRadius: 7, backgroundColor: '#172332', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#6CB4F8' },
+  label: { height: 46, paddingVertical: 5, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  selectedLabel: { backgroundColor: mapLabelColors.selected.background, borderColor: mapLabelColors.selected.border },
+  unselectedLabel: { backgroundColor: mapLabelColors.unselected.background, borderColor: mapLabelColors.unselected.border,
+    experimental_backgroundImage: mapLabelColors.unselected.gradient },
+  coverage: { fontSize: 10, textAlign: 'center' },
   retry: { padding: 10, marginTop: 6, borderRadius: 8, backgroundColor: '#354B64' },
-  price: { fontSize: 11, lineHeight: 17, color: '#FFFFFF', fontWeight: '600', fontVariant: ['tabular-nums'] },
+  price: { fontSize: 11, lineHeight: 17, color: '#FFFFFF', fontWeight: '600', fontVariant: ['tabular-nums'],
+    textShadowColor: mapLabelColors.textShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
 });

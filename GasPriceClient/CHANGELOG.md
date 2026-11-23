@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Use a translucent gradient on unselected map price cards so map details remain visible, and a solid deep green fill on the selected card.
 - Start the fuel map at city and municipality level in Metro Manila with the City of Manila highlighted. Restore that view and highlight when users center on Metro Manila, and move to the detected area when a location fix succeeds.
 - Summarize weekly adjustments by amount and reporting company count in the refueling popup. Count missing amounts separately and show a green decrease range when all current confirmed reports are decreases.
 - In the refueling popup, show the amber forecast before confirmed green advice and replace the company selector with a read-only list of the latest Weekly Changes, with logos and per-liter adjustments for the selected fuel.
