@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
-import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, polygons } from './geometry';
+import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { mapLabelColors, placeLabels, rangeText } from './labels';
 import type { Bounds, MapRendererProps, Point } from './types';
@@ -32,7 +32,9 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
   const map = useRef<MapView | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [ready, setReady] = useState(false);
-  const [moving, setMoving] = useState(true);
+  const [liveBounds, setLiveBounds] = useState<Bounds | null>(null);
+  const pendingBounds = useRef<Bounds | null>(null);
+  const labelFrame = useRef<number | null>(null);
   const sequence = useRef(0);
   const initialized = useRef(false);
   const focusedZoom = useRef<MapRendererProps['zoomFocus']>(null);
@@ -43,8 +45,21 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
   const initialBounds = metroBounds ?? index.bbox;
   const center = useMemo(() => metroBounds ? boundsCenter(metroBounds) : cameraCenter(index.bbox), [metroBounds, index]);
   const minZoom = size.width ? fitZoom(bounds, size.width, size.height, 0) : 0;
+  const cancelLabelFrame = useCallback(() => {
+    if (labelFrame.current !== null) cancelAnimationFrame(labelFrame.current);
+    labelFrame.current = null;
+  }, []);
   const start = useCallback((region: Region) => {
-    ++sequence.current; setMoving(true); onMove();
+    ++sequence.current; onMove();
+    if (region.latitudeDelta > 0 && region.longitudeDelta > 0) {
+      const halfWidth = region.longitudeDelta / 2, halfHeight = region.latitudeDelta / 2;
+      pendingBounds.current = [region.longitude - halfWidth, region.latitude - halfHeight,
+        region.longitude + halfWidth, region.latitude + halfHeight];
+      labelFrame.current ??= requestAnimationFrame(() => {
+        labelFrame.current = null;
+        setLiveBounds(pendingBounds.current);
+      });
+    }
     const latitude = Math.max(bounds[1], Math.min(bounds[3], region.latitude));
     const longitude = Math.max(bounds[0], Math.min(bounds[2], region.longitude));
     // SDK 57 uses Fabric; the library's legacy setMapBoundaries can be a no-op there.
@@ -67,11 +82,13 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         map.current.setCamera({ center: { latitude, longitude }, zoom, pitch: 0, heading: 0 });
         return;
       }
-      setFailure(false); setMoving(false);
+      cancelLabelFrame();
+      setFailure(false);
       onIdle({ bounds: [visible.southWest.longitude, visible.southWest.latitude, visible.northEast.longitude, visible.northEast.latitude],
         zoom, ...size });
+      setLiveBounds(null);
     } catch { setFailure(true); }
-  }, [bounds, minZoom, size, onIdle]);
+  }, [bounds, minZoom, size, onIdle, cancelLabelFrame]);
   useEffect(() => {
     if (!ready || !size.width || !map.current) return;
     const frame = requestAnimationFrame(() => {
@@ -114,7 +131,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
     });
     return () => cancelAnimationFrame(frame);
   }, [ready, size, zoomFocus, active]);
-  useEffect(() => () => { ++sequence.current; }, []);
+  useEffect(() => () => { ++sequence.current; cancelLabelFrame(); }, [cancelLabelFrame]);
   useEffect(() => {
     if (ready) return;
     const timeout = setTimeout(() => setFailure(true), 25000);
@@ -138,7 +155,9 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       zIndex={highlighted ? 1 : 0} strokeColor={highlighted ? '#D38B00' : '#3F83BE'}
       fillColor={highlighted ? '#FFD16655' : '#348EF020'} />;
   }), [shapes, visibleBounds, selected, onSelect]);
-  const labels = moving ? [] : placeLabels(snapshot, selected);
+  // Keep the settled label layout while moving its geographic anchors with the camera.
+  const labels = useMemo(() => placeLabels(snapshot, selected), [snapshot, selected]);
+  const liveViewport = liveBounds && snapshot.viewport ? { ...snapshot.viewport, ...size, bounds: liveBounds } : null;
   return <View style={styles.fill} onLayout={event => {
     const { width, height } = event.nativeEvent.layout;
     setSize(old => old.width === width && old.height === height ? old : { width, height });
@@ -152,18 +171,23 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
     </MapView>
     {/* Keep price cards outside native markers so they cannot intercept map gestures. */}
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {labels.map((label, priority) => <View accessible key={`${label.id}:${label.fontSize}:${label.name}:${rangeText(label.price.gasoline)}:${rangeText(label.price.diesel)}:${label.coverage}:${selected === label.id}`}
-        style={{ position: 'absolute', left: label.x - label.width / 2, top: label.y - label.height / 2, zIndex: labels.length - priority }}
-        accessibilityLabel={`${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`}>
-        <View style={[styles.label, label.id === selected ? styles.selectedLabel : styles.unselectedLabel,
-          { width: label.width, height: label.height, borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
-          <Text numberOfLines={1} allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{label.name}</Text>
-          <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.gasoline)}</Text>
-          <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.diesel)}</Text>
-          {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, styles.coverage,
-            label.id !== selected && { color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB' }]}>{label.coverage}</Text>}
-        </View>
-      </View>)}
+      {labels.map((label, priority) => {
+        const [x, y] = liveViewport ? project(label.anchor, liveViewport) : [label.x, label.y];
+        const left = x - label.width / 2, top = y - label.height / 2;
+        if (liveViewport && (left + label.width < 0 || left > size.width || top + label.height < 0 || top > size.height)) return null;
+        return <View accessible key={`${label.id}:${label.fontSize}:${label.name}:${rangeText(label.price.gasoline)}:${rangeText(label.price.diesel)}:${label.coverage}:${selected === label.id}`}
+          style={{ position: 'absolute', left, top, zIndex: labels.length - priority }}
+          accessibilityLabel={`${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`}>
+          <View style={[styles.label, label.id === selected ? styles.selectedLabel : styles.unselectedLabel,
+            { width: label.width, height: label.height, borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
+            <Text numberOfLines={1} allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{label.name}</Text>
+            <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.gasoline)}</Text>
+            <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.diesel)}</Text>
+            {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, styles.coverage,
+              label.id !== selected && { color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB' }]}>{label.coverage}</Text>}
+          </View>
+        </View>;
+      })}
     </View>
     {failure && <View style={styles.warning}><Text style={styles.notice}>The map could not update. Check your connection.</Text>
       <Pressable accessibilityRole="button" onPress={onRetry} style={styles.retry}><Text style={styles.notice}>Retry map</Text></Pressable>

@@ -11,6 +11,7 @@
 - Use “Good time to refuel” for effective confirmed rollbacks and show the current per-liter decrease in green in the advice popup. Keep the next forecast separate in amber; forecast-only updates do not receive the confirmed-decrease message.
 
 ### Fixed
+- Keep loaded fuel-price cards visible and anchored to the map while dragging. Update which cards are shown when the map settles.
 - Show forecast adjustment ranges and estimated effective dates in the Gasoline and Diesel header notices instead of leaving the amount and date empty. Use amber for unconfirmed forecasts with clearer labels such as “Price drop not yet confirmed” in the notices and advice panel.
 
 ## [1.1.2] - 2026-11-23

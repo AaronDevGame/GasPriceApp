@@ -8,27 +8,23 @@ import { type MapLabel, mapLabelColors, placeLabels, rangeText } from './labels'
 import type { Bounds, MapRendererProps } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
-type LabelOverlay = google.maps.OverlayView & { labels: MapLabel[]; selected: string | null };
+type LabelOverlay = google.maps.OverlayView & { setLabels(labels: MapLabel[], selected: string | null): void };
 type AreaPolygon = { shape: google.maps.Polygon; areaId: string; hasOutline: boolean };
 function createLabels() {
       class Labels extends google.maps.OverlayView {
-        labels: MapLabel[] = [];
-        selected: string | null = null;
         private root = document.createElement('div');
+        private cards: { anchor: google.maps.LatLng; element: HTMLDivElement }[] = [];
         // Keep cards above polygon fills/outlines while all gestures pass through.
         onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.floatPane.appendChild(this.root); }
-        draw() {
-          const projection = this.getProjection();
-          if (!projection) return;
-          this.root.replaceChildren(...this.labels.map((label, priority) => {
-            const point = projection.fromLatLngToDivPixel(new google.maps.LatLng(label.anchor[1], label.anchor[0]));
+        setLabels(labels: MapLabel[], selectedId: string | null) {
+          this.cards = labels.map((label, priority) => {
             // Display-only labels let mouse, touch and wheel gestures reach the map.
             const card = document.createElement('div');
-            const selected = label.id === this.selected;
+            const selected = label.id === selectedId;
             const colors = selected ? mapLabelColors.selected : mapLabelColors.unselected;
             card.setAttribute('role', 'img');
             card.setAttribute('aria-label', `${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`);
-            card.style.cssText = `box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${this.labels.length - priority};left:${point?.x ?? 0}px;top:${point?.y ?? 0}px;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:white;border:2px solid ${colors.border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:none;user-select:none;font-variant-numeric:tabular-nums;`;
+            card.style.cssText = `box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${labels.length - priority};visibility:hidden;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:white;border:2px solid ${colors.border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:none;user-select:none;font-variant-numeric:tabular-nums;`;
             card.style.backgroundColor = colors.background;
             if (!selected) {
               card.style.backgroundImage = mapLabelColors.unselected.gradient;
@@ -36,8 +32,23 @@ function createLabels() {
             }
             card.textContent = [label.name, rangeText(label.price.gasoline), rangeText(label.price.diesel), label.coverage].filter(Boolean).join('\n');
             if (label.price.estimated || label.price.outdated) card.style.borderStyle = 'dashed';
-            return card;
-          }));
+            return { anchor: new google.maps.LatLng(label.anchor[1], label.anchor[0]), element: card };
+          });
+          this.root.replaceChildren(...this.cards.map(card => card.element));
+          this.draw();
+        }
+        draw() {
+          const projection = this.getProjection();
+          if (!projection) return;
+          // Google Maps calls draw as the camera moves. Reuse the cards and update only their positions.
+          for (const { anchor, element } of this.cards) {
+            const point = projection.fromLatLngToDivPixel(anchor);
+            element.style.visibility = point ? 'visible' : 'hidden';
+            if (point) {
+              element.style.left = `${point.x}px`;
+              element.style.top = `${point.y}px`;
+            }
+          }
         }
         onRemove() { this.root.remove(); }
       }
@@ -52,7 +63,6 @@ export default function MapRenderer(props: MapRendererProps) {
   const focusedLocation = useRef<MapRendererProps['locationFocus']>(null);
   const shapes = useRef<AreaPolygon[]>([]);
   const overlay = useRef<LabelOverlay | null>(null);
-  const [moving, setMoving] = useState(true);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -90,14 +100,11 @@ export default function MapRenderer(props: MapRendererProps) {
       });
       map.current = instance; focusedBounds.current = null; focusedLocation.current = null; focusedZoom.current = null;
       const labels = createLabels(); labels.setMap(instance); overlay.current = labels;
-      listeners.push(instance.addListener('bounds_changed', () => {
-        latest.current.onMove(); setMoving(true); labels.labels = []; labels.draw();
-      }));
+      listeners.push(instance.addListener('bounds_changed', () => latest.current.onMove()));
       listeners.push(instance.addListener('idle', () => {
         const visible = instance.getBounds();
         if (!visible || !host.current?.clientWidth || !host.current.clientHeight || !active) return;
         const sw = visible.getSouthWest(), ne = visible.getNorthEast();
-        setMoving(false);
         latest.current.onIdle({ bounds: [sw.lng(), sw.lat(), ne.lng(), ne.lat()], zoom: instance.getZoom() ?? 12,
           width: host.current.clientWidth, height: host.current.clientHeight });
       }));
@@ -174,10 +181,8 @@ export default function MapRenderer(props: MapRendererProps) {
   }, [ready, props.snapshot.features, areaIds, props.selected]);
   useEffect(() => {
     if (!overlay.current || !ready) return;
-    overlay.current.selected = props.selected;
-    overlay.current.labels = moving ? [] : placeLabels(props.snapshot, props.selected);
-    overlay.current.draw();
-  }, [ready, moving, props.snapshot, props.selected]);
+    overlay.current.setLabels(placeLabels(props.snapshot, props.selected), props.selected);
+  }, [ready, props.snapshot, props.selected]);
   return <View style={styles.fill}>
     <div ref={host} data-pull-refresh-ignore aria-label="Philippine fuel price map by geographic level" style={{ height: '100%', width: '100%' }} />
     {(!key || error || !ready) && <View style={styles.message}>
