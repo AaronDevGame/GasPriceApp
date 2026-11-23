@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-11-23
+
+### Changed
+- Bump the project and API version to `1.15.2`. This release changes version metadata only; no database schema changes are required.
+
 ## [1.15.1] - 2026-11-21
 
 ### Changed
