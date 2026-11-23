@@ -133,12 +133,23 @@ internal static class FuelAdviceChecks
         Check(FuelAdviceCalculator.CurrentAdjustments(effective.AddDays(7), [companyRollback]).Count == 0,
             "Current context expires after seven days");
         var earlierCompany = companyRollback with { OilCompany = "Earlier Company",
-            EffectiveAtUtc = effective.AddHours(-6), AdjustmentId = 2 };
+            EffectiveAtUtc = effective.AddHours(-6).AddMinutes(1), AdjustmentId = 2 };
         var nearExpiry = effective.AddDays(7).AddHours(-2);
-        Check(FuelAdviceCalculator.CurrentAdjustments(nearExpiry, [earlierCompany, companyRollback])
-            .Single().OilCompany == "Fixture Company", "An earlier matching company report can expire independently");
+        var earlyReports = FuelAdviceCalculator.CurrentAdjustments(nearExpiry, [earlierCompany, companyRollback]);
+        Check(earlyReports.Count == 2 && earlyReports.All(e => e.ValidUntilUtc == effective.AddDays(7)),
+            "Early DOE adjustment remains eligible until the usual weekly rollover");
+        Check(Advice(nearExpiry, earlierCompany).Reason == "rollback_effective" &&
+              Advice(effective.AddDays(7), earlierCompany).Reason == "no_confirmed_adjustment",
+            "Company advice uses the same rollover and expires at 6 AM");
+        var replacement = next with { EffectiveDatePhilippines = date.AddDays(7), EffectiveAtUtc = nearExpiry.AddMinutes(1) };
+        var beforeReplacement = FuelAdviceCalculator.CurrentAdjustments(nearExpiry, [earlierCompany, companyRollback, replacement]);
+        Check(beforeReplacement.Count == 2 && beforeReplacement.All(e => e.ValidUntilUtc == replacement.EffectiveAtUtc),
+            "New confirmed adjustment can supersede the rollover earlier");
+        var expiredEarlierCompany = earlierCompany with { ValidUntilUtc = nearExpiry };
+        Check(FuelAdviceCalculator.CurrentAdjustments(nearExpiry, [expiredEarlierCompany, companyRollback])
+            .Single().OilCompany == "Fixture Company", "An earlier source expiry still applies independently");
         Check(FuelAdviceCalculator.CurrentAdjustments(nearExpiry, [companyRollback,
-            earlierCompany with { MinChangePerLiter = 1, MaxChangePerLiter = 1 }]).Count == 0,
+            expiredEarlierCompany with { MinChangePerLiter = 1, MaxChangePerLiter = 1 }]).Count == 0,
             "An expired conflicting report still blocks reassurance for that date");
         var currentIncrease = FuelAdviceCalculator.CurrentAdjustments(effective.AddDays(2), [companyRollback, next]);
         Check(currentIncrease.Count == 1 && currentIncrease[0].MinChangePerLiter > 0,

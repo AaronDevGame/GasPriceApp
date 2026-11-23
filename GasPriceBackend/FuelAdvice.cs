@@ -110,7 +110,7 @@ public static class FuelAdviceCalculator
         });
         // Hard expiration applies even if an article has a longer editorial lifetime.
         var bounded = resolved.Select(e => e with
-            { ValidUntilUtc = Min(e.ValidUntilUtc, (e.EffectiveAtUtc ?? StartUtc(e.EffectiveDatePhilippines)).AddDays(7)) })
+            { ValidUntilUtc = AdviceExpiry(e) })
             .Where(e => StartUtc(e.EffectiveDatePhilippines) >= StartUtc(DateOnly.FromDateTime(now.AddHours(8)).AddDays(-7)) &&
                         StartUtc(e.EffectiveDatePhilippines) <= now.AddDays(7))
             .ToArray();
@@ -177,7 +177,7 @@ public static class FuelAdviceCalculator
             .Select(e => e.EffectiveAtUtc!.Value).DefaultIfEmpty(DateTime.MaxValue).Min();
         var rows = latest.Select(e => e with
         {
-            ValidUntilUtc = Min(nextEffective, Min(e.ValidUntilUtc, e.EffectiveAtUtc!.Value.AddDays(7)))
+            ValidUntilUtc = Min(nextEffective, AdviceExpiry(e))
         }).ToArray();
         // An expired company row must not hide still-current reports of the same change.
         // Keep withholding advice if an expired row disagrees or the date is still incomplete.
@@ -187,6 +187,17 @@ public static class FuelAdviceCalculator
                 e.MaxChangePerLiter != current[0].MaxChangePerLiter)) ||
             confirmed.Any(e => e.EffectiveDatePhilippines == latest.Key && e.EffectiveAtUtc > now)) return [];
         return current.OrderBy(e => e.OilCompany).ThenBy(e => e.AdjustmentId).ToArray();
+    }
+
+    private static DateTime AdviceExpiry(FuelAdviceEvidence evidence)
+    {
+        var start = StartUtc(evidence.EffectiveDatePhilippines);
+        var effective = evidence.EffectiveAtUtc ?? start;
+        // Early DOE adjustments stay eligible through the standard weekly rollover at 06:00 PHT.
+        var rollover = start.AddHours(6);
+        if (evidence.AdjustmentId.HasValue && effective < rollover)
+            effective = rollover;
+        return Min(evidence.ValidUntilUtc, effective.AddDays(7));
     }
 
     private static DateTime Min(DateTime left, DateTime right) => left < right ? left : right;

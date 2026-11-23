@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Keep confirmed DOE company adjustments that start before 6:00 AM PHT eligible for refueling advice until the following week's 6:00 AM rollover, unless an earlier source expiry or confirmed replacement applies.
 - Keep confirmed current-adjustment reports visible when an earlier company report for the same change expires. Conflicting reports still block refueling reassurance.
 
 ### Added

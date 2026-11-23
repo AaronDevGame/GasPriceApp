@@ -37,8 +37,10 @@ shown alongside advice backed by a separate confirmed adjustment.
 Evaluate at the server's current UTC time using `TimeProvider`. Philippine dates
 use UTC+08:00. Consider adjustments from the previous seven Philippine dates
 through the next seven dates, and reject future events beyond seven days from now.
-Confirmed adjustments expire seven days after their resolved effective timestamp,
-including the default time described below. Earlier news expiry still wins.
+Confirmed adjustments normally expire seven days after their resolved effective
+timestamp. DOE company adjustments that take effect before 06:00 Philippine time
+remain eligible until 06:00 seven days later. The original effective time is
+preserved. Earlier source expiry still wins.
 Forecast context expires at its effective timestamp
 or the end of its Philippine date.
 
@@ -115,9 +117,10 @@ a news article or an existing DOE adjustment. All returned timestamps are UTC.
 including DOE company reports when viewing nationwide advice. Each report keeps its
 company and source; this does not imply all Philippine companies made that change.
 Forecasts and future changes are excluded. Date-only reports use 06:00 Philippine
-time. Context expires within seven days (or at source expiry); an expired latest
-event blocks falling back to an older decrease. Clients may show positive current
-decrease context only when all returned amounts are agreed, negative, and current,
+time. Context uses the same expiry rules and ends sooner when a newer confirmed
+adjustment takes effect. An expired latest event blocks falling back to an older
+decrease. Clients may show positive current decrease context when all returned
+amounts are negative and current,
 and no confirmed upcoming rollback or conflicting recommendation takes priority.
 
 Frontend UI integration is separate: when adding a caller using the Expo shared
