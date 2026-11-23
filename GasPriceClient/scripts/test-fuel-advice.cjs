@@ -92,6 +92,19 @@ const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(
   assert.equal(api.adviceImpact(fixture({ evidence: [{ ...fixture().evidence[0], minChangePerLiter: -3 }] })), null);
   assert.match(api.adviceHeadline(fixture({ status: 'gas_now', reason: 'increase_upcoming' })), /before the increase/);
   assert.match(api.adviceHeadline(fixture({ status: 'gas_now', reason: 'rollback_effective' })), /Good time/);
+  for (const fuelType of ['gasoline', 'diesel']) {
+    const applied = fixture({ fuelType, status: 'gas_now', reason: 'rollback_effective',
+      forecast: { ...fixture().evidence[0], confirmationStatus: 'forecast', minChangePerLiter: -3, maxChangePerLiter: -2 } });
+    assert.equal(api.adviceHeadline(applied), 'Good time to refuel');
+    assert.equal(api.adviceCurrentDecrease(applied), '↓ ₱2.00/L decrease now in effect');
+  }
+  for (const advice of [fixture(), fixture({ status: 'neutral', reason: 'increase_effective' }),
+    fixture({ status: 'unknown', reason: 'forecast_only', evidence: [] }),
+    fixture({ status: 'gas_now', reason: 'increase_upcoming' }),
+    fixture({ status: 'gas_now', reason: 'rollback_effective', evidence: [{ ...fixture().evidence[0], confirmationStatus: 'forecast' }] }),
+    fixture({ status: 'gas_now', reason: 'rollback_effective', evidence: [{ ...fixture().evidence[0], minChangePerLiter: 2, maxChangePerLiter: 2 }] })]) {
+    assert.equal(api.adviceCurrentDecrease(advice), null);
+  }
   assert.equal(api.adviceHeadline(fixture({ status: 'unknown', reason: 'forecast_only' })), 'Price change not yet confirmed');
   assert.equal(api.adviceIsCurrent(fixture(), Date.parse(effective)), false);
   assert.match(api.adviceTime(fixture().evidence[0]), /6:00.*PHT/);

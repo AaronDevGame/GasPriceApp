@@ -4,7 +4,7 @@ import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, View } fro
 import { ThemedText } from '@/components/themed-text';
 import { AppIcon } from '@/components/app-icon';
 import { useTheme } from '@/hooks/use-theme';
-import { adviceHeadline, adviceImpact, adviceTime, type AdviceFuel, type FuelAdvice } from '@/fuel/advice';
+import { adviceCurrentDecrease, adviceHeadline, adviceImpact, adviceTime, type AdviceFuel, type FuelAdvice } from '@/fuel/advice';
 import { changeLabel, newsDate, newsIdPattern } from '@/news/api';
 
 export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFuelChange, oilCompany,
@@ -22,6 +22,7 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
   const accent = status === 'gas_now' ? theme.advicePositive
     : status === 'wait' || advice?.reason === 'forecast_only' ? theme.adviceWait : theme.textSecondary;
   const impact = advice ? adviceImpact(advice) : null;
+  const currentDecrease = advice ? adviceCurrentDecrease(advice) : null;
   const evidence = advice?.evidence[0];
   const options = [...new Set([...companies, ...(oilCompany ? [oilCompany] : [])])].sort((a, b) => a.localeCompare(b));
   const sources = [...new Set((advice?.evidence ?? []).flatMap(e => e.sourceUrls))]
@@ -63,12 +64,13 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
     <View style={styles.body}>
       <View style={styles.recommendation} accessibilityLiveRegion="polite">
         <ThemedText accessibilityRole="header" style={[styles.headline, { color: accent }]}>{adviceHeadline(advice, loading, error)}</ThemedText>
+        {currentDecrease && <ThemedText type="smallBold" style={{ color: theme.advicePositive }}>{currentDecrease}</ThemedText>}
         <ThemedText>{advice?.message ?? (loading ? 'Looking up the latest fuel-price advice for your selection.'
           : error ? 'We couldn’t load fuel advice. Check your connection and try again.' : 'No current confirmed update is available.')}</ThemedText>
         {evidence && advice?.reason !== 'conflicting_adjustments' && <ThemedText type="small" themeColor="textSecondary">
           Effective: {adviceTime(evidence)}{evidence.isEffectiveTimeDefaulted ? '\n6:00 AM PHT default used' : ''}
         </ThemedText>}
-        {advice?.forecast && <ThemedText type="small" themeColor="textSecondary">Forecast: {changeLabel({
+        {advice?.forecast && <ThemedText type="small" style={{ color: theme.adviceWait }}>Next adjustment · Forecast: {changeLabel({
           fuel: fuelType, oilCompany: advice.forecast.oilCompany, status: 'forecast',
           minChangePerLiter: advice.forecast.minChangePerLiter, maxChangePerLiter: advice.forecast.maxChangePerLiter,
         })}. Subject to change. Expected date: {adviceTime(advice.forecast)}. A forecast does not confirm when to refuel.</ThemedText>}
