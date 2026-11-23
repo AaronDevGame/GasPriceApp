@@ -1,4 +1,5 @@
 import { ApiError, send } from '@/auth/http';
+import type { FuelAdjustment } from './api';
 
 export type AdviceFuel = 'gasoline' | 'diesel' | 'kerosene';
 export type AdviceStatus = 'gas_now' | 'wait' | 'neutral' | 'unknown';
@@ -91,20 +92,52 @@ export function adviceCurrentDecrease(advice: FuelAdvice) {
   return impact ? `↓ ₱${impact.amount.toFixed(2)}/L decrease now in effect` : null;
 }
 
+function decreaseAmount(min: number, max: number) {
+  const low = Math.abs(max).toFixed(2);
+  return min === max ? `₱${low}/L` : `₱${low}–₱${Math.abs(min).toFixed(2)}/L`;
+}
+
+export function summarizeWeeklyAdjustments(rows: FuelAdjustment[], fuel: AdviceFuel) {
+  const reported = new Map<number, Set<string>>();
+  const companies = new Set<string>();
+  const withAmounts = new Set<string>();
+  for (const row of rows) {
+    const company = row.oilCompany.trim().toLowerCase();
+    companies.add(company);
+    const amount = row[`${fuel}ChangePerLiter`];
+    if (amount === null) continue;
+    withAmounts.add(company);
+    const group = reported.get(amount) ?? new Set<string>();
+    group.add(company);
+    reported.set(amount, group);
+  }
+  const amounts = [...reported.keys()].sort((a, b) => a - b);
+  const groups = amounts.length > 1 && amounts[amounts.length - 1] < 0
+    ? [{ min: amounts[0], max: amounts[amounts.length - 1], count: withAmounts.size }]
+    : amounts.map(amount => ({ min: amount, max: amount, count: reported.get(amount)!.size }));
+  return { groups, missing: companies.size - withAmounts.size };
+}
+
+export function weeklyAdjustmentLabel(min: number, max: number) {
+  if (min < 0) return `↓ ${decreaseAmount(min, max)}`;
+  return min === 0 ? 'No change' : `↑ ₱${min.toFixed(2)}/L`;
+}
+
 // Company reports provide current context even when nationwide advice has only a forecast.
 export function adviceCurrentDecreaseContext(advice: FuelAdvice, now = Date.now()) {
   if (advice.status !== 'unknown' || !['forecast_only', 'no_confirmed_adjustment'].includes(advice.reason) ||
       advice.evidence.length || !advice.currentAdjustments?.length) return null;
   const rows = advice.currentAdjustments;
-  const amount = rows[0].minChangePerLiter;
-  if (!Number.isFinite(amount) || amount >= 0 || rows.some(row =>
-    row.confirmationStatus !== 'confirmed' || row.minChangePerLiter !== amount || row.maxChangePerLiter !== amount ||
+  if (rows.some(row => row.confirmationStatus !== 'confirmed' ||
+    !Number.isFinite(row.minChangePerLiter) || !Number.isFinite(row.maxChangePerLiter) ||
+    row.minChangePerLiter > row.maxChangePerLiter || row.maxChangePerLiter >= 0 ||
     row.effectiveDatePhilippines !== rows[0].effectiveDatePhilippines ||
     !Number.isFinite(Date.parse(row.effectiveAtUtc ?? '')) || Date.parse(row.effectiveAtUtc!) > now ||
     !(Date.parse(row.validUntilUtc) > now) ||
     (advice.oilCompany !== null && row.oilCompany !== null && row.oilCompany.toLowerCase() !== advice.oilCompany.toLowerCase()))) return null;
   return {
-    change: `↓ ₱${Math.abs(amount).toFixed(2)}/L decrease now in effect`,
+    change: `↓ ${decreaseAmount(Math.min(...rows.map(row => row.minChangePerLiter)),
+      Math.max(...rows.map(row => row.maxChangePerLiter)))} decrease now in effect`,
     companies: [...new Set(rows.flatMap(row => row.oilCompany ? [row.oilCompany] : []))],
     evidence: rows[0],
   };

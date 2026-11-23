@@ -139,7 +139,7 @@ const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(
     effectiveAtUtc: '2026-11-09T20:00:00Z', validUntilUtc: '2026-11-10T20:00:00Z' };
   const contextAdvice = fixture({ status: 'unknown', reason: 'forecast_only', evidence: [],
     currentAdjustments: [contextRow], forecast: { ...fixture().evidence[0], confirmationStatus: 'forecast' } });
-  for (const fuelType of ['gasoline', 'diesel']) {
+  for (const fuelType of ['gasoline', 'diesel', 'kerosene']) {
     const context = api.adviceCurrentDecreaseContext({ ...contextAdvice, fuelType });
     assert.equal(context.change, '↓ ₱2.00/L decrease now in effect');
     assert.equal(context.companies[0], 'Fixture Company');
@@ -149,9 +149,33 @@ const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(
     [{ ...contextRow, confirmationStatus: 'forecast' }],
     [{ ...contextRow, effectiveAtUtc: effective }],
     [{ ...contextRow, validUntilUtc: '2026-11-09T21:00:00Z' }],
-    [contextRow, { ...contextRow, minChangePerLiter: -1, maxChangePerLiter: -1 }]]) {
+    [contextRow, { ...contextRow, minChangePerLiter: 0, maxChangePerLiter: 0 }],
+    [contextRow, { ...contextRow, minChangePerLiter: 1, maxChangePerLiter: 1 }]]) {
     assert.equal(api.adviceCurrentDecreaseContext({ ...contextAdvice, currentAdjustments }), null);
   }
+  const smallerDecrease = { ...contextRow, oilCompany: 'Other Company', minChangePerLiter: -1, maxChangePerLiter: -1 };
+  assert.equal(api.adviceCurrentDecreaseContext({
+    ...contextAdvice, currentAdjustments: [contextRow, smallerDecrease],
+  }).change, '↓ ₱1.00–₱2.00/L decrease now in effect');
+  const keroseneRows = Array.from({ length: 16 }, (_, i) => ({
+    oilCompany: `Company ${i}`, keroseneChangePerLiter: i < 6 ? -5.8 : null,
+  }));
+  const grouped = api.summarizeWeeklyAdjustments([...keroseneRows, { ...keroseneRows[0], oilCompany: 'COMPANY 0' }], 'kerosene');
+  assert.equal(grouped.missing, 10);
+  assert.equal(grouped.groups.length, 1);
+  assert.equal(grouped.groups[0].count, 6);
+  assert.equal(api.weeklyAdjustmentLabel(grouped.groups[0].min, grouped.groups[0].max), '↓ ₱5.80/L');
+  keroseneRows[0].keroseneChangePerLiter = -4;
+  const range = api.summarizeWeeklyAdjustments(keroseneRows, 'kerosene').groups;
+  assert.equal(range.length, 1);
+  assert.equal(range[0].count, 6);
+  assert.equal(api.weeklyAdjustmentLabel(range[0].min, range[0].max), '↓ ₱4.00–₱5.80/L');
+  keroseneRows[0].keroseneChangePerLiter = 0;
+  keroseneRows[1].keroseneChangePerLiter = 1;
+  const mixed = api.summarizeWeeklyAdjustments(keroseneRows, 'kerosene');
+  assert.equal(mixed.missing, 10);
+  assert.equal(Array.from(mixed.groups, g => api.weeklyAdjustmentLabel(g.min, g.max)).join(', '),
+    '↓ ₱5.80/L, No change, ↑ ₱1.00/L');
   assert.equal(api.adviceCurrentDecreaseContext({ ...contextAdvice, status: 'wait', reason: 'rollback_upcoming' }), null);
   assert.equal(api.adviceCurrentDecreaseContext({ ...contextAdvice, reason: 'conflicting_adjustments' }), null);
   assert.equal(api.adviceCurrentDecreaseContext({ ...contextAdvice, oilCompany: 'Other Company' }), null);

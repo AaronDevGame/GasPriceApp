@@ -2,10 +2,10 @@ import { Link } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { StationLogo, stationBrand } from '@/components/station-brand';
 import { AppIcon } from '@/components/app-icon';
 import { useTheme } from '@/hooks/use-theme';
-import { adviceCurrentDecrease, adviceCurrentDecreaseContext, adviceHeadline, adviceImpact, adviceTime, forecastLabel, type AdviceFuel, type FuelAdvice } from '@/fuel/advice';
+import { adviceCurrentDecrease, adviceCurrentDecreaseContext, adviceHeadline, adviceImpact, adviceTime, forecastLabel,
+  summarizeWeeklyAdjustments, weeklyAdjustmentLabel, type AdviceFuel, type FuelAdvice } from '@/fuel/advice';
 import type { FuelAdjustmentWeek } from '@/fuel/api';
 import { changeLabel, newsDate, newsIdPattern } from '@/news/api';
 
@@ -13,6 +13,10 @@ function weekDate(date: string) {
   return new Date(`${date}T12:00:00+08:00`).toLocaleDateString('en-PH', {
     timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric',
   });
+}
+
+function companyCount(count: number) {
+  return `${count} ${count === 1 ? 'company' : 'companies'}`;
 }
 
 export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFuelChange, weeklyAdjustments,
@@ -33,6 +37,7 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
   const impact = advice ? adviceImpact(advice) : null;
   const currentDecrease = advice ? adviceCurrentDecrease(advice) : null;
   const currentContext = advice ? adviceCurrentDecreaseContext(advice) : null;
+  const weeklySummary = weeklyAdjustments && summarizeWeeklyAdjustments(weeklyAdjustments.adjustments, fuelType);
   const sourceEvidence = [...(advice?.evidence ?? []), ...(advice?.currentAdjustments ?? [])];
   const evidence = advice?.evidence[0];
   const sources = [...new Set(sourceEvidence.flatMap(e => e.sourceUrls))]
@@ -70,10 +75,11 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
           })}. Expected date: {adviceTime(forecast)}.</ThemedText>
         </>}
         {currentContext ? <View style={[styles.currentContext, { borderColor: theme.advicePositive }]}>
-          <ThemedText accessibilityRole="header" style={[styles.headline, { color: theme.advicePositive }]}>Good time to refuel</ThemedText>
+          <ThemedText accessibilityRole="header" style={[styles.headline, { color: theme.advicePositive }]}>{currentContext.companies.length
+            ? 'Good time to refuel at reporting companies' : 'Good time to refuel'}</ThemedText>
           <ThemedText type="smallBold" style={{ color: theme.advicePositive }}>{currentContext.change}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">{currentContext.companies.length
-            ? `Confirmed for ${currentContext.companies.join(', ')}.`
+            ? `Confirmed for ${companyCount(currentContext.companies.length)}.`
             : 'Based on the latest confirmed nationwide adjustment.'}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">Effective {weekDate(currentContext.evidence.effectiveDatePhilippines)}</ThemedText>
         </View> : (!forecast || status !== 'unknown' || advice?.reason === 'conflicting_adjustments') && <>
@@ -92,23 +98,16 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
         </View>}
       </View>
       {weeklyAdjustments !== undefined && <View style={[styles.companyList, { backgroundColor: theme.background, borderColor: theme.backgroundSelected }]}>
-        <ThemedText accessibilityRole="header" type="smallBold">Weekly adjustments by company</ThemedText>
-        {weeklyAdjustments?.adjustments.length ? <>
+        <ThemedText accessibilityRole="header" type="smallBold">Weekly adjustment summary</ThemedText>
+        {weeklyAdjustments?.adjustments.length && weeklySummary ? <>
           <ThemedText type="small" themeColor="textSecondary">{weekDate(weeklyAdjustments.weekStart)} – {weekDate(weeklyAdjustments.weekEnd)}</ThemedText>
-          {weeklyAdjustments.adjustments.map(item => {
-            const brand = stationBrand(item.oilCompany);
-            const amount = item[`${fuelType}ChangePerLiter`];
-            const color = amount === null || amount === 0 ? theme.textSecondary
-              : amount < 0 ? theme.advicePositive : theme.priceIncrease;
-            const change = amount === null ? 'Not listed' : amount === 0 ? 'No change'
-              : `${amount < 0 ? '↓' : '↑'} ₱${Math.abs(amount).toFixed(2)}/L`;
-            return <View key={item.id} style={styles.companyRow}>
-              <StationLogo {...brand} size={28} />
-              <ThemedText type="smallBold" style={styles.companyName}>{brand.name}</ThemedText>
-              <ThemedText type="small" style={{ color }} accessibilityLabel={amount
-                ? `${amount < 0 ? 'Decrease' : 'Increase'} of ₱${Math.abs(amount).toFixed(2)} per liter` : change}>{change}</ThemedText>
-            </View>;
-          })}
+          {weeklySummary.groups.map(({ min, max, count }) => <ThemedText key={min} type="smallBold"
+            style={{ color: min < 0 ? theme.advicePositive : min > 0 ? theme.priceIncrease : theme.textSecondary }}>
+            {weeklyAdjustmentLabel(min, max)} · {companyCount(count)} reported
+          </ThemedText>)}
+          {weeklySummary.missing > 0 && <ThemedText type="small" themeColor="textSecondary">
+            {companyCount(weeklySummary.missing)} had no {fuelType} amount listed.
+          </ThemedText>}
         </> : <ThemedText type="small" themeColor="textSecondary">{weeklyAdjustmentsLoading ? 'Loading weekly adjustments…'
           : weeklyAdjustmentsUnavailable ? 'Company adjustments unavailable' : 'No weekly adjustments to display yet'}</ThemedText>}
       </View>}
@@ -154,8 +153,6 @@ const styles = StyleSheet.create({
   fuels: { flexDirection: 'row', flexWrap: 'wrap', borderRadius: 12, padding: 4, gap: 4 },
   fuel: { minHeight: 44, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 9, justifyContent: 'center' },
   companyList: { flexGrow: 1, flexShrink: 1, flexBasis: 270, minWidth: 0, padding: 14, gap: 7, borderWidth: 1, borderRadius: 12 },
-  companyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  companyName: { flex: 1 },
   body: { flexDirection: 'row', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' },
   recommendation: { flexGrow: 1, flexShrink: 1, flexBasis: 360, gap: 12, minWidth: 0 },
   currentContext: { borderWidth: 1, borderRadius: 12, padding: 16, gap: 8 },
