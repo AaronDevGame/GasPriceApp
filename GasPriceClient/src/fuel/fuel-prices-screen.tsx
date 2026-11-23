@@ -44,6 +44,7 @@ export default function FuelPricesScreen() {
   const theme = useTheme();
   const [feed, setFeed] = useState<DoePriceBrowseFeed | null>(null);
   const [selected, setSelected] = useState<DoePriceLocation | null>(null);
+  const [selectedManually, setSelectedManually] = useState(false);
   const [grade, setGrade] = useState<string>('RON 91');
   const [search, setSearch] = useState('');
   const [showCities, setShowCities] = useState(false);
@@ -63,10 +64,13 @@ export default function FuelPricesScreen() {
       const next = await getDoePriceBrowse(location);
       if (ticket !== requestId.current) return;
       setFeed(next);
-      if (!location) setSelected(next.selected ? {
-        city: next.selected.city ?? '', province: next.selected.province ?? '',
-        scope: next.selected.scope ?? undefined,
-      } : null);
+      if (!location) {
+        setSelectedManually(false);
+        setSelected(next.selected ? {
+          city: next.selected.city ?? '', province: next.selected.province ?? '',
+          scope: next.selected.scope ?? undefined,
+        } : null);
+      }
     } catch (failure) {
       if (ticket === requestId.current) setError(errorMessage(failure));
     } finally {
@@ -76,6 +80,7 @@ export default function FuelPricesScreen() {
   const choose = useCallback((location: DoePriceLocation) => {
     followLocal.current = false;
     setSelected(location);
+    setSelectedManually(true);
     setHistoryVisible(false);
     setShowCities(false);
     setSearch('');
@@ -88,6 +93,7 @@ export default function FuelPricesScreen() {
     void getDoePriceBrowse().then(next => {
       if (!active || ticket !== requestId.current) return;
       setFeed(next);
+      setSelectedManually(false);
       setSelected(next.selected ? { city: next.selected.city ?? '', province: next.selected.province ?? '', scope: next.selected.scope ?? undefined } : null);
     }, failure => {
       if (active && ticket === requestId.current) setError(errorMessage(failure));
@@ -171,7 +177,7 @@ export default function FuelPricesScreen() {
                 <ThemedText type="smallBold">Where are you filling up?</ThemedText>
                 <DashboardAction title="Use my location" primary disabled={fuel.busy || !authenticated} onPress={() => { followLocal.current = true; void fuel.useLocation(); }} />
               </View>
-              <ThemedText type="small" themeColor="textSecondary">{historyVisible || !selected ? fuel.locationNote : 'Browse reported prices or use your location for local estimates.'}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">{historyVisible || !selected || !fuel.userCoordinates ? fuel.locationNote : 'Browse reported prices or use your location for local estimates.'}</ThemedText>
               <Pressable accessibilityRole="button" accessibilityLabel="Choose city or province" accessibilityState={{ expanded: showCities, disabled: !authenticated }} disabled={!authenticated} onPress={() => setShowCities(value => !value)}
                 style={[styles.selector, { borderColor: theme.backgroundSelected, backgroundColor: theme.background }]}>
                 <ThemedText>{selected ? doeLocationLabel(selected) : 'Choose a city or province'}</ThemedText>
@@ -209,7 +215,7 @@ export default function FuelPricesScreen() {
                 <ThemedText type="smallBold">{value === 'map' ? 'Map' : 'Company list'}</ThemedText>
               </Pressable>)}</View>
             <View style={mode === 'list' ? styles.hidden : undefined}>
-              <FuelMap ref={map} location={historyVisible && fuel.localItem ? localLocation(fuel.localItem, null) ?? selected : selected} userCoordinates={fuel.userCoordinates}
+              <FuelMap ref={map} location={historyVisible && fuel.localItem ? localLocation(fuel.localItem, null) ?? selected : selectedManually ? selected : null} userCoordinates={fuel.userCoordinates}
                 userLocation={fuel.localItem ? localLocation(fuel.localItem, null) : null}
                 onReturnToLocation={() => {
                   if (!fuel.localItem) return;

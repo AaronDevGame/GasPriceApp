@@ -1,4 +1,4 @@
-import { fitZoom, intersects, midpoint, MAX_ZOOM } from './geometry';
+import { boundsCenter, cameraCenter, fitZoom, intersects, midpoint, MAX_ZOOM, OVERVIEW_PADDING, OVERVIEW_ZOOM_OFFSET } from './geometry';
 import type { Bounds, City, CityPrices, GeographicIndex, MapSnapshot, PriceRange, Viewport } from './types';
 
 export type MapLevel = 'country' | 'island' | 'region' | 'province' | 'city';
@@ -10,15 +10,30 @@ export const mapLevelButtons: { level: MapLevel; label: string }[] = [
   { level: 'country', label: 'Nationwide' }, { level: 'island', label: 'Island groups' },
   { level: 'region', label: 'Regions' }, { level: 'province', label: 'Provinces' }, { level: 'city', label: 'Cities' },
 ];
+const CITY_LEVEL_OFFSET = 5;
+const overviewZoom = (index: GeographicIndex, width: number, height: number) => fitZoom(index.bbox, width, height, 35);
 // Aim inside each existing zoom band so button navigation and manual zoom agree.
 export function zoomForLevel(index: GeographicIndex, viewport: Pick<Viewport, 'width' | 'height'>, level: MapLevel) {
   const offsets: Record<MapLevel, number> = { country: 0.15, island: 1.375, region: 2.75, province: 4.25, city: 5.75 };
-  return Math.min(MAX_ZOOM, fitZoom(index.bbox, viewport.width, viewport.height, 35) + offsets[level]);
+  return Math.min(MAX_ZOOM, overviewZoom(index, viewport.width, viewport.height) + offsets[level]);
+}
+export function metroManilaBounds(index: GeographicIndex): Bounds | undefined {
+  return mapAreas(index, 'region').find(area => area.id === 'region:1300000000')?.bbox;
+}
+export function defaultMapCamera(index: GeographicIndex, size: Pick<Viewport, 'width' | 'height'>, metroBounds?: Bounds) {
+  const { width, height } = size;
+  return metroBounds ? {
+    center: boundsCenter(metroBounds),
+    zoom: Math.max(fitZoom(metroBounds, width, height, 36), Math.min(MAX_ZOOM, overviewZoom(index, width, height) + CITY_LEVEL_OFFSET + 0.15)),
+  } : {
+    center: cameraCenter(index.bbox),
+    zoom: fitZoom(index.bbox, width, height, OVERVIEW_PADDING) + OVERVIEW_ZOOM_OFFSET,
+  };
 }
 // Relative to the national fit so the hierarchy also works on narrow phone screens.
 export function mapLevel(index: GeographicIndex, viewport: Viewport): MapLevel {
-  const delta = viewport.zoom - fitZoom(index.bbox, viewport.width, viewport.height, 35);
-  return delta < 0.75 ? 'country' : delta < 2 ? 'island' : delta < 3.5 ? 'region' : delta < 5 ? 'province' : 'city';
+  const delta = viewport.zoom - overviewZoom(index, viewport.width, viewport.height);
+  return delta < 0.75 ? 'country' : delta < 2 ? 'island' : delta < 3.5 ? 'region' : delta < CITY_LEVEL_OFFSET ? 'province' : 'city';
 }
 export function areaIdentity(city: City, level: MapLevel): [string, string] {
   if (level === 'country') return ['country:PH', 'Philippines'];

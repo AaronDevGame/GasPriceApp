@@ -43,7 +43,7 @@ export function useFuelPrices() {
     if (!position) {
       setUserCoordinates(null);
       coordinates.current = undefined;
-      setLocationNote('Location access is blocked. Check your browser and device location permissions to use your location.');
+      setLocationNote('Location access is blocked. You can still browse the map or choose a city or province.');
       return;
     }
     coordinates.current = position;

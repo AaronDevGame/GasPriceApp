@@ -9,12 +9,12 @@ import { ThemedText } from '@/components/themed-text';
 import { MapController } from './controller';
 import { mapCache } from './cache';
 import MapRenderer from './map-renderer';
-import { areaPrices, levelNames, mapLevel, mapLevelButtons, zoomForLevel, visibleAreas } from './hierarchy';
+import { areaPrices, defaultMapCamera, levelNames, mapLevel, mapLevelButtons, metroManilaBounds, zoomForLevel, visibleAreas } from './hierarchy';
 import { cameraCenter } from './geometry';
 import { adjustmentSummaries, priceLabel, rangeText, reportDate } from './labels';
 import { mapAreaForLocation, locationForMapArea } from '@/fuel/selection';
 import type { Coordinates, DoePriceLocation } from '@/fuel/api';
-import type { MapSnapshot, Viewport, ZoomFocus } from './types';
+import type { LocationFocus, MapSnapshot, Viewport, ZoomFocus } from './types';
 
 const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: true, detail: false, error: null };
 export type FuelMapHandle = { refresh(): Promise<void> };
@@ -42,8 +42,8 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const locating = useRef(initialLocationPending);
   const updateActivity = useRef<((visible: boolean) => void) | null>(null);
   const [snapshot, setSnapshot] = useState(empty);
-  const [mapSelection, setMapSelection] = useState<{ id: string; targetId: string | undefined } | null>(null);
-  const [zoomFocus, setZoomFocus] = useState<ZoomFocus | null>(null);
+  const [mapSelection, setMapSelection] = useState<{ id: string | null; targetId: string | undefined } | null>(null);
+  const [zoomCommand, setZoomCommand] = useState<{ focus: ZoomFocus; location: LocationFocus | null } | null>(null);
   const [locationRequest, setLocationRequest] = useState(0);
   const controller = useRef<MapController | null>(null);
   const lastViewport = useRef<Viewport | null>(null);
@@ -79,8 +79,8 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
       const initialLocationTransition = locating.current;
       void next.start().then(() => {
         if (controller.current !== next || !next.isActive() || !next.snapshot.viewport) return;
-        // The initial permission dialog/local-camera transition reuses the Nationwide
-        // batch. Later genuine screen/app returns explicitly refresh current prices.
+        // Reuse any cached prices during the initial permission dialog and camera transition.
+        // Later screen/app returns explicitly refresh current prices.
         if (initialLocationTransition) next.idle(next.snapshot.viewport, true);
         else void refresh();
       });
@@ -104,6 +104,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   }, [eligible]);
   const onIdle = useCallback((viewport: Viewport) => { lastViewport.current = viewport; controller.current?.idle(viewport); }, []);
   const onMove = useCallback(() => controller.current?.move(), []);
+  const metroBounds = useMemo(() => snapshot.index ? metroManilaBounds(snapshot.index) : undefined, [snapshot.index]);
   const locationCity = location?.city;
   const locationProvince = location?.province;
   const target = useMemo(() => snapshot.index && locationProvince !== undefined
@@ -121,20 +122,23 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
     !!indexBounds && longitude >= indexBounds[0] && longitude <= indexBounds[2] && latitude >= indexBounds[1] && latitude <= indexBounds[3];
   const locationFocus = useMemo(() => canLocate ? { latitude: latitude!, longitude: longitude!, request: locationRequest, areaBounds: userAreaBounds } : null,
     [canLocate, latitude, longitude, locationRequest, userAreaBounds]);
+  const zoomFocus = zoomCommand?.location === locationFocus ? zoomCommand.focus : null;
   const targetId = target?.id;
-  const selected = mapSelection && mapSelection.targetId === targetId ? mapSelection.id : targetId ?? null;
+  const defaultCityId = !canLocate && metroBounds ? snapshot.index?.defaultCityId : undefined;
+  const selectionOverride = mapSelection && mapSelection.targetId === targetId ? mapSelection : null;
+  const selected = selectionOverride?.id ?? (selectionOverride?.id === null && defaultCityId ? defaultCityId : targetId) ?? defaultCityId ?? null;
   useEffect(() => {
-    if (targetId) controller.current?.select(targetId);
-  }, [targetId]);
+    controller.current?.select(selected);
+  }, [selected]);
   const onSelect = useCallback((id: string) => {
-    setZoomFocus(null);
-    setMapSelection({ id, targetId }); controller.current?.select(id);
+    setZoomCommand(null);
+    setMapSelection({ id, targetId });
     if (!snapshot.index || !snapshot.viewport) return;
     const area = visibleAreas(snapshot.index, snapshot.viewport).find(value => value.id === id);
     const next = area && locationForMapArea(area, locations);
     if (next) onLocationChange?.(next);
   }, [snapshot.index, snapshot.viewport, locations, onLocationChange, targetId]);
-  const level = snapshot.index && snapshot.viewport ? mapLevel(snapshot.index, snapshot.viewport) : 'country';
+  const level = snapshot.index && snapshot.viewport ? mapLevel(snapshot.index, snapshot.viewport) : metroBounds ? 'city' : 'country';
   const areas = snapshot.index && snapshot.viewport ? visibleAreas(snapshot.index, snapshot.viewport) : [];
   const selection = areas.find(area => area.id === selected);
   const prices = selection ? areaPrices(selection, snapshot) : null;
@@ -150,24 +154,33 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
         disabled={!snapshot.index || !snapshot.viewport}
         onPress={() => {
           if (!snapshot.index || !snapshot.viewport) return;
-          setZoomFocus({ zoom: zoomForLevel(snapshot.index, snapshot.viewport, item.level),
-            ...(item.level === 'country' ? { center: cameraCenter(snapshot.index.bbox) } : {}) });
+          setZoomCommand({ location: locationFocus, focus: {
+            zoom: zoomForLevel(snapshot.index, snapshot.viewport, item.level),
+            ...(item.level === 'country' ? { center: cameraCenter(snapshot.index.bbox) } : {}),
+          } });
         }}
         style={[styles.levelButton, !!snapshot.viewport && level === item.level && styles.levelButtonSelected, !snapshot.viewport && styles.levelButtonDisabled]}>
         <ThemedText type="smallBold" style={!!snapshot.viewport && level === item.level ? styles.levelButtonTextSelected : undefined}>{item.label}</ThemedText>
       </Pressable>)}
     </View>
     <ThemedText type="small" themeColor="textSecondary">{levelNames[level]} · Zoom or choose a level</ThemedText>
+    {!canLocate && metroBounds && snapshot.viewport && <Pressable accessibilityRole="button" style={styles.metroButton}
+      onPress={() => {
+        if (!snapshot.index || !snapshot.viewport) return;
+        setMapSelection({ id: null, targetId });
+        setZoomCommand({ location: locationFocus, focus: defaultMapCamera(snapshot.index, snapshot.viewport, metroBounds) });
+      }}>
+      <ThemedText type="smallBold">Center on Metro Manila</ThemedText>
+    </Pressable>}
     <View style={styles.canvas}>
-      {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} focusBounds={target?.bbox} locationFocus={locationFocus} zoomFocus={zoomFocus} active={eligible && isAppForeground()} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :
+      {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} focusBounds={target?.bbox} locationFocus={locationFocus} zoomFocus={zoomFocus} metroBounds={metroBounds} active={eligible && isAppForeground()} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :
         <View style={styles.initial}><ActivityIndicator /><ThemedText>Loading Philippine map…</ThemedText></View>}
-      <Pressable accessibilityRole="button" accessibilityLabel="Return to my location"
-        accessibilityHint={canLocate ? 'Center the map on your detected location.' : userCoordinates ? 'Your detected location is outside the Philippine map.' : 'Allow location access using Use my location above to enable this button.'}
-        accessibilityState={{ disabled: !canLocate }} disabled={!canLocate}
-        onPress={() => { setZoomFocus(null); setLocationRequest(value => value + 1); onReturnToLocation?.(); }}
-        style={[styles.locationButton, canLocate ? styles.locationButtonEnabled : styles.locationButtonDisabled]}>
-        <AppIcon name="location" color={canLocate ? '#76B4FF' : '#7B8798'} />
-      </Pressable>
+      {canLocate && <Pressable accessibilityRole="button" accessibilityLabel="Return to my location"
+        accessibilityHint="Center the map on your detected location."
+        onPress={() => { setZoomCommand(null); setLocationRequest(value => value + 1); onReturnToLocation?.(); }}
+        style={styles.locationButton}>
+        <AppIcon name="location" color="#76B4FF" />
+      </Pressable>}
     </View>
     <View style={styles.status}>
       {selection && prices && <View style={styles.selection}>
@@ -210,8 +223,8 @@ const styles = StyleSheet.create({
   levelButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   levelButton: { minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#495569', borderRadius: 12, justifyContent: 'center' },
   levelButtonSelected: { borderColor: '#76B4FF', backgroundColor: '#21334B' }, levelButtonTextSelected: { color: '#76B4FF' }, levelButtonDisabled: { opacity: 0.5 },
-  locationButton: { position: 'absolute', left: 12, top: 12, width: 48, height: 48, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A2029', zIndex: 20 },
-  locationButtonEnabled: { borderColor: '#76B4FF' }, locationButtonDisabled: { borderColor: '#495569', opacity: 0.7 },
+  metroButton: { alignSelf: 'flex-start', minHeight: 44, paddingHorizontal: 12, justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#495569' },
+  locationButton: { position: 'absolute', left: 12, top: 12, width: 48, height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#76B4FF', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A2029', zIndex: 20 },
   selection: { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#D38B00', gap: 4 },
   wrapper: { gap: 10 }, canvas: { height: 560, minHeight: 380, borderRadius: 14, overflow: 'hidden', backgroundColor: '#202832' },
   initial: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }, status: { gap: 8 },

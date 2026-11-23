@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { boundsCenter, cameraBounds, cameraCenter, fitZoom, MAX_ZOOM, OVERVIEW_PADDING, OVERVIEW_ZOOM_OFFSET, polygons } from './geometry';
-import { areaIdentity, mapLevel } from './hierarchy';
+import { boundsCenter, cameraBounds, fitZoom, MAX_ZOOM, polygons } from './geometry';
+import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
 import { type MapLabel, placeLabels, rangeText } from './labels';
 import type { Bounds, MapRendererProps } from './types';
@@ -69,10 +69,13 @@ export default function MapRenderer(props: MapRendererProps) {
       if (!active || !host.current) return;
       const index = latest.current.snapshot.index!;
       const bounds = cameraBounds(index.bbox);
-      const [lng, lat] = cameraCenter(index.bbox);
+      let cameraInitialized = !!(host.current.clientWidth && host.current.clientHeight);
+      const { center: [lng, lat], zoom } = defaultMapCamera(index, {
+        width: host.current.clientWidth, height: host.current.clientHeight,
+      }, latest.current.metroBounds);
 
       const instance = new google.maps.Map(host.current, {
-        center: { lat, lng }, zoom: 5, maxZoom: MAX_ZOOM, isFractionalZoomEnabled: true,
+        center: { lat, lng }, zoom, maxZoom: MAX_ZOOM, isFractionalZoomEnabled: true,
         restriction: { latLngBounds: literalBounds(bounds), strictBounds: false },
         mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
         rotateControl: false, tilt: 0, heading: 0, gestureHandling: 'greedy',
@@ -85,20 +88,25 @@ export default function MapRenderer(props: MapRendererProps) {
       }));
       listeners.push(instance.addListener('idle', () => {
         const visible = instance.getBounds();
-        if (!visible || !host.current || !active) return;
+        if (!visible || !host.current?.clientWidth || !host.current.clientHeight || !active) return;
         const sw = visible.getSouthWest(), ne = visible.getNorthEast();
         setMoving(false);
         latest.current.onIdle({ bounds: [sw.lng(), sw.lat(), ne.lng(), ne.lat()], zoom: instance.getZoom() ?? 12,
           width: host.current.clientWidth, height: host.current.clientHeight });
       }));
       const updateSize = () => {
-        if (!host.current?.clientWidth) return;
-        instance.setOptions({ minZoom: fitZoom(bounds, host.current.clientWidth, host.current.clientHeight, 0) });
+        const width = host.current?.clientWidth, height = host.current?.clientHeight;
+        if (!width || !height) return;
+        instance.setOptions({ minZoom: fitZoom(bounds, width, height, 0) });
+        if (!cameraInitialized) {
+          const { center: [lng, lat], zoom } = defaultMapCamera(index, { width, height }, latest.current.metroBounds);
+          instance.setCenter({ lat, lng });
+          instance.setZoom(zoom);
+          cameraInitialized = true;
+        }
+        setReady(true);
       };
       resize = new ResizeObserver(updateSize); resize.observe(host.current); updateSize();
-      instance.setCenter({ lat, lng });
-      instance.setZoom(fitZoom(index.bbox, host.current.clientWidth, host.current.clientHeight, OVERVIEW_PADDING) + OVERVIEW_ZOOM_OFFSET);
-      setReady(true);
     }).catch(() => { if (active) setError(true); });
     return () => {
       active = false; resize?.disconnect(); listeners.forEach(listener => listener.remove());

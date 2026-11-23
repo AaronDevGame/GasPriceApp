@@ -89,6 +89,8 @@ function harness(options = {}) {
 (async () => {
   const h = harness(); await h.settle();
   assert.equal(h.calls.length, 1);
+  assert.equal(h.nodes().find(n => n.type === 'FuelMap').props.location, null, 'The default company report does not drive the map camera');
+  assert.equal(h.nodes().find(n => n.type === 'DoePriceSummary').props.report.city, 'Manila');
   h.button('Company list').props.onPress(); await h.settle();
   h.button('Gasoline 95').props.onPress();
   await h.settle();
@@ -132,11 +134,30 @@ function harness(options = {}) {
   const mapHarness = harness({ props: mapProps, snapshot: mapSnapshot });
   await mapHarness.settle();
   const locationButton = () => mapHarness.nodes().find(n => n.props?.accessibilityLabel === 'Return to my location');
-  assert.equal(locationButton().props.disabled, true, 'No permission/fix leaves location control disabled');
+  const metroButton = () => mapHarness.button('Center on Metro Manila');
+  const renderer = () => mapHarness.nodes().find(n => n.type === 'MapRenderer').props;
+  assert.equal(locationButton(), undefined, 'The device control waits for a usable fix');
+  assert.equal(renderer().selected, index.defaultCityId, 'City of Manila is highlighted by default');
+  assert.equal(renderer().focusBounds, undefined, 'The highlight leaves the Metro Manila camera intact');
+  const hierarchy = compile('map/hierarchy');
+  const metroBounds = renderer().metroBounds;
+  for (const city of index.cities.filter(city => city.regionId === '1300000000')) {
+    assert(city.bbox[0] >= metroBounds[0] && city.bbox[2] <= metroBounds[2]);
+    assert(city.bbox[1] >= metroBounds[1] && city.bbox[3] <= metroBounds[3]);
+  }
+  for (const width of [320, 1200]) {
+    const size = { width, height: 560 };
+    const camera = hierarchy.defaultMapCamera(index, size, metroBounds);
+    assert.equal(hierarchy.mapLevel(index, { ...size, zoom: camera.zoom }), 'city');
+    assert(camera.zoom <= compile('map/geometry').fitZoom(metroBounds, width, size.height, 0), 'The city-level camera fits the entire region');
+    const initialSnapshot = { ...mapSnapshot, viewport: { ...size, bounds: metroBounds, zoom: camera.zoom } };
+    assert.equal(compile('map/labels').placeLabels(initialSnapshot, renderer().selected)[0].id, index.defaultCityId, 'Manila gets the first visible price card');
+  }
   mapProps.userCoordinates = { latitude: 14.43, longitude: 120.94 };
   mapHarness.render(); await mapHarness.settle();
-  assert.equal(locationButton().props.disabled, false);
-  const camera = () => mapHarness.nodes().find(n => n.type === 'MapRenderer').props.locationFocus;
+  assert(locationButton());
+  assert.equal(renderer().selected, null, 'A GPS fix replaces the fallback highlight');
+  const camera = () => renderer().locationFocus;
   assert.equal(camera().latitude, 14.43);
   assert.equal(camera().areaBounds, undefined, 'Use GPS until the city is resolved');
   mapProps.userLocation = { city: 'Imus', province: 'Cavite' };
@@ -156,19 +177,20 @@ function harness(options = {}) {
   assert.equal(returned, 2);
   mapProps.userCoordinates = { latitude: 51.5, longitude: -0.1 };
   mapHarness.render(); await mapHarness.settle();
-  assert.equal(locationButton().props.disabled, true, 'Do not move the Philippines map outside its coverage');
+  assert.equal(locationButton(), undefined, 'Do not move the Philippines map outside its coverage');
   assert.equal(camera(), null);
   mapProps.userCoordinates = null;
   mapHarness.render(); await mapHarness.settle();
-  assert.equal(locationButton().props.disabled, true, 'A cleared location disables the control');
+  assert.equal(locationButton(), undefined, 'A cleared location hides the device control');
   const levelButtons = () => mapHarness.nodes().filter(n => n.type === 'Pressable' && n.props?.accessibilityLabel?.startsWith('Show '));
   assert.equal(levelButtons().length, 5);
   assert(levelButtons().every(n => n.props.disabled), 'Level controls wait for a usable map viewport');
-  const hierarchy = compile('map/hierarchy');
   const viewport = { bounds: [120.85, 14.3, 121.05, 14.55], width: 1200, height: 560, zoom: 12 };
   mapSnapshot.viewport = viewport;
   mapHarness.render(); await mapHarness.settle();
   const selectedLevels = () => levelButtons().filter(n => n.props.accessibilityState.selected);
+  renderer().onSelect(imus.id); await mapHarness.settle();
+  assert.equal(renderer().selected, imus.id, 'Tapping a city overrides the default selection');
   assert.equal(selectedLevels().length, 1);
   assert.equal(selectedLevels()[0].props.accessibilityLabel, 'Show cities', 'Imus city zoom activates Cities');
   for (const [level, label] of [['province', 'provinces'], ['region', 'regions'], ['island', 'island groups'], ['country', 'nationwide'], ['city', 'cities']]) {
@@ -186,11 +208,17 @@ function harness(options = {}) {
   viewport.zoom = hierarchy.zoomForLevel(index, viewport, 'province');
   mapHarness.render(); await mapHarness.settle();
   assert.equal(selectedLevels()[0].props.accessibilityLabel, 'Show provinces', 'Manual zoom-out clears Cities and activates Provinces');
+  metroButton().props.onPress(); await mapHarness.settle();
+  assert.deepEqual(renderer().zoomFocus, hierarchy.defaultMapCamera(index, viewport, metroBounds), 'Metro Manila reset uses the same camera as startup');
+  assert.equal(renderer().selected, index.defaultCityId, 'Metro Manila reset restores the Manila highlight');
   mapProps.userCoordinates = { latitude: 14.43, longitude: 120.94 };
   mapHarness.render(); await mapHarness.settle();
+  assert.equal(metroButton(), undefined);
+  assert.equal(renderer().zoomFocus, null, 'A successful fix supersedes the Metro Manila command');
+  assert.equal(renderer().selected, selection.mapAreaForLocation(index, cebu).id, 'With a valid fix the fallback no longer overrides the chosen city');
   locationButton().props.onPress(); await mapHarness.settle();
   assert.equal(mapHarness.nodes().find(n => n.type === 'MapRenderer').props.zoomFocus, null, 'Returning to location clears the old level command');
   console.log('PASS map levels: five controls, initial disabled state, city/province zoom synchronization, single active level and button camera commands');
-  console.log('PASS map location: disabled before fix, enabled at Imus, stable while panning, repeat recenter and out-of-coverage handling');
+  console.log('PASS map location: Metro Manila city default and reset, Imus fix, stable panning, repeat recenter and out-of-coverage handling');
   console.log('PASS merged screen: shared area/grade, view persistence, stale response protection, deduplicated refresh, GPS race and reconnect');
 })().catch(error => { console.error(error); process.exitCode = 1; });

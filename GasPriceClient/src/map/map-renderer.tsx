@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
-import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, OVERVIEW_PADDING, OVERVIEW_ZOOM_OFFSET, polygons } from './geometry';
-import { areaIdentity, mapLevel } from './hierarchy';
+import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, polygons } from './geometry';
+import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { placeLabels, rangeText } from './labels';
 import type { Bounds, MapRendererProps, Point } from './types';
 
@@ -27,7 +27,7 @@ export default function MapRenderer(props: MapRendererProps) {
   }
   return <NativeMap key={attempt} {...props} onRetry={() => setAttempt(value => value + 1)} />;
 }
-function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, active, onMove, onIdle, onSelect, onRetry }: MapRendererProps & { onRetry(): void }) {
+function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, metroBounds, active, onMove, onIdle, onSelect, onRetry }: MapRendererProps & { onRetry(): void }) {
   const index = snapshot.index!;
   const map = useRef<MapView | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -40,7 +40,8 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
   const focusedBounds = useRef<Bounds | null>(null);
   const [failure, setFailure] = useState(false);
   const bounds = useMemo(() => cameraBounds(index.bbox), [index]);
-  const center = useMemo(() => cameraCenter(index.bbox), [index]);
+  const initialBounds = metroBounds ?? index.bbox;
+  const center = useMemo(() => metroBounds ? boundsCenter(metroBounds) : cameraCenter(index.bbox), [metroBounds, index]);
   const minZoom = size.width ? fitZoom(bounds, size.width, size.height, 0) : 0;
   const start = useCallback((region: Region) => {
     ++sequence.current; setMoving(true); onMove();
@@ -79,13 +80,14 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         map.current?.setMapBoundaries(coordinate([bounds[2], bounds[3]]), coordinate([bounds[0], bounds[1]]));
         if (!initialized.current) {
           initialized.current = true;
-          map.current?.setCamera({ center: coordinate(center), zoom: fitZoom(index.bbox, size.width, size.height, OVERVIEW_PADDING) + OVERVIEW_ZOOM_OFFSET, pitch: 0, heading: 0 });
+          const camera = defaultMapCamera(index, size, metroBounds);
+          map.current?.setCamera({ center: coordinate(camera.center), zoom: camera.zoom, pitch: 0, heading: 0 });
         }
         void settle();
       } catch { setFailure(true); }
     });
     return () => cancelAnimationFrame(frame);
-  }, [ready, size, bounds, center, index, settle]);
+  }, [ready, size, bounds, metroBounds, index, settle]);
   useEffect(() => {
     if (!ready || !size.width || active === false || !focusBounds || focusedBounds.current === focusBounds) return;
     const frame = requestAnimationFrame(() => {
@@ -142,7 +144,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
     setSize(old => old.width === width && old.height === height ? old : { width, height });
   }}>
     <MapView ref={map} provider={PROVIDER_GOOGLE} style={styles.fill}
-      initialRegion={{ ...coordinate(center), latitudeDelta: index.bbox[3] - index.bbox[1], longitudeDelta: index.bbox[2] - index.bbox[0] }}
+      initialRegion={{ ...coordinate(center), latitudeDelta: initialBounds[3] - initialBounds[1], longitudeDelta: initialBounds[2] - initialBounds[0] }}
       minZoomLevel={minZoom} maxZoomLevel={MAX_ZOOM} rotateEnabled={false} pitchEnabled={false}
       toolbarEnabled={false} showsPointsOfInterests={false} showsBuildings={false}
       onMapReady={() => setReady(true)} onRegionChange={start} onRegionChangeComplete={() => void settle()}>

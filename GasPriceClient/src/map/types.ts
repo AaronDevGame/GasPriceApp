@@ -37,6 +37,7 @@ export type MapSnapshot = {
 export type LocationFocus = { latitude: number; longitude: number; request: number; areaBounds?: Bounds };
 export type ZoomFocus = { zoom: number; center?: Point };
 export type MapRendererProps = {
+  metroBounds?: Bounds;
   zoomFocus?: ZoomFocus | null;
   locationFocus?: LocationFocus | null;
   snapshot: MapSnapshot; selected: string | null; focusBounds?: Bounds | null; active?: boolean;

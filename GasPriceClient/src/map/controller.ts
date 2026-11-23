@@ -75,7 +75,8 @@ export class MapController {
     this.timer = setTimeout(() => { this.timer = undefined; void this.load(generation); }, immediate ? 0 : 750);
   };
   retry = () => { if (this.snapshot.viewport) this.idle(this.snapshot.viewport, true); else void this.start(); };
-  select = (id: string) => {
+  select = (id: string | null) => {
+    if (this.selected === id) return;
     this.selected = id;
     const { index, viewport } = this.snapshot;
     // Both polygon and card taps can highlight an already drawn area immediately.
