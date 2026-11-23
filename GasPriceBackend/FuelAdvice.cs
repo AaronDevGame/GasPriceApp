@@ -179,10 +179,14 @@ public static class FuelAdviceCalculator
         {
             ValidUntilUtc = Min(nextEffective, Min(e.ValidUntilUtc, e.EffectiveAtUtc!.Value.AddDays(7)))
         }).ToArray();
-        // Do not revive older decreases when the latest applied event is expired or incomplete.
-        if (rows.Any(e => e.ValidUntilUtc <= now) ||
+        // An expired company row must not hide still-current reports of the same change.
+        // Keep withholding advice if an expired row disagrees or the date is still incomplete.
+        var current = rows.Where(e => e.ValidUntilUtc > now).ToArray();
+        if (current.Length == 0 ||
+            rows.Any(e => e.ValidUntilUtc <= now && (e.MinChangePerLiter != current[0].MinChangePerLiter ||
+                e.MaxChangePerLiter != current[0].MaxChangePerLiter)) ||
             confirmed.Any(e => e.EffectiveDatePhilippines == latest.Key && e.EffectiveAtUtc > now)) return [];
-        return rows.OrderBy(e => e.OilCompany).ThenBy(e => e.AdjustmentId).ToArray();
+        return current.OrderBy(e => e.OilCompany).ThenBy(e => e.AdjustmentId).ToArray();
     }
 
     private static DateTime Min(DateTime left, DateTime right) => left < right ? left : right;

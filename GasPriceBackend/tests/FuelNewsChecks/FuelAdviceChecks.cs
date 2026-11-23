@@ -132,6 +132,14 @@ internal static class FuelAdviceChecks
             "Upcoming decrease is not current");
         Check(FuelAdviceCalculator.CurrentAdjustments(effective.AddDays(7), [companyRollback]).Count == 0,
             "Current context expires after seven days");
+        var earlierCompany = companyRollback with { OilCompany = "Earlier Company",
+            EffectiveAtUtc = effective.AddHours(-6), AdjustmentId = 2 };
+        var nearExpiry = effective.AddDays(7).AddHours(-2);
+        Check(FuelAdviceCalculator.CurrentAdjustments(nearExpiry, [earlierCompany, companyRollback])
+            .Single().OilCompany == "Fixture Company", "An earlier matching company report can expire independently");
+        Check(FuelAdviceCalculator.CurrentAdjustments(nearExpiry, [companyRollback,
+            earlierCompany with { MinChangePerLiter = 1, MaxChangePerLiter = 1 }]).Count == 0,
+            "An expired conflicting report still blocks reassurance for that date");
         var currentIncrease = FuelAdviceCalculator.CurrentAdjustments(effective.AddDays(2), [companyRollback, next]);
         Check(currentIncrease.Count == 1 && currentIncrease[0].MinChangePerLiter > 0,
             "Latest applied increase replaces prior decrease context");
