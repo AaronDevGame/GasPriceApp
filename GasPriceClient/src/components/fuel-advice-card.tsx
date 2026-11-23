@@ -4,7 +4,7 @@ import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, View } fro
 import { ThemedText } from '@/components/themed-text';
 import { AppIcon } from '@/components/app-icon';
 import { useTheme } from '@/hooks/use-theme';
-import { adviceCurrentDecrease, adviceHeadline, adviceImpact, adviceTime, type AdviceFuel, type FuelAdvice } from '@/fuel/advice';
+import { adviceCurrentDecrease, adviceCurrentDecreaseContext, adviceHeadline, adviceImpact, adviceTime, type AdviceFuel, type FuelAdvice } from '@/fuel/advice';
 import { changeLabel, newsDate, newsIdPattern } from '@/news/api';
 
 export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFuelChange, oilCompany,
@@ -23,11 +23,13 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
     : status === 'wait' || advice?.reason === 'forecast_only' ? theme.adviceWait : theme.textSecondary;
   const impact = advice ? adviceImpact(advice) : null;
   const currentDecrease = advice ? adviceCurrentDecrease(advice) : null;
+  const currentContext = advice ? adviceCurrentDecreaseContext(advice) : null;
+  const sourceEvidence = [...(advice?.evidence ?? []), ...(advice?.currentAdjustments ?? [])];
   const evidence = advice?.evidence[0];
   const options = [...new Set([...companies, ...(oilCompany ? [oilCompany] : [])])].sort((a, b) => a.localeCompare(b));
-  const sources = [...new Set((advice?.evidence ?? []).flatMap(e => e.sourceUrls))]
+  const sources = [...new Set(sourceEvidence.flatMap(e => e.sourceUrls))]
     .filter(url => { try { return new URL(url).protocol === 'https:'; } catch { return false; } });
-  const newsId = advice?.evidence.find(e => e.newsId && newsIdPattern.test(e.newsId))?.newsId;
+  const newsId = sourceEvidence.find(e => e.newsId && newsIdPattern.test(e.newsId))?.newsId;
   return <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: accent }]}>
     <View style={styles.topline}>
       <View style={styles.label}><AppIcon name="fuel" color={accent} /><ThemedText type="smallBold">SHOULD I GAS UP?</ThemedText></View>
@@ -63,9 +65,17 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
 
     <View style={styles.body}>
       <View style={styles.recommendation} accessibilityLiveRegion="polite">
-        <ThemedText accessibilityRole="header" style={[styles.headline, { color: accent }]}>{adviceHeadline(advice, loading, error)}</ThemedText>
+        {currentContext && <View style={[styles.currentContext, { borderColor: theme.advicePositive }]}>
+          <ThemedText accessibilityRole="header" style={[styles.headline, { color: theme.advicePositive }]}>Good time to refuel</ThemedText>
+          <ThemedText type="smallBold" style={{ color: theme.advicePositive }}>{currentContext.change}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">{currentContext.companies.length
+            ? `Confirmed reports from ${currentContext.companies.join(', ')}. Other companies may differ.`
+            : 'Based on the latest confirmed nationwide adjustment.'}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">Effective: {adviceTime(currentContext.evidence)}{currentContext.evidence.isEffectiveTimeDefaulted ? '\n6:00 AM PHT default used' : ''}</ThemedText>
+        </View>}
+        {(!currentContext || advice?.forecast) && <ThemedText accessibilityRole="header" style={[styles.headline, { color: accent }]}>{adviceHeadline(advice, loading, error)}</ThemedText>}
         {currentDecrease && <ThemedText type="smallBold" style={{ color: theme.advicePositive }}>{currentDecrease}</ThemedText>}
-        <ThemedText>{advice?.message ?? (loading ? 'Looking up the latest fuel-price advice for your selection.'
+        <ThemedText>{currentContext ? 'The current decrease is confirmed for the reports shown above. Any next adjustment remains subject to confirmation.' : advice?.message ?? (loading ? 'Looking up the latest fuel-price advice for your selection.'
           : error ? 'We couldn’t load fuel advice. Check your connection and try again.' : 'No current confirmed update is available.')}</ThemedText>
         {evidence && advice?.reason !== 'conflicting_adjustments' && <ThemedText type="small" themeColor="textSecondary">
           Effective: {adviceTime(evidence)}{evidence.isEffectiveTimeDefaulted ? '\n6:00 AM PHT default used' : ''}
@@ -84,14 +94,14 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
 
     <View style={[styles.footer, { borderTopColor: theme.backgroundSelected }]}>
       <View style={styles.metadata}>
-        <ThemedText type="small" themeColor="textSecondary">{advice ? `${advice.evidence.length ? 'Confirmed adjustment' : advice.forecast ? 'Forecast only' : 'No confirmed update'} · Checked ${newsDate(advice.evaluatedAtUtc, true)} PHT` : 'Price-based advice'}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">{advice ? `${currentContext ? 'Confirmed current decrease' : advice.evidence.length ? 'Confirmed adjustment' : advice.forecast ? 'Forecast only' : 'No confirmed update'} · Checked ${newsDate(advice.evaluatedAtUtc, true)} PHT` : 'Price-based advice'}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">{oilCompany ? `${oilCompany} announcements and nationwide updates.` : 'Nationwide announcements. Individual companies may differ.'} Keep enough fuel for your trip.</ThemedText>
       </View>
       <View style={styles.actions}>
         <Link href="/fuel-prices" onPress={onNavigate} asChild><Pressable accessibilityRole="link" style={StyleSheet.flatten([styles.primaryAction, { backgroundColor: theme.backgroundSelected, borderColor: accent }])}>
           <ThemedText type="smallBold" style={{ color: accent }}>Compare fuel prices →</ThemedText>
         </Pressable></Link>
-        {(advice?.evidence.length ?? 0) > 0 && <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }}
+        {sourceEvidence.length > 0 && <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }}
           onPress={() => setShowDetails(value => !value)} style={styles.textButton}>
           <ThemedText type="smallBold">{showDetails ? 'Hide sources ↑' : status === 'wait' ? 'Why wait? ↓' : 'Why this advice? ↓'}</ThemedText>
         </Pressable>}
@@ -107,7 +117,7 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
         onPress={() => void Linking.openURL(url).catch(() => {})} style={styles.textButton}>
         <ThemedText type="small" style={{ color: accent }}>Source {index + 1} · {new URL(url).hostname} ↗</ThemedText>
       </Pressable>)}
-      <ThemedText type="small" themeColor="textSecondary">{advice.evidence.some(e => e.isEffectiveTimeDefaulted)
+      <ThemedText type="small" themeColor="textSecondary">{sourceEvidence.some(e => e.isEffectiveTimeDefaulted)
         ? 'The effective time uses the app’s 6:00 AM Philippine-time default because the announcement supplied only a date.'
         : 'Effective dates and times come from the stored announcements.'}</ThemedText>
     </View>}
@@ -125,6 +135,7 @@ const styles = StyleSheet.create({
   companyOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   body: { flexDirection: 'row', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' },
   recommendation: { flexGrow: 1, flexShrink: 1, flexBasis: 360, gap: 12, minWidth: 0 },
+  currentContext: { borderWidth: 1, borderRadius: 12, padding: 16, gap: 8 },
   headline: { fontSize: 28, lineHeight: 36, fontWeight: '700', letterSpacing: -0.5 },
   impact: { flexBasis: 230, flexGrow: 1, flexShrink: 1, padding: 18, borderRadius: 14, borderWidth: 1, gap: 8, minWidth: 0 },
   savings: { fontSize: 26, lineHeight: 34, fontWeight: '700', fontVariant: ['tabular-nums'] },

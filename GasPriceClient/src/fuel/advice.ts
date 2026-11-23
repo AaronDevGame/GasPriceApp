@@ -12,6 +12,7 @@ export type FuelAdvice = {
   fuelType: AdviceFuel; oilCompany: string | null; status: AdviceStatus; reason: string;
   message: string; evaluatedAtUtc: string; validUntilUtc: string | null;
   evidence: AdviceEvidence[]; forecast: AdviceEvidence | null;
+  currentAdjustments?: AdviceEvidence[];
 };
 
 export async function getFuelAdvice(fuelType: AdviceFuel, oilCompany: string | null) {
@@ -45,7 +46,7 @@ export function adviceHeadline(advice: FuelAdvice | null, loading: boolean, erro
 
 export function adviceExpiresAt(advice: FuelAdvice) {
   const evaluated = Date.parse(advice.evaluatedAtUtc);
-  const evidence = [...advice.evidence, ...(advice.forecast ? [advice.forecast] : [])];
+  const evidence = [...advice.evidence, ...(advice.forecast ? [advice.forecast] : []), ...(advice.currentAdjustments ?? [])];
   const deadlines = [Date.parse(advice.validUntilUtc ?? ''), ...evidence.flatMap(item => {
     const effective = Date.parse(item.effectiveAtUtc ?? '');
     return [Date.parse(item.validUntilUtc), ...(effective > evaluated ? [effective] : [])];
@@ -89,6 +90,25 @@ export function adviceCurrentDecrease(advice: FuelAdvice) {
       !advice.evidence.length || advice.evidence[0].minChangePerLiter >= 0) return null;
   const impact = adviceImpact(advice);
   return impact ? `↓ ₱${impact.amount.toFixed(2)}/L decrease now in effect` : null;
+}
+
+// Company reports provide current context even when nationwide advice has only a forecast.
+export function adviceCurrentDecreaseContext(advice: FuelAdvice, now = Date.now()) {
+  if (advice.status !== 'unknown' || !['forecast_only', 'no_confirmed_adjustment'].includes(advice.reason) ||
+      advice.evidence.length || !advice.currentAdjustments?.length) return null;
+  const rows = advice.currentAdjustments;
+  const amount = rows[0].minChangePerLiter;
+  if (!Number.isFinite(amount) || amount >= 0 || rows.some(row =>
+    row.confirmationStatus !== 'confirmed' || row.minChangePerLiter !== amount || row.maxChangePerLiter !== amount ||
+    row.effectiveDatePhilippines !== rows[0].effectiveDatePhilippines ||
+    !Number.isFinite(Date.parse(row.effectiveAtUtc ?? '')) || Date.parse(row.effectiveAtUtc!) > now ||
+    !(Date.parse(row.validUntilUtc) > now) ||
+    (advice.oilCompany !== null && row.oilCompany !== null && row.oilCompany.toLowerCase() !== advice.oilCompany.toLowerCase()))) return null;
+  return {
+    change: `↓ ₱${Math.abs(amount).toFixed(2)}/L decrease now in effect`,
+    companies: [...new Set(rows.flatMap(row => row.oilCompany ? [row.oilCompany] : []))],
+    evidence: rows[0],
+  };
 }
 
 // Only calculate the example from agreed confirmed amounts; forecasts stay separate.

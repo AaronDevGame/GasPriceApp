@@ -135,6 +135,28 @@ const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(
   }
   assert.equal(api.adviceSummary(null, false, true).action, 'Temporarily unavailable');
   assert.equal(api.adviceSummary(null, true, false).amount, '—');
+  const contextRow = { ...fixture().evidence[0], oilCompany: 'Fixture Company', newsId: null, adjustmentId: 1,
+    effectiveAtUtc: '2026-11-09T20:00:00Z', validUntilUtc: '2026-11-10T20:00:00Z' };
+  const contextAdvice = fixture({ status: 'unknown', reason: 'forecast_only', evidence: [],
+    currentAdjustments: [contextRow], forecast: { ...fixture().evidence[0], confirmationStatus: 'forecast' } });
+  for (const fuelType of ['gasoline', 'diesel']) {
+    const context = api.adviceCurrentDecreaseContext({ ...contextAdvice, fuelType });
+    assert.equal(context.change, '↓ ₱2.00/L decrease now in effect');
+    assert.equal(context.companies[0], 'Fixture Company');
+  }
+  for (const currentAdjustments of [undefined, [],
+    [{ ...contextRow, minChangePerLiter: 2, maxChangePerLiter: 2 }],
+    [{ ...contextRow, confirmationStatus: 'forecast' }],
+    [{ ...contextRow, effectiveAtUtc: effective }],
+    [{ ...contextRow, validUntilUtc: '2026-11-09T21:00:00Z' }],
+    [contextRow, { ...contextRow, minChangePerLiter: -1, maxChangePerLiter: -1 }]]) {
+    assert.equal(api.adviceCurrentDecreaseContext({ ...contextAdvice, currentAdjustments }), null);
+  }
+  assert.equal(api.adviceCurrentDecreaseContext({ ...contextAdvice, status: 'wait', reason: 'rollback_upcoming' }), null);
+  assert.equal(api.adviceCurrentDecreaseContext({ ...contextAdvice, reason: 'conflicting_adjustments' }), null);
+  assert.equal(api.adviceCurrentDecreaseContext({ ...contextAdvice, oilCompany: 'Other Company' }), null);
+  assert.equal(api.adviceExpiresAt({ ...contextAdvice, forecast: null, validUntilUtc: null }), Date.parse(contextRow.validUntilUtc));
+  console.log('PASS current company decreases alongside forecasts, fuel scope, expiry and unsafe-reassurance suppression');
   console.log('PASS summary price direction independent of action, forecast ranges, conflicting sources and unavailable states');
   console.log('PASS advice query encoding, response validation, headlines, confirmed impact and Philippine time');
 
