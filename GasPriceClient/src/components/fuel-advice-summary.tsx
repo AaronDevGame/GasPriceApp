@@ -19,7 +19,7 @@ function AdviceDetails({ fuel, onFuelChange, onClose }: {
 }) {
   const advice = useFuelAdvice(fuel, null);
   return <FuelAdviceCard key={fuel} {...advice} fuelType={fuel} onFuelChange={onFuelChange}
-    oilCompany={null} onCompanyChange={() => {}} companies={[]} initiallyShowDetails onNavigate={onClose} />;
+    initiallyShowDetails onNavigate={onClose} />;
 }
 
 export function FuelAdviceSummary({ inHeader = false }: { inHeader?: boolean }) {

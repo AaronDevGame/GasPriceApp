@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- In the refueling popup, show the amber forecast before confirmed green advice and replace the company selector with a read-only list of the latest Weekly Changes, with logos and per-liter adjustments for the selected fuel.
 - Show a green current-decrease panel alongside amber nationwide forecasts when the backend supplies agreeing, unexpired confirmed reports. Identify reporting companies, effective dates and sources, and suppress reassurance for increases, conflicts or future changes.
 - Use “Good time to refuel” for effective confirmed rollbacks and show the current per-liter decrease in green in the advice popup. Keep the next forecast separate in amber; forecast-only updates do not receive the confirmed-decrease message.
 

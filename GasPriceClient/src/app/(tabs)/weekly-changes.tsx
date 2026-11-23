@@ -1,10 +1,11 @@
 import { MobileHeader } from '@/components/mobile-header';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, Image, Linking, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Linking, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
 import { errorMessage } from '@/auth/http';
+import { StationLogo, stationBrand } from '@/components/station-brand';
 import { ThemedText } from '@/components/themed-text';
 import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { ThemedView } from '@/components/themed-view';
@@ -22,30 +23,6 @@ function weekLabel(start: string, end: string) {
   const startOptions: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
   if (startDate.getFullYear() !== endDate.getFullYear()) startOptions.year = 'numeric';
   return `${startDate.toLocaleDateString('en-PH', startOptions)} – ${dateLabel(end)}`;
-}
-
-function stationBrand(value: string) {
-  const key = value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-  switch (key) {
-    case 'caltex': return { name: 'Caltex', logo: 'caltex' } as const;
-    case 'cleanfuel': return { name: 'Cleanfuel', logo: 'cleanfuel' } as const;
-    case 'ecooil': return { name: 'EcoOil', logo: 'ecooil' } as const;
-    case 'cityoil': return { name: 'City Oil', logo: null } as const;
-    default: return { name: value.trim(), logo: null } as const;
-  }
-}
-
-function StationLogo({ name, logo }: { name: string; logo: 'caltex' | 'cleanfuel' | 'ecooil' | null }) {
-  if (logo === 'caltex') return <Image source={require('@/assets/images/stations/caltex.png')} style={styles.logo} resizeMode="contain" accessibilityLabel="Caltex logo" />;
-  if (logo === 'cleanfuel') return <View style={styles.logoCrop}>
-    <Image source={require('@/assets/images/stations/cleanfuel.png')} style={styles.cleanfuelLogo} resizeMode="stretch" accessibilityLabel="Cleanfuel logo" />
-  </View>;
-  if (logo === 'ecooil') return <View style={styles.logoCrop}>
-    <Image source={require('@/assets/images/stations/ecooil.png')} style={styles.ecooilLogo} resizeMode="stretch" accessibilityLabel="EcoOil logo" />
-  </View>;
-  return <View style={styles.logoFallback} accessible={false}>
-    <ThemedText type="smallBold" style={styles.logoInitials}>{name.split(/\s+/).map(word => word[0]).slice(0, 2).join('').toUpperCase()}</ThemedText>
-  </View>;
 }
 
 function Change({ label, amount }: { label: string; amount: number | null }) {
@@ -259,11 +236,6 @@ const styles = StyleSheet.create({
   card: { padding: 20, borderRadius: 14, gap: 16 },
   cardHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   brand: { flex: 1, minWidth: 150, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  logo: { width: 44, height: 44 }, logoCrop: { width: 44, height: 44, overflow: 'hidden' },
-  cleanfuelLogo: { width: 301, height: 44, left: -2 },
-  ecooilLogo: { width: 110, height: 44, left: -4 },
-  logoFallback: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#34526A', alignItems: 'center', justifyContent: 'center' },
-  logoInitials: { color: '#FFFFFF' },
   sourceLink: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
   company: { fontSize: 21, lineHeight: 28, fontWeight: '600', flexShrink: 1 },
   effectiveDate: { textAlign: 'right', flexShrink: 1 },

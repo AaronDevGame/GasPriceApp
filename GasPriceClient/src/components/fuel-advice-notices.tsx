@@ -8,10 +8,9 @@ import { FuelAdviceCard } from '@/components/fuel-advice-card';
 import { ThemedText } from '@/components/themed-text';
 import { adviceSummary, type AdviceFuel } from '@/fuel/advice';
 import { useFuelAdvice } from '@/fuel/use-fuel-advice';
-import { getDoePriceBrowse } from '@/fuel/api';
+import { getFuelAdjustments, type FuelAdjustmentWeek } from '@/fuel/api';
 import { useAuth } from '@/auth/auth-provider';
 import { useTheme } from '@/hooks/use-theme';
-import { useLatestNews } from '@/news/use-latest-news';
 
 type HeaderFuel = Extract<AdviceFuel, 'gasoline' | 'diesel'>;
 
@@ -57,24 +56,27 @@ function AdviceNotice({ fuel, onOpen, active }: { fuel: HeaderFuel; onOpen: () =
 function AdvicePanel({ initialFuel, onClose }: { initialFuel: HeaderFuel; onClose: () => void }) {
   const theme = useTheme();
   const [fuel, setFuel] = useState<AdviceFuel>(initialFuel);
-  const [company, setCompany] = useState<string | null>(null);
-  const advice = useFuelAdvice(fuel, company);
+  const advice = useFuelAdvice(fuel, null);
   const { session } = useAuth();
   const authenticated = session?.state === 'authenticated';
-  const [doeCompanies, setDoeCompanies] = useState<string[]>([]);
+  const [week, setWeek] = useState<FuelAdjustmentWeek | null>();
+  const [weekUnavailable, setWeekUnavailable] = useState(false);
+  const [refreshCount, setRefreshCount] = useState(0);
   useEffect(() => {
     if (!authenticated) return;
     let active = true;
-    void getDoePriceBrowse().then(feed => {
-      if (active) setDoeCompanies(feed.selected?.prices.map(price => price.oilCompany) ?? []);
-    }).catch(() => {});
+    void getFuelAdjustments(1).then(feed => {
+      if (active) {
+        setWeek(feed.groups[0] ?? null);
+        setWeekUnavailable(false);
+      }
+    }, () => { if (active) setWeekUnavailable(true); });
     return () => { active = false; };
-  }, [authenticated]);
-  const news = useLatestNews();
-  const companies = [...new Set([
-    ...doeCompanies,
-    ...(news.item?.article.adjustments.flatMap(change => change.oilCompany ? [change.oilCompany] : []) ?? []),
-  ])];
+  }, [authenticated, refreshCount]);
+  const reload = () => {
+    setRefreshCount(count => count + 1);
+    return advice.reload();
+  };
   return <SafeAreaView style={styles.overlay}>
     <Pressable accessibilityRole="button" accessibilityLabel="Close refueling advice" onPress={onClose} style={StyleSheet.absoluteFill} />
     <View accessibilityViewIsModal style={[styles.panel, { backgroundColor: theme.background }]}>
@@ -86,8 +88,11 @@ function AdvicePanel({ initialFuel, onClose }: { initialFuel: HeaderFuel; onClos
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.panelContent} keyboardShouldPersistTaps="handled">
-        <FuelAdviceCard {...advice} fuelType={fuel} onFuelChange={setFuel} oilCompany={company}
-          onCompanyChange={setCompany} companies={companies} onNavigate={onClose} />
+        <FuelAdviceCard {...advice} reload={reload} fuelType={fuel} onFuelChange={setFuel}
+          weeklyAdjustments={authenticated ? week ?? null : null}
+          weeklyAdjustmentsLoading={authenticated && week === undefined && !weekUnavailable}
+          weeklyAdjustmentsUnavailable={!authenticated || weekUnavailable}
+          onNavigate={onClose} />
         <Link href="/weekly-changes" onPress={onClose} style={styles.weeklyLink}>Weekly adjustments ↗</Link>
       </ScrollView>
     </View>

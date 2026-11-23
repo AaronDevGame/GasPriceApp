@@ -87,8 +87,8 @@ export type FuelAdjustmentFeed = {
   groups: FuelAdjustmentWeek[];
 };
 
-export function getFuelAdjustments() {
-  return authClient.request<FuelAdjustmentFeed>('/fuel-prices/adjustments?weeks=52');
+export function getFuelAdjustments(weeks = 52) {
+  return authClient.request<FuelAdjustmentFeed>(`/fuel-prices/adjustments?weeks=${weeks}`);
 }
 
 export function areaQuery(area?: Area) {

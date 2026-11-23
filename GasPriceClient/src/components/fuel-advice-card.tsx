@@ -2,31 +2,39 @@ import { Link } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
+import { StationLogo, stationBrand } from '@/components/station-brand';
 import { AppIcon } from '@/components/app-icon';
 import { useTheme } from '@/hooks/use-theme';
-import { adviceCurrentDecrease, adviceCurrentDecreaseContext, adviceHeadline, adviceImpact, adviceTime, type AdviceFuel, type FuelAdvice } from '@/fuel/advice';
+import { adviceCurrentDecrease, adviceCurrentDecreaseContext, adviceHeadline, adviceImpact, adviceTime, forecastLabel, type AdviceFuel, type FuelAdvice } from '@/fuel/advice';
+import type { FuelAdjustmentWeek } from '@/fuel/api';
 import { changeLabel, newsDate, newsIdPattern } from '@/news/api';
 
-export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFuelChange, oilCompany,
-  onCompanyChange, companies, initiallyShowDetails = false, onNavigate }: {
+function weekDate(date: string) {
+  return new Date(`${date}T12:00:00+08:00`).toLocaleDateString('en-PH', {
+    timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric',
+  });
+}
+
+export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFuelChange, weeklyAdjustments,
+  weeklyAdjustmentsLoading, weeklyAdjustmentsUnavailable, initiallyShowDetails = false, onNavigate }: {
   advice: FuelAdvice | null; loading: boolean; error: boolean; reload: () => Promise<void>;
-  fuelType: AdviceFuel; onFuelChange: (fuel: AdviceFuel) => void; oilCompany: string | null;
-  onCompanyChange: (company: string | null) => void; companies: string[];
+  fuelType: AdviceFuel; onFuelChange: (fuel: AdviceFuel) => void;
+  weeklyAdjustments?: FuelAdjustmentWeek | null;
+  weeklyAdjustmentsLoading?: boolean; weeklyAdjustmentsUnavailable?: boolean;
   initiallyShowDetails?: boolean;
   onNavigate?: () => void;
 }) {
   const theme = useTheme();
-  const [showCompanies, setShowCompanies] = useState(false);
   const [showDetails, setShowDetails] = useState(initiallyShowDetails);
   const status = advice?.status ?? 'unknown';
-  const accent = status === 'gas_now' ? theme.advicePositive
-    : status === 'wait' || advice?.reason === 'forecast_only' ? theme.adviceWait : theme.textSecondary;
+  const forecast = advice?.forecast;
+  const accent = forecast || status === 'wait' ? theme.adviceWait
+    : status === 'gas_now' ? theme.advicePositive : theme.textSecondary;
   const impact = advice ? adviceImpact(advice) : null;
   const currentDecrease = advice ? adviceCurrentDecrease(advice) : null;
   const currentContext = advice ? adviceCurrentDecreaseContext(advice) : null;
   const sourceEvidence = [...(advice?.evidence ?? []), ...(advice?.currentAdjustments ?? [])];
   const evidence = advice?.evidence[0];
-  const options = [...new Set([...companies, ...(oilCompany ? [oilCompany] : [])])].sort((a, b) => a.localeCompare(b));
   const sources = [...new Set(sourceEvidence.flatMap(e => e.sourceUrls))]
     .filter(url => { try { return new URL(url).protocol === 'https:'; } catch { return false; } });
   const newsId = sourceEvidence.find(e => e.newsId && newsIdPattern.test(e.newsId))?.newsId;
@@ -49,53 +57,67 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
           <ThemedText type="smallBold" themeColor={fuelType === fuel ? 'text' : 'textSecondary'}>{fuel[0].toUpperCase() + fuel.slice(1)}</ThemedText>
         </Pressable>)}
       </View>
-      {options.length > 0 ? <Pressable accessibilityRole="button" accessibilityLabel="Choose company for fuel advice"
-        accessibilityState={{ expanded: showCompanies }} onPress={() => setShowCompanies(value => !value)}
-        style={[styles.scope, { borderColor: theme.backgroundSelected }]}>
-        <ThemedText type="smallBold">{oilCompany ?? 'Nationwide'} {showCompanies ? '▴' : '▾'}</ThemedText>
-      </Pressable> : <ThemedText type="small" themeColor="textSecondary">Nationwide advice</ThemedText>}
     </View>
-    {showCompanies && <View style={styles.companyOptions}>
-      {[null, ...options].map(company => <Pressable key={company ?? 'nationwide'} accessibilityRole="button"
-        accessibilityState={{ selected: oilCompany === company }} onPress={() => { onCompanyChange(company); setShowCompanies(false); }}
-        style={[styles.scope, { backgroundColor: oilCompany === company ? theme.backgroundSelected : theme.background }]}>
-        <ThemedText type="small">{company ?? 'Nationwide'}</ThemedText>
-      </Pressable>)}
-    </View>}
 
     <View style={styles.body}>
       <View style={styles.recommendation} accessibilityLiveRegion="polite">
-        {currentContext && <View style={[styles.currentContext, { borderColor: theme.advicePositive }]}>
+        {forecast && <>
+          <ThemedText accessibilityRole="header" style={[styles.headline, { color: theme.adviceWait }]}>{forecastLabel(forecast)}</ThemedText>
+          <ThemedText>The next fuel-price adjustment is forecast and may change.</ThemedText>
+          <ThemedText type="small" style={{ color: theme.adviceWait }}>Next adjustment · Forecast: {changeLabel({
+            fuel: fuelType, oilCompany: forecast.oilCompany, status: 'forecast',
+            minChangePerLiter: forecast.minChangePerLiter, maxChangePerLiter: forecast.maxChangePerLiter,
+          })}. Expected date: {adviceTime(forecast)}.</ThemedText>
+        </>}
+        {currentContext ? <View style={[styles.currentContext, { borderColor: theme.advicePositive }]}>
           <ThemedText accessibilityRole="header" style={[styles.headline, { color: theme.advicePositive }]}>Good time to refuel</ThemedText>
           <ThemedText type="smallBold" style={{ color: theme.advicePositive }}>{currentContext.change}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">{currentContext.companies.length
-            ? `Confirmed reports from ${currentContext.companies.join(', ')}. Other companies may differ.`
+            ? `Confirmed for ${currentContext.companies.join(', ')}.`
             : 'Based on the latest confirmed nationwide adjustment.'}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">Effective: {adviceTime(currentContext.evidence)}{currentContext.evidence.isEffectiveTimeDefaulted ? '\n6:00 AM PHT default used' : ''}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">Effective {weekDate(currentContext.evidence.effectiveDatePhilippines)}</ThemedText>
+        </View> : (!forecast || status !== 'unknown' || advice?.reason === 'conflicting_adjustments') && <>
+          <ThemedText accessibilityRole="header" style={[styles.headline, { color: currentDecrease ? theme.advicePositive : accent }]}>{adviceHeadline(advice, loading, error)}</ThemedText>
+          {currentDecrease && <ThemedText type="smallBold" style={{ color: theme.advicePositive }}>{currentDecrease}</ThemedText>}
+          {!currentDecrease && <ThemedText>{advice?.message ?? (loading ? 'Looking up the latest fuel-price advice for your selection.'
+            : error ? 'We couldn’t load fuel advice. Check your connection and try again.' : 'No current confirmed update is available.')}</ThemedText>}
+          {evidence && advice?.reason !== 'conflicting_adjustments' && <ThemedText type="small" themeColor="textSecondary">
+            Effective: {adviceTime(evidence)}{evidence.isEffectiveTimeDefaulted ? '\n6:00 AM PHT default used' : ''}
+          </ThemedText>}
+        </>}
+        {impact && <View style={[styles.impact, { backgroundColor: theme.background, borderColor: theme.backgroundSelected }]}>
+          <ThemedText type="small" themeColor="textSecondary">{impact.label}</ThemedText>
+          <ThemedText style={[styles.savings, { color: status === 'gas_now' ? theme.advicePositive : accent }]}>₱{impact.total.toFixed(2)}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">₱{impact.amount.toFixed(2)}/L {evidence!.minChangePerLiter < 0 ? 'decrease' : 'increase'} · Example fill</ThemedText>
         </View>}
-        {(!currentContext || advice?.forecast) && <ThemedText accessibilityRole="header" style={[styles.headline, { color: accent }]}>{adviceHeadline(advice, loading, error)}</ThemedText>}
-        {currentDecrease && <ThemedText type="smallBold" style={{ color: theme.advicePositive }}>{currentDecrease}</ThemedText>}
-        <ThemedText>{currentContext ? 'The current decrease is confirmed for the reports shown above. Any next adjustment remains subject to confirmation.' : advice?.message ?? (loading ? 'Looking up the latest fuel-price advice for your selection.'
-          : error ? 'We couldn’t load fuel advice. Check your connection and try again.' : 'No current confirmed update is available.')}</ThemedText>
-        {evidence && advice?.reason !== 'conflicting_adjustments' && <ThemedText type="small" themeColor="textSecondary">
-          Effective: {adviceTime(evidence)}{evidence.isEffectiveTimeDefaulted ? '\n6:00 AM PHT default used' : ''}
-        </ThemedText>}
-        {advice?.forecast && <ThemedText type="small" style={{ color: theme.adviceWait }}>Next adjustment · Forecast: {changeLabel({
-          fuel: fuelType, oilCompany: advice.forecast.oilCompany, status: 'forecast',
-          minChangePerLiter: advice.forecast.minChangePerLiter, maxChangePerLiter: advice.forecast.maxChangePerLiter,
-        })}. Subject to change. Expected date: {adviceTime(advice.forecast)}. A forecast does not confirm when to refuel.</ThemedText>}
       </View>
-      {impact && <View style={[styles.impact, { backgroundColor: theme.background, borderColor: theme.backgroundSelected }]}>
-        <ThemedText type="small" themeColor="textSecondary">{impact.label}</ThemedText>
-        <ThemedText style={[styles.savings, { color: accent }]}>₱{impact.total.toFixed(2)}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">₱{impact.amount.toFixed(2)}/L {evidence!.minChangePerLiter < 0 ? 'decrease' : 'increase'} · Example fill</ThemedText>
+      {weeklyAdjustments !== undefined && <View style={[styles.companyList, { backgroundColor: theme.background, borderColor: theme.backgroundSelected }]}>
+        <ThemedText accessibilityRole="header" type="smallBold">Weekly adjustments by company</ThemedText>
+        {weeklyAdjustments?.adjustments.length ? <>
+          <ThemedText type="small" themeColor="textSecondary">{weekDate(weeklyAdjustments.weekStart)} – {weekDate(weeklyAdjustments.weekEnd)}</ThemedText>
+          {weeklyAdjustments.adjustments.map(item => {
+            const brand = stationBrand(item.oilCompany);
+            const amount = item[`${fuelType}ChangePerLiter`];
+            const color = amount === null || amount === 0 ? theme.textSecondary
+              : amount < 0 ? theme.advicePositive : theme.priceIncrease;
+            const change = amount === null ? 'Not listed' : amount === 0 ? 'No change'
+              : `${amount < 0 ? '↓' : '↑'} ₱${Math.abs(amount).toFixed(2)}/L`;
+            return <View key={item.id} style={styles.companyRow}>
+              <StationLogo {...brand} size={28} />
+              <ThemedText type="smallBold" style={styles.companyName}>{brand.name}</ThemedText>
+              <ThemedText type="small" style={{ color }} accessibilityLabel={amount
+                ? `${amount < 0 ? 'Decrease' : 'Increase'} of ₱${Math.abs(amount).toFixed(2)} per liter` : change}>{change}</ThemedText>
+            </View>;
+          })}
+        </> : <ThemedText type="small" themeColor="textSecondary">{weeklyAdjustmentsLoading ? 'Loading weekly adjustments…'
+          : weeklyAdjustmentsUnavailable ? 'Company adjustments unavailable' : 'No weekly adjustments to display yet'}</ThemedText>}
       </View>}
     </View>
 
     <View style={[styles.footer, { borderTopColor: theme.backgroundSelected }]}>
       <View style={styles.metadata}>
         <ThemedText type="small" themeColor="textSecondary">{advice ? `${currentContext ? 'Confirmed current decrease' : advice.evidence.length ? 'Confirmed adjustment' : advice.forecast ? 'Forecast only' : 'No confirmed update'} · Checked ${newsDate(advice.evaluatedAtUtc, true)} PHT` : 'Price-based advice'}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">{oilCompany ? `${oilCompany} announcements and nationwide updates.` : 'Nationwide announcements. Individual companies may differ.'} Keep enough fuel for your trip.</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">Individual companies may differ. Keep enough fuel for your trip.</ThemedText>
       </View>
       <View style={styles.actions}>
         <Link href="/fuel-prices" onPress={onNavigate} asChild><Pressable accessibilityRole="link" style={StyleSheet.flatten([styles.primaryAction, { backgroundColor: theme.backgroundSelected, borderColor: accent }])}>
@@ -131,8 +153,9 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   fuels: { flexDirection: 'row', flexWrap: 'wrap', borderRadius: 12, padding: 4, gap: 4 },
   fuel: { minHeight: 44, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 9, justifyContent: 'center' },
-  scope: { minHeight: 44, borderWidth: 1, borderRadius: 10, paddingVertical: 11, paddingHorizontal: 14, justifyContent: 'center' },
-  companyOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  companyList: { flexGrow: 1, flexShrink: 1, flexBasis: 270, minWidth: 0, padding: 14, gap: 7, borderWidth: 1, borderRadius: 12 },
+  companyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  companyName: { flex: 1 },
   body: { flexDirection: 'row', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' },
   recommendation: { flexGrow: 1, flexShrink: 1, flexBasis: 360, gap: 12, minWidth: 0 },
   currentContext: { borderWidth: 1, borderRadius: 12, padding: 16, gap: 8 },
