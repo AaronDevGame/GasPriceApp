@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Keep confirmed current-adjustment reports visible when an earlier company report for the same change expires. Conflicting reports still block refueling reassurance.
+
 ### Added
 - Return latest applied confirmed adjustment context through `currentAdjustments` in fuel advice, including company-specific DOE records in the nationwide view while preserving their company names and sources. Keep forecasts and nationwide buying advice separate; expired or newer applied events block older rollback context.
 
