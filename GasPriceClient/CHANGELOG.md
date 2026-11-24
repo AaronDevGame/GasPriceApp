@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Lead with the refueling recommendation in the advice popup and show the local price range below the adjustment timing.
 - Show gasoline RON 91 and diesel price ranges beside the adjustments in the header, with City of Manila as the fallback. Mark estimates and DOE report dates, show the underlying report date in advice, and open the company list with the matching fuel selected.
 - Show compact gray map cards with an italic “No recent report” when neither fuel has prices. Show the fuel name alongside a single available price range.
 - Use a translucent gradient on unselected map price cards so map details remain visible, and a solid deep green fill on the selected card.

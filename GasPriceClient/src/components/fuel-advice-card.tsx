@@ -1,5 +1,5 @@
 import { Link } from 'expo-router';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { AppIcon } from '@/components/app-icon';
@@ -20,7 +20,7 @@ function companyCount(count: number) {
 }
 
 export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFuelChange, weeklyAdjustments,
-  weeklyAdjustmentsLoading, weeklyAdjustmentsUnavailable, initiallyShowDetails = false, onNavigate, onCompare }: {
+  weeklyAdjustmentsLoading, weeklyAdjustmentsUnavailable, initiallyShowDetails = false, onNavigate, onCompare, priceDetails }: {
   advice: FuelAdvice | null; loading: boolean; error: boolean; reload: () => Promise<void>;
   fuelType: AdviceFuel; onFuelChange: (fuel: AdviceFuel) => void;
   weeklyAdjustments?: FuelAdjustmentWeek | null;
@@ -28,6 +28,7 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
   initiallyShowDetails?: boolean;
   onNavigate?: () => void;
   onCompare?: () => void;
+  priceDetails?: ReactNode;
 }) {
   const theme = useTheme();
   const [showDetails, setShowDetails] = useState(initiallyShowDetails);
@@ -38,6 +39,11 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
   const impact = advice ? adviceImpact(advice) : null;
   const currentDecrease = advice ? adviceCurrentDecrease(advice) : null;
   const currentContext = advice ? adviceCurrentDecreaseContext(advice) : null;
+  const showRecommendation = !forecast || status !== 'unknown' || advice?.reason === 'conflicting_adjustments';
+  const headline = currentContext
+    ? currentContext.companies.length ? 'Good time to refuel at reporting companies' : 'Good time to refuel'
+    : showRecommendation ? adviceHeadline(advice, loading, error) : forecastLabel(forecast);
+  const headlineColor = currentContext || status === 'gas_now' ? theme.advicePositive : accent;
   const weeklySummary = weeklyAdjustments && summarizeWeeklyAdjustments(weeklyAdjustments.adjustments, fuelType);
   const sourceEvidence = [...(advice?.evidence ?? []), ...(advice?.currentAdjustments ?? [])];
   const evidence = advice?.evidence[0];
@@ -48,7 +54,10 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
   const compareLabel = <ThemedText type="smallBold" style={{ color: accent }}>Compare fuel prices →</ThemedText>;
   return <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: accent }]}>
     <View style={styles.topline}>
-      <View style={styles.label}><AppIcon name="fuel" color={accent} /><ThemedText type="smallBold">SHOULD I GAS UP?</ThemedText></View>
+      <View style={styles.label} accessibilityLiveRegion="polite">
+        <AppIcon name="fuel" color={headlineColor} />
+        <ThemedText accessibilityRole="header" style={[styles.headline, { color: headlineColor }]}>{headline}</ThemedText>
+      </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Refresh fuel advice" disabled={loading}
         accessibilityState={{ disabled: loading }} onPress={() => void reload()}
         style={({ pressed, hovered }) => [styles.textButton, (pressed || hovered || loading) && styles.dim]}>
@@ -69,30 +78,29 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
 
     <View style={styles.body}>
       <View style={styles.recommendation} accessibilityLiveRegion="polite">
-        {forecast && <>
-          <ThemedText accessibilityRole="header" style={[styles.headline, { color: theme.adviceWait }]}>{forecastLabel(forecast)}</ThemedText>
-          <ThemedText>The next fuel-price adjustment is forecast and may change.</ThemedText>
-          <ThemedText type="small" style={{ color: theme.adviceWait }}>Next adjustment · Forecast: {changeLabel({
-            fuel: fuelType, oilCompany: forecast.oilCompany, status: 'forecast',
-            minChangePerLiter: forecast.minChangePerLiter, maxChangePerLiter: forecast.maxChangePerLiter,
-          })}. Expected date: {adviceTime(forecast)}.</ThemedText>
-        </>}
         {currentContext ? <View style={[styles.currentContext, { borderColor: theme.advicePositive }]}>
-          <ThemedText accessibilityRole="header" style={[styles.headline, { color: theme.advicePositive }]}>{currentContext.companies.length
-            ? 'Good time to refuel at reporting companies' : 'Good time to refuel'}</ThemedText>
           <ThemedText type="smallBold" style={{ color: theme.advicePositive }}>{currentContext.change}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">{currentContext.companies.length
             ? `Confirmed for ${companyCount(currentContext.companies.length)}.`
             : 'Based on the latest confirmed nationwide adjustment.'}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">Effective {weekDate(currentContext.evidence.effectiveDatePhilippines)}</ThemedText>
-        </View> : (!forecast || status !== 'unknown' || advice?.reason === 'conflicting_adjustments') && <>
-          <ThemedText accessibilityRole="header" style={[styles.headline, { color: currentDecrease ? theme.advicePositive : accent }]}>{adviceHeadline(advice, loading, error)}</ThemedText>
+        </View> : showRecommendation && <>
           {currentDecrease && <ThemedText type="smallBold" style={{ color: theme.advicePositive }}>{currentDecrease}</ThemedText>}
           {!currentDecrease && <ThemedText>{advice?.message ?? (loading ? 'Looking up the latest fuel-price advice for your selection.'
             : error ? 'We couldn’t load fuel advice. Check your connection and try again.' : 'No current confirmed update is available.')}</ThemedText>}
           {evidence && advice?.reason !== 'conflicting_adjustments' && <ThemedText type="small" themeColor="textSecondary">
             Effective: {adviceTime(evidence)}{evidence.isEffectiveTimeDefaulted ? '\n6:00 AM PHT default used' : ''}
           </ThemedText>}
+        </>}
+        {priceDetails}
+        {forecast && <>
+          {(currentContext || showRecommendation) && <ThemedText accessibilityRole="header" type="smallBold"
+            style={{ color: theme.adviceWait }}>{forecastLabel(forecast)}</ThemedText>}
+          <ThemedText>The next fuel-price adjustment is forecast and may change.</ThemedText>
+          <ThemedText type="small" style={{ color: theme.adviceWait }}>Next adjustment · Forecast: {changeLabel({
+            fuel: fuelType, oilCompany: forecast.oilCompany, status: 'forecast',
+            minChangePerLiter: forecast.minChangePerLiter, maxChangePerLiter: forecast.maxChangePerLiter,
+          })}. Expected date: {adviceTime(forecast)}.</ThemedText>
         </>}
         {impact && <View style={[styles.impact, { backgroundColor: theme.background, borderColor: theme.backgroundSelected }]}>
           <ThemedText type="small" themeColor="textSecondary">{impact.label}</ThemedText>
@@ -150,7 +158,7 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
 const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 20, padding: 20, gap: 20 },
   topline: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  label: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  label: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, gap: 10 },
   controls: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   fuels: { flexDirection: 'row', flexWrap: 'wrap', borderRadius: 12, padding: 4, gap: 4 },
   fuel: { minHeight: 44, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 9, justifyContent: 'center' },
@@ -158,7 +166,7 @@ const styles = StyleSheet.create({
   body: { flexDirection: 'row', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' },
   recommendation: { flexGrow: 1, flexShrink: 1, flexBasis: 360, gap: 12, minWidth: 0 },
   currentContext: { borderWidth: 1, borderRadius: 12, padding: 16, gap: 8 },
-  headline: { fontSize: 28, lineHeight: 36, fontWeight: '700', letterSpacing: -0.5 },
+  headline: { fontSize: 28, lineHeight: 36, fontWeight: '700', letterSpacing: -0.5, flexShrink: 1 },
   impact: { flexBasis: 230, flexGrow: 1, flexShrink: 1, padding: 18, borderRadius: 14, borderWidth: 1, gap: 8, minWidth: 0 },
   savings: { fontSize: 26, lineHeight: 34, fontWeight: '700', fontVariant: ['tabular-nums'] },
   footer: { borderTopWidth: 1, paddingTop: 16, gap: 16 }, metadata: { gap: 6 },

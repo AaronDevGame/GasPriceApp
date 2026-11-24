@@ -122,21 +122,23 @@ function AdvicePanel({ initialFuel, onClose }: { initialFuel: HeaderFuel; onClos
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.panelContent} keyboardShouldPersistTaps="handled">
-        {price && <View style={[styles.priceDetails, { backgroundColor: theme.backgroundElement }]}>
-          <ThemedText type="smallBold">{price.area}{fuel === 'gasoline' ? ' · Gasoline RON 91' : ' · Diesel'} · {formatPrice(price.range)}/L</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {price.estimated ? 'Estimated using confirmed adjustments' : 'DOE reported range'}
-            {price.baselineDate ? ` · DOE data through ${reportDate(price.baselineDate)}` : ''}
-            {price.outdated ? ' · Outdated' : ''}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">Actual prices vary by station.</ThemedText>
-        </View>}
         <FuelAdviceCard {...advice} reload={reload} fuelType={fuel} onFuelChange={setFuel}
           weeklyAdjustments={authenticated ? week ?? null : null}
           weeklyAdjustmentsLoading={authenticated && week === undefined && !weekUnavailable}
           weeklyAdjustmentsUnavailable={!authenticated || weekUnavailable}
           onCompare={fuel === 'kerosene' ? undefined : compare}
-          onNavigate={onClose} />
+          onNavigate={onClose}
+          priceDetails={price && <View style={[styles.priceDetails, {
+            backgroundColor: theme.background, borderColor: theme.backgroundSelected,
+          }]}>
+            <ThemedText type="smallBold">{price.area}{fuel === 'gasoline' ? ' · Gasoline RON 91' : ' · Diesel'} · {formatPrice(price.range)}/L</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {price.estimated ? 'Estimated using confirmed adjustments' : 'DOE reported range'}
+              {price.baselineDate ? ` · DOE data through ${reportDate(price.baselineDate)}` : ''}
+              {price.outdated ? ' · Outdated' : ''}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">Actual prices vary by station.</ThemedText>
+          </View>} />
         <Link href="/weekly-changes" onPress={onClose} style={styles.weeklyLink}>Weekly adjustments ↗</Link>
       </ScrollView>
     </View>
@@ -175,7 +177,7 @@ const styles = StyleSheet.create({
   amount: { fontSize: 13, fontVariant: ['tabular-nums'] },
   priceCaption: { flexDirection: 'row', alignItems: 'flex-start', gap: 3 },
   priceLabel: { flexShrink: 1, fontSize: 11, lineHeight: 15 },
-  priceDetails: { padding: 14, borderRadius: 12, gap: 4 },
+  priceDetails: { padding: 14, borderRadius: 12, borderWidth: 1, gap: 4 },
   overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.65)', padding: 16 },
   panel: { width: '100%', maxWidth: 960, maxHeight: '100%', flexShrink: 1, borderRadius: 20, overflow: 'hidden' },
   panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 16 },
