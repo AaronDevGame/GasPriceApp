@@ -9,6 +9,7 @@ export const mapLabelColors = {
     border: '#6CB4F8',
   },
   selected: { background: '#115442', border: '#69E0B3' },
+  unavailable: { background: 'rgba(60, 68, 77, 0.87)', border: '#9AA5B1', text: '#E7EBF0' },
   textShadow: '#071322',
 };
 
@@ -36,7 +37,10 @@ export function priceLabel(price: ReturnType<typeof areaPrices>) {
   }
   return `${price.estimated ? 'Includes estimates' : 'DOE reported'}${price.outdated ? ' · Outdated reports' : ''}`;
 }
-export type MapLabel = { id: string; coverage: string; price: ReturnType<typeof areaPrices>; anchor: Point; x: number; y: number; width: number; height: number; fontSize: number; name: string };
+export type MapLabel = {
+  id: string; name: string; priceLines: string[]; coverage: string; accessibilityLabel: string;
+  price: ReturnType<typeof areaPrices>; anchor: Point; x: number; y: number; width: number; height: number; fontSize: number;
+};
 // Search the part of the city's bounding box where a full label can fit on screen.
 function* candidates(city: MapArea, viewport: Viewport, width: number, height: number): Generator<Point> {
   const nw = project([city.bbox[0], city.bbox[3]], viewport);
@@ -77,10 +81,15 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null): Map
   for (const { area, price } of sorted) {
     const name = area.name;
     const fontSize = 11;
-    const coverage = [priceLabel(price), level === 'city' ? (price.complete ? '' : 'Incomplete') :
+    const priceRows = [{ fuel: 'RON 91', range: price.gasoline }, { fuel: 'Diesel', range: price.diesel }]
+      .flatMap(({ fuel, range }) => range ? [{ fuel, text: rangeText(range) }] : []);
+    const priceLines = priceRows.map(({ fuel, text }) => priceRows.length === 1 ? `${fuel} ${text}` : text);
+    const coverage = [priceLabel(price), !priceLines.length ? '' : level === 'city' ? (price.complete ? '' : 'Incomplete') :
       `${price.reported}/${price.total} cities with prices${price.complete ? '' : ' · incomplete'}`].filter(Boolean).join('\n');
-    const height = 62 + coverage.split('\n').length * 16;
-    const longestLine = Math.max(name.length, rangeText(price.gasoline).length, rangeText(price.diesel).length, ...coverage.split('\n').map(line => line.length));
+    const accessibilityLabel = [name, ...priceRows.map(({ fuel, text }) => `${fuel} ${text}`), coverage].join(', ');
+    const lines = [name, ...priceLines, ...coverage.split('\n')];
+    const height = 14 + lines.length * 16;
+    const longestLine = Math.max(...lines.map(line => line.length));
     const width = Math.min(viewport.width - 16, Math.max(130, longestLine * fontSize * 0.64 + 18));
     const positions = [...candidates(area, viewport, width, height)];
     const position = positions.find(([x, y]) => !placed.some(other =>
@@ -88,7 +97,7 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null): Map
     // Selected areas go first. Never force a colliding card into the remaining space.
     if (position) {
       const [x, y] = position;
-      placed.push({ id: area.id, price, coverage, name, height, fontSize, anchor: pointAtPixel(position, viewport), x, y, width });
+      placed.push({ id: area.id, price, priceLines, coverage, accessibilityLabel, name, height, fontSize, anchor: pointAtPixel(position, viewport), x, y, width });
     }
   }
   return placed;

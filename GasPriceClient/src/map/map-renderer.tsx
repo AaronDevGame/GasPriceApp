@@ -5,7 +5,7 @@ import MapView, { Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-map
 
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
-import { mapLabelColors, placeLabels, rangeText } from './labels';
+import { mapLabelColors, placeLabels } from './labels';
 import type { Bounds, MapRendererProps, Point } from './types';
 
 const coordinate = ([longitude, latitude]: Point) => ({ latitude, longitude });
@@ -175,16 +175,21 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         const [x, y] = liveViewport ? project(label.anchor, liveViewport) : [label.x, label.y];
         const left = x - label.width / 2, top = y - label.height / 2;
         if (liveViewport && (left + label.width < 0 || left > size.width || top + label.height < 0 || top > size.height)) return null;
-        return <View accessible key={`${label.id}:${label.fontSize}:${label.name}:${rangeText(label.price.gasoline)}:${rangeText(label.price.diesel)}:${label.coverage}:${selected === label.id}`}
+        const highlighted = label.id === selected;
+        const hasPrices = label.priceLines.length > 0;
+        const labelStyle = hasPrices ? (highlighted ? styles.selectedLabel : styles.unselectedLabel) : styles.unavailableLabel;
+        const borderColor = highlighted ? mapLabelColors.selected.border : (hasPrices ? mapLabelColors.unselected.border : mapLabelColors.unavailable.border);
+        const priceStyle = [styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }];
+        return <View accessible key={`${label.id}:${label.accessibilityLabel}:${highlighted}`}
           style={{ position: 'absolute', left, top, zIndex: labels.length - priority }}
-          accessibilityLabel={`${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`}>
-          <View style={[styles.label, label.id === selected ? styles.selectedLabel : styles.unselectedLabel,
-            { width: label.width, height: label.height, borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
-            <Text numberOfLines={1} allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{label.name}</Text>
-            <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.gasoline)}</Text>
-            <Text allowFontScaling={false} style={[styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }]}>{rangeText(label.price.diesel)}</Text>
-            {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, styles.coverage,
-              label.id !== selected && { color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB' }]}>{label.coverage}</Text>}
+          accessibilityLabel={label.accessibilityLabel}>
+          <View style={[styles.label, labelStyle,
+            { width: label.width, height: label.height, borderColor, borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
+            <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, !hasPrices && styles.unavailableText]}>{label.name}</Text>
+            {label.priceLines.map((line, i) => <Text key={i} allowFontScaling={false} style={priceStyle}>{line}</Text>)}
+            <Text allowFontScaling={false} style={[styles.price, styles.coverage, hasPrices
+              ? !highlighted && { color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB' }
+              : [styles.unavailableText, styles.noReport]]}>{label.coverage}</Text>
           </View>
         </View>;
       })}
@@ -198,9 +203,12 @@ const styles = StyleSheet.create({
   fill: { flex: 1 }, unavailable: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   notice: { color: '#E8EDF5', textAlign: 'center' }, warning: { position: 'absolute', top: 10, left: 12, right: 12, padding: 10, backgroundColor: '#243142' },
   label: { height: 46, paddingVertical: 5, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  selectedLabel: { backgroundColor: mapLabelColors.selected.background, borderColor: mapLabelColors.selected.border },
-  unselectedLabel: { backgroundColor: mapLabelColors.unselected.background, borderColor: mapLabelColors.unselected.border,
+  selectedLabel: { backgroundColor: mapLabelColors.selected.background },
+  unselectedLabel: { backgroundColor: mapLabelColors.unselected.background,
     experimental_backgroundImage: mapLabelColors.unselected.gradient },
+  unavailableLabel: { backgroundColor: mapLabelColors.unavailable.background },
+  unavailableText: { color: mapLabelColors.unavailable.text },
+  noReport: { fontStyle: 'italic' },
   coverage: { fontSize: 10, textAlign: 'center' },
   retry: { padding: 10, marginTop: 6, borderRadius: 8, backgroundColor: '#354B64' },
   price: { fontSize: 11, lineHeight: 17, color: '#FFFFFF', fontWeight: '600', fontVariant: ['tabular-nums'],

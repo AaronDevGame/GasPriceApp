@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { boundsCenter, cameraBounds, fitZoom, MAX_ZOOM, polygons } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
-import { type MapLabel, mapLabelColors, placeLabels, rangeText } from './labels';
+import { type MapLabel, mapLabelColors, placeLabels } from './labels';
 import type { Bounds, MapRendererProps } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
@@ -21,16 +21,21 @@ function createLabels() {
             // Display-only labels let mouse, touch and wheel gestures reach the map.
             const card = document.createElement('div');
             const selected = label.id === selectedId;
-            const colors = selected ? mapLabelColors.selected : mapLabelColors.unselected;
+            const hasPrices = label.priceLines.length > 0;
+            const colors = hasPrices ? (selected ? mapLabelColors.selected : mapLabelColors.unselected) : mapLabelColors.unavailable;
+            const border = selected ? mapLabelColors.selected.border : colors.border;
             card.setAttribute('role', 'img');
-            card.setAttribute('aria-label', `${label.name}, gasoline RON 91 ${rangeText(label.price.gasoline)}, diesel ${rangeText(label.price.diesel)}, ${label.coverage}`);
-            card.style.cssText = `box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${labels.length - priority};visibility:hidden;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:white;border:2px solid ${colors.border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:none;user-select:none;font-variant-numeric:tabular-nums;`;
+            card.setAttribute('aria-label', label.accessibilityLabel);
+            card.style.cssText = `box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${labels.length - priority};visibility:hidden;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:${hasPrices ? 'white' : mapLabelColors.unavailable.text};border:2px solid ${border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:none;user-select:none;font-variant-numeric:tabular-nums;`;
             card.style.backgroundColor = colors.background;
-            if (!selected) {
+            if (hasPrices && !selected) {
               card.style.backgroundImage = mapLabelColors.unselected.gradient;
               card.style.textShadow = `0 1px 2px ${mapLabelColors.textShadow}, 0 0 4px ${mapLabelColors.textShadow}`;
             }
-            card.textContent = [label.name, rangeText(label.price.gasoline), rangeText(label.price.diesel), label.coverage].filter(Boolean).join('\n');
+            card.textContent = [label.name, ...label.priceLines].join('\n');
+            const status = document.createElement(hasPrices ? 'span' : 'em');
+            status.textContent = label.coverage;
+            card.append('\n', status);
             if (label.price.estimated || label.price.outdated) card.style.borderStyle = 'dashed';
             return { anchor: new google.maps.LatLng(label.anchor[1], label.anchor[0]), element: card };
           });

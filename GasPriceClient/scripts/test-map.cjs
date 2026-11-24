@@ -422,6 +422,18 @@ function lifecycle(h, initial = {}) {
     prices: new Map([[imus.id, h.feed([imus.id]).items[0]]]) };
   const [relocated] = placeLabels(imusSnapshot, null);
   assert(relocated, 'A visible part of Imus still has room for both price ranges');
+  const [withoutPrices] = placeLabels({ ...imusSnapshot, prices: new Map() }, imus.id);
+  assert.equal(withoutPrices.priceLines.length, 0);
+  assert.equal(withoutPrices.coverage, 'No recent report');
+  assert.equal(withoutPrices.accessibilityLabel, `${withoutPrices.name}, No recent report`);
+  assert.equal(withoutPrices.height, relocated.height - 32, 'Omitting both price rows shrinks the card');
+  const imusPrices = imusSnapshot.prices.get(imus.id);
+  for (const [missing, fuel] of [['gasoline', 'Diesel'], ['diesel', 'RON 91']]) {
+    const [partial] = placeLabels({ ...imusSnapshot, prices: new Map([[imus.id, { ...imusPrices, [missing]: null }]]) }, imus.id);
+    assert.equal(partial.priceLines.length, 1);
+    assert(partial.priceLines[0].startsWith(`${fuel} ₱`));
+    assert.equal(partial.height, relocated.height - 16);
+  }
   const [x, y] = geometry.project(relocated.anchor, clipped);
   assert(x >= relocated.width / 2 + 7.99 && y >= relocated.height / 2 + 7.99);
   const hierarchy = h.load('hierarchy');
