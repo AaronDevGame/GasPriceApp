@@ -1,6 +1,7 @@
 import { MobileHeader } from '@/components/mobile-header';
+import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, TextInput, View, type ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
@@ -12,6 +13,7 @@ import { doeCoverageLabel, doeLocationLabel, getDoePriceBrowse, type DoeFuelPric
 import { useTheme } from '@/hooks/use-theme';
 import { useForegroundRefresh } from '@/hooks/use-foreground-refresh';
 import { useFuelPrices } from '@/fuel/use-fuel-prices';
+import { useHeaderComparison } from '@/fuel/header-prices';
 import { LocalPriceBoard } from '@/components/local-price-board';
 import { DoePriceSummary, RecentPriceUpdates } from '@/components/fuel-price-summary';
 import { DashboardAction } from '@/components/dashboard-action';
@@ -25,6 +27,7 @@ const grades = [
   { value: 'RON 91', label: 'Gasoline 91' },
   { value: 'RON 95', label: 'Gasoline 95' },
 ] as const;
+const scrollPadding = 20;
 
 function priceLabel(row: DoeFuelPrice) {
   const low = `₱${row.minPricePerLiter.toFixed(2)}`;
@@ -33,10 +36,15 @@ function priceLabel(row: DoeFuelPrice) {
 }
 
 export default function FuelPricesScreen() {
+  const focused = useIsFocused();
   const fuel = useFuelPrices();
+  const { comparison, setComparison } = useHeaderComparison();
   const news = useLatestNews({ refreshOnForeground: false });
   const [mode, setMode] = useState<'map' | 'list'>('map');
   const map = useRef<FuelMapHandle>(null);
+  const scroll = useRef<ScrollView>(null);
+  const [comparisonY, setComparisonY] = useState<number | null>(null);
+  const [handledComparison, setHandledComparison] = useState<typeof comparison>(null);
   const [mapRefreshing, setMapRefreshing] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
   const followLocal = useRef(true);
@@ -54,7 +62,13 @@ export default function FuelPricesScreen() {
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
   const authenticated = session?.state === 'authenticated';
-
+  if (comparison !== handledComparison) {
+    setHandledComparison(comparison);
+    if (comparison) {
+      setGrade(comparison.fuel === 'gasoline' ? 'RON 91' : 'DIESEL');
+      setMode('list');
+    }
+  }
   const load = useCallback(async (location?: DoePriceLocation, refresh = false) => {
     const ticket = ++requestId.current;
     setLoading(true);
@@ -86,6 +100,19 @@ export default function FuelPricesScreen() {
     setSearch('');
     void load(location);
   }, [load]);
+  useEffect(() => {
+    if (!focused || !comparison || comparisonY === null || mode !== 'list' || authLoading || (authenticated && loading)) return;
+    const frame = requestAnimationFrame(() => {
+      const area = authenticated ? comparison.location : null;
+      if (area && (!selected || !sameLocation(selected, area))) {
+        choose(area);
+        return;
+      }
+      scroll.current?.scrollTo({ y: comparisonY + scrollPadding, animated: false });
+      setComparison(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [authenticated, authLoading, choose, comparison, comparisonY, focused, loading, mode, selected, setComparison]);
   useEffect(() => {
     if (!authenticated) return;
     let active = true;
@@ -151,7 +178,7 @@ export default function FuelPricesScreen() {
 
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.page}>
-      <RefreshableScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
+      <RefreshableScrollView ref={scroll} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
         refreshing={refreshing || mapRefreshing} onRefresh={refresh}
         refreshEnabled={(!authenticated || !loading) && !fuel.busy}>
         <View style={styles.content}>
@@ -202,7 +229,7 @@ export default function FuelPricesScreen() {
             {showLocal && <LocalPriceBoard item={showLocal} />}
             {report && <DoePriceSummary report={report} />}
             {!loading && selected && !report && <ThemedText themeColor="textSecondary">No DOE company report is available for {doeLocationLabel(selected)}. Choose another area or explore the map.</ThemedText>}
-            <View style={styles.controls}>
+            <View style={styles.controls} onLayout={event => setComparisonY(event.nativeEvent.layout.y)}>
               {grades.map(item => <Pressable key={item.value} accessibilityRole="button"
                 accessibilityState={{ selected: grade === item.value }} onPress={() => setGrade(item.value)}
                 style={[styles.chip, { borderColor: grade === item.value ? '#76B4FF' : theme.backgroundSelected }]}>
@@ -258,7 +285,7 @@ export default function FuelPricesScreen() {
 
 const styles = StyleSheet.create({
   hidden: { display: 'none' }, locationHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  page: { flex: 1 }, scroll: { padding: 20, alignItems: 'center' },
+  page: { flex: 1 }, scroll: { padding: scrollPadding, alignItems: 'center' },
   content: { width: '100%', maxWidth: 1160, gap: 16, paddingVertical: 12 },
   header: { gap: 8, marginBottom: 12 }, accent: { color: '#76B4FF' },
   title: { fontSize: 28, lineHeight: 36, fontWeight: '600' }, loading: { flexDirection: 'row', alignItems: 'center', gap: 12 },

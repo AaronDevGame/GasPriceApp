@@ -59,6 +59,7 @@ function harness(options = {}) {
           onForeground = callback; return () => { onForeground = undefined; };
         } };
         if (name === '@/auth/auth-provider') return { useAuth: () => auth };
+        if (name === './header-prices') return { useSetHeaderLocation: () => area => calls.push({ headerArea: area }) };
         if (name === '@/auth/session' || name === './session') return { authClient: client };
         if (name === './location' && relative === 'fuel/use-fuel-prices' && options.locationReason) return {
           requestLocation: async () => { throw new (load('fuel/location-error').LocationError)(options.locationReason); },
@@ -122,6 +123,7 @@ async function settle(h) {
   assert.ok(offlineProvider.states[3].value.at(-1).message.includes('Session check failed'));
   console.log('PASS foreground provider: no blocking loading, duplicate-return coalescing, cleanup and offline screen preservation');
   const granted = harness(); granted.load('fuel/use-fuel-prices').useFuelPrices(); granted.effects[0](); await settle(granted);
+  assert.equal(granted.calls.find(call => call.headerArea)?.headerArea.city, 'Cebu City');
   assert.equal(granted.calls[0], 'permission');
   assert.equal(JSON.stringify(granted.states[7].value), JSON.stringify({ latitude: 10.3, longitude: 123.8 }), 'Expose the successful location fix to the map');
   assert.ok(!granted.calls.some(call => call.url === '/fuel-prices/featured'));
@@ -162,6 +164,7 @@ async function settle(h) {
   }
   console.log('PASS location timeout and positioning failure show distinct recovery messages');
   const denied = harness({ denied: true }); const screen = denied.load('fuel/use-fuel-prices').useFuelPrices(); denied.effects[0](); await settle(denied);
+  assert(denied.calls.some(call => call.headerArea === null));
   const before = denied.calls.length; screen.refresh(); await settle(denied);
   assert.ok(!denied.calls.slice(before).some(call => call.url === '/fuel-prices/featured'));
   assert.ok(!denied.calls.slice(before).includes('permission'));

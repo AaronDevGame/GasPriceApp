@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Show gasoline RON 91 and diesel price ranges beside the adjustments in the header, with City of Manila as the fallback. Mark estimates and DOE report dates, show the underlying report date in advice, and open the company list with the matching fuel selected.
 - Show compact gray map cards with an italic “No recent report” when neither fuel has prices. Show the fuel name alongside a single available price range.
 - Use a translucent gradient on unselected map price cards so map details remain visible, and a solid deep green fill on the selected card.
 - Start the fuel map at city and municipality level in Metro Manila with the City of Manila highlighted. Restore that view and highlight when users center on Metro Manila, and move to the detected area when a location fix succeeds.

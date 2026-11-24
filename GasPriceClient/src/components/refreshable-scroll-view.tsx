@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { RefreshControl, ScrollView, type ScrollViewProps } from 'react-native';
 
 import { useTheme } from '@/hooks/use-theme';
@@ -6,6 +7,7 @@ export type RefreshableScrollViewProps = Omit<ScrollViewProps, 'refreshControl'>
   refreshing: boolean;
   onRefresh(): Promise<unknown> | void;
   refreshEnabled?: boolean;
+  ref?: Ref<ScrollView>;
 };
 
 export function RefreshableScrollView({ refreshing, onRefresh, refreshEnabled = true, ...props }: RefreshableScrollViewProps) {

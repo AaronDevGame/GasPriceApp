@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView } from 'react-native';
 
 import type { RefreshableScrollViewProps } from './refreshable-scroll-view';
@@ -7,8 +7,9 @@ import { useRefreshIndicator } from '@/hooks/use-refresh-indicator';
 import { attachPullToRefresh, pullRefreshThreshold, refreshHoldDistance } from '@/scroll/pull-to-refresh';
 import classes from './refreshable-scroll-view.module.css';
 
-export function RefreshableScrollView({ refreshing, onRefresh, refreshEnabled = true, children, ...props }: RefreshableScrollViewProps) {
+export function RefreshableScrollView({ refreshing, onRefresh, refreshEnabled = true, children, ref, ...props }: RefreshableScrollViewProps) {
   const scroll = useRef<ScrollView>(null);
+  useImperativeHandle(ref, () => scroll.current!, []);
   const [pull, setPull] = useState({ distance: 0, pulling: false });
   const [busy, setBusy] = useState(false);
   const active = useRefreshIndicator(busy || refreshing);

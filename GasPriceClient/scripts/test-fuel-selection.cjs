@@ -13,6 +13,8 @@ function compile(name, overrides = {}) {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
   vm.runInNewContext(code, { exports, console, URLSearchParams, setTimeout, clearTimeout,
+    requestAnimationFrame: callback => { const frame = {}; queueMicrotask(() => { if (!frame.cancelled) callback(); }); return frame; },
+    cancelAnimationFrame: frame => { frame.cancelled = true; },
     require: spec => {
       if (spec in overrides) return overrides[spec];
       const target = spec.startsWith('@/') ? spec.slice(2) : path.posix.join(path.posix.dirname(name), spec);
@@ -60,6 +62,7 @@ function harness(options = {}) {
   };
   const api = { getDoePriceBrowse: location => { calls.push(location ?? 'default'); return response(location ?? manila); },
     doeLocationLabel: location => location.city || location.province, doeCoverageLabel: report => report.city || report.province };
+  const setComparison = value => { options.comparison = value; dirty = true; };
   const components = new Proxy({}, { get: (_, name) => name });
   const overrides = {
     react, 'expo-router': { useIsFocused: () => true },
@@ -73,6 +76,7 @@ function harness(options = {}) {
     'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView' },
     '@/auth/auth-provider': { useAuth: () => auth }, '@/auth/http': { errorMessage: () => 'Offline' },
     '@/fuel/api': api, '@/fuel/selection': selection, '@/fuel/use-fuel-prices': { useFuelPrices: () => fuel },
+    '@/fuel/header-prices': { useHeaderComparison: () => ({ comparison: options.comparison ?? null, setComparison }) },
     '@/news/use-latest-news': { useLatestNews: () => news }, '@/hooks/use-theme': { useTheme: () => ({}) },
     '@/hooks/use-foreground-refresh': { useForegroundRefresh: fn => { foreground = fn; } },
     '@/map/fuel-map': { __esModule: true, default: 'FuelMap' },
@@ -87,6 +91,16 @@ function harness(options = {}) {
   return { settle, nodes, button, calls, fuel, auth, render, foreground: () => foreground(), setResponse: fn => { response = fn; } };
 }
 (async () => {
+  const comparison = harness({ comparison: { fuel: 'diesel', location: cebu } }); await comparison.settle();
+  const scroll = comparison.nodes().find(n => n.type === 'RefreshableScrollView');
+  let comparisonOffset;
+  scroll.props.ref.current = { scrollTo: ({ y }) => { comparisonOffset = y; } };
+  comparison.nodes().find(n => n.props?.onLayout).props.onLayout({ nativeEvent: { layout: { y: 200 } } });
+  await comparison.settle();
+  assert(comparison.button('Company list').props.accessibilityState.selected);
+  assert(comparison.button('Diesel').props.accessibilityState.selected);
+  assert.equal(comparison.nodes().find(n => n.type === 'DoePriceSummary').props.report.city, 'Cebu City');
+  assert.equal(comparisonOffset, 220);
   const h = harness(); await h.settle();
   assert.equal(h.calls.length, 1);
   assert.equal(h.nodes().find(n => n.type === 'FuelMap').props.location, null, 'The default company report does not drive the map camera');

@@ -20,6 +20,7 @@ export type CityPrices = {
   gasoline: PriceRange | null; diesel: PriceRange | null; expiresAtUtc: string;
   priceKind?: 'doe_reported' | 'estimated' | 'unavailable'; isOutdated?: boolean;
   weekStart?: string | null; weekEnd?: string | null; asOf?: string | null;
+  monitoringEnd?: string | null;
   sourceUrls?: string[]; reportedGasoline?: PriceRange | null; reportedDiesel?: PriceRange | null;
   adjustments?: { fuel: string; oilCompany: string | null; effectiveDate: string; effectiveAtUtc: string;
     changePerLiter: number; sourceUrls: string[] }[];

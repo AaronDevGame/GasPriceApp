@@ -4,9 +4,11 @@ import { errorMessage } from '@/auth/http';
 import { getHistory, refreshLocation, type Coordinates, type DoeFuelPriceFeed, type FeedItem, type PricePoint } from './api';
 import { requestLocation } from './location';
 import { locationErrorMessage } from './location-error';
+import { useSetHeaderLocation } from './header-prices';
 
 export function useFuelPrices() {
   const { session, loading: authLoading, error: authError, restore, logout } = useAuth();
+  const setHeaderLocation = useSetHeaderLocation();
   const [localItem, setLocalItem] = useState<FeedItem | null>(null);
   const [doePrices, setDoePrices] = useState<DoeFuelPriceFeed | null>(null);
   const [updates, setUpdates] = useState<PricePoint[]>([]);
@@ -36,11 +38,15 @@ export function useFuelPrices() {
     setLocationNote('Waiting for location permission…');
     let position: Coordinates | null;
     try { position = await requestLocation(); } catch (failure) {
-      if (ticket === version.current) { setUserCoordinates(null); coordinates.current = undefined; setLocationNote(locationErrorMessage(failure)); }
+      if (ticket === version.current) {
+        setHeaderLocation(null);
+        setUserCoordinates(null); coordinates.current = undefined; setLocationNote(locationErrorMessage(failure));
+      }
       return;
     }
     if (ticket !== version.current) return;
     if (!position) {
+      setHeaderLocation(null);
       setUserCoordinates(null);
       coordinates.current = undefined;
       setLocationNote('Location access is blocked. You can still browse the map or choose a city or province.');
@@ -52,6 +58,7 @@ export function useFuelPrices() {
     try {
       const next = await refreshLocation(position);
       if (ticket !== version.current) return;
+      setHeaderLocation(next.area);
       const local = next.feed.items.find(item => item.isLocal) ?? null;
       publishLocal(local, ticket);
       setDoePrices(next.doePrices);
@@ -59,11 +66,12 @@ export function useFuelPrices() {
         'No saved prices are available near your location yet.');
     } catch (failure) {
       if (ticket === version.current) {
+        setHeaderLocation(null);
         setError(errorMessage(failure));
         setLocationNote('Your location was received, but local prices could not be updated. Try refreshing prices.');
       }
     }
-  }, [publishLocal]);
+  }, [publishLocal, setHeaderLocation]);
 
   const run = useCallback(async (operation: (ticket: number) => Promise<void>) => {
     if (running.current) return;
@@ -112,6 +120,7 @@ export function useFuelPrices() {
     if (!position) return;
     const next = await refreshLocation(position);
     if (ticket !== version.current) return;
+    setHeaderLocation(next.area);
     const local = next.feed.items.find(item => item.isLocal) ?? null;
     publishLocal(local, ticket);
     setDoePrices(next.doePrices);

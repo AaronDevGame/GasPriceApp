@@ -5,6 +5,7 @@ import { FuelAdviceNotices } from '@/components/fuel-advice-notices';
 
 import { AppIcon } from '@/components/app-icon';
 import { ThemedText } from '@/components/themed-text';
+import { HeaderPricesProvider } from '@/fuel/header-prices';
 import { useTheme } from '@/hooks/use-theme';
 
 const destinations = [
@@ -23,7 +24,7 @@ export default function TabLayout() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const desktop = Platform.OS === 'web' && width >= 900;
-  return <View style={{ flex: 1, backgroundColor: theme.background }}>
+  return <HeaderPricesProvider><View style={{ flex: 1, backgroundColor: theme.background }}>
     <Tabs screenOptions={{
     headerShown: false,
     tabBarPosition: desktop ? 'top' : 'bottom',
@@ -63,7 +64,7 @@ export default function TabLayout() {
       tabBarIcon: ({ color }) => <AppIcon name={item.icon} color={color} />,
     }} />)}
   </Tabs>
-  </View>;
+  </View></HeaderPricesProvider>;
 }
 const styles = StyleSheet.create({
   nav: { backgroundColor: '#151A21', borderBottomWidth: 1, borderColor: '#2B3441', alignItems: 'center', paddingHorizontal: 28 },

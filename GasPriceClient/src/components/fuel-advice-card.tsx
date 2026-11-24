@@ -20,13 +20,14 @@ function companyCount(count: number) {
 }
 
 export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFuelChange, weeklyAdjustments,
-  weeklyAdjustmentsLoading, weeklyAdjustmentsUnavailable, initiallyShowDetails = false, onNavigate }: {
+  weeklyAdjustmentsLoading, weeklyAdjustmentsUnavailable, initiallyShowDetails = false, onNavigate, onCompare }: {
   advice: FuelAdvice | null; loading: boolean; error: boolean; reload: () => Promise<void>;
   fuelType: AdviceFuel; onFuelChange: (fuel: AdviceFuel) => void;
   weeklyAdjustments?: FuelAdjustmentWeek | null;
   weeklyAdjustmentsLoading?: boolean; weeklyAdjustmentsUnavailable?: boolean;
   initiallyShowDetails?: boolean;
   onNavigate?: () => void;
+  onCompare?: () => void;
 }) {
   const theme = useTheme();
   const [showDetails, setShowDetails] = useState(initiallyShowDetails);
@@ -43,6 +44,8 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
   const sources = [...new Set(sourceEvidence.flatMap(e => e.sourceUrls))]
     .filter(url => { try { return new URL(url).protocol === 'https:'; } catch { return false; } });
   const newsId = sourceEvidence.find(e => e.newsId && newsIdPattern.test(e.newsId))?.newsId;
+  const compareStyle = StyleSheet.flatten([styles.primaryAction, { backgroundColor: theme.backgroundSelected, borderColor: accent }]);
+  const compareLabel = <ThemedText type="smallBold" style={{ color: accent }}>Compare fuel prices →</ThemedText>;
   return <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: accent }]}>
     <View style={styles.topline}>
       <View style={styles.label}><AppIcon name="fuel" color={accent} /><ThemedText type="smallBold">SHOULD I GAS UP?</ThemedText></View>
@@ -119,9 +122,8 @@ export function FuelAdviceCard({ advice, loading, error, reload, fuelType, onFue
         <ThemedText type="small" themeColor="textSecondary">Individual companies may differ. Keep enough fuel for your trip.</ThemedText>
       </View>
       <View style={styles.actions}>
-        <Link href="/fuel-prices" onPress={onNavigate} asChild><Pressable accessibilityRole="link" style={StyleSheet.flatten([styles.primaryAction, { backgroundColor: theme.backgroundSelected, borderColor: accent }])}>
-          <ThemedText type="smallBold" style={{ color: accent }}>Compare fuel prices →</ThemedText>
-        </Pressable></Link>
+        {onCompare ? <Pressable accessibilityRole="button" onPress={onCompare} style={compareStyle}>{compareLabel}</Pressable>
+          : <Link href="/fuel-prices" onPress={onNavigate} asChild><Pressable accessibilityRole="link" style={compareStyle}>{compareLabel}</Pressable></Link>}
         {sourceEvidence.length > 0 && <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }}
           onPress={() => setShowDetails(value => !value)} style={styles.textButton}>
           <ThemedText type="smallBold">{showDetails ? 'Hide sources ↑' : status === 'wait' ? 'Why wait? ↓' : 'Why this advice? ↓'}</ThemedText>
