@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppIcon } from '@/components/app-icon';
 import { FuelAdviceCard } from '@/components/fuel-advice-card';
 import { ThemedText } from '@/components/themed-text';
 import { adviceSummary, type AdviceFuel } from '@/fuel/advice';
@@ -41,24 +42,29 @@ function AdviceNotice({ fuel, onOpen, active, compact }: { fuel: HeaderFuel; onO
   const notice = !advice ? loading ? 'Checking…' : error ? 'Tap to retry' : 'View advice'
     : advice.reason === 'rollback_effective' ? 'Rollback in effect'
     : status === 'gas_now' ? 'Gas up now' : status === 'wait' ? 'Wait for rollback' : status === 'neutral' ? 'No rush to fill' : summary.action;
-  const priceView = <View style={styles.price}>
+  const priceView = <View style={!compact && styles.desktopPrice}>
     {amount && <ThemedText type="smallBold" style={styles.amount}>{amount}</ThemedText>}
-    <ThemedText type="small" themeColor="textSecondary" style={styles.priceLabel}>{priceLabel}</ThemedText>
+    <View style={styles.priceCaption}>
+      {price && <AppIcon name="map-pin" color={theme.textSecondary} />}
+      <ThemedText type="small" themeColor="textSecondary" style={styles.priceLabel}>{priceLabel}</ThemedText>
+    </View>
   </View>;
   return <Pressable accessibilityRole="button"
     accessibilityLabel={[fuel === 'gasoline' ? 'Gasoline RON 91' : label, amount, priceLabel, change, summary.timing, notice].filter(Boolean).join('. ')}
     accessibilityHint="Opens Should I gas up with this fuel selected"
     onPress={onOpen} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-    style={({ hovered, pressed }) => [styles.notice, { backgroundColor: theme.backgroundElement,
+    style={({ hovered, pressed }) => [styles.notice, compact && styles.compactNotice, { backgroundColor: theme.backgroundElement,
       borderColor: focused || hovered ? '#76B4FF' : theme.backgroundSelected }, pressed && { opacity: 0.75 }]}>
     <View style={styles.noticeTop}>
-      <View style={[styles.noticeRow, styles.noticeMain]}>
-        <View style={styles.fuelLabel}>
+      <View style={styles.noticeMain}>
+        <View style={[styles.fuelHeading, compact ? styles.compactFuelHeading : styles.desktopFuelHeading]}>
           <Image source={fuelNozzles[fuel]} style={styles.nozzle} contentFit="contain"
             tintColor={fuel === 'gasoline' ? '#64D99B' : '#F2CB45'} accessible={false} />
-          <ThemedText type="smallBold" style={styles.headingText}>{label}</ThemedText>
+          <View style={[styles.fuelText, compact && styles.compactFuelText]}>
+            <ThemedText type="smallBold" style={styles.headingText}>{label}</ThemedText>
+            {change && <ThemedText type="smallBold" style={[styles.headingText, { color: changeColor }]}>{change}</ThemedText>}
+          </View>
         </View>
-        {change && <ThemedText type="smallBold" style={[styles.headingText, { color: changeColor }]}>{change}</ThemedText>}
         {!compact && priceView}
       </View>
       <ThemedText themeColor="textSecondary">›</ThemedText>
@@ -140,7 +146,7 @@ function AdvicePanel({ initialFuel, onClose }: { initialFuel: HeaderFuel; onClos
 export function FuelAdviceNotices({ compact = false, active = true }: { compact?: boolean; active?: boolean }) {
   const [selectedFuel, setSelectedFuel] = useState<HeaderFuel | null>(null);
   const close = () => setSelectedFuel(null);
-  return <View style={[styles.notices, !compact && { flexBasis: 340 }]}>
+  return <View style={[styles.notices, compact ? styles.compactNotices : styles.desktopNotices]}>
     <AdviceNotice active={active} compact={compact} fuel="gasoline" onOpen={() => setSelectedFuel('gasoline')} />
     <AdviceNotice active={active} compact={compact} fuel="diesel" onOpen={() => setSelectedFuel('diesel')} />
     <Modal visible={selectedFuel !== null} transparent animationType="fade" onRequestClose={close}>
@@ -151,16 +157,24 @@ export function FuelAdviceNotices({ compact = false, active = true }: { compact?
 
 const styles = StyleSheet.create({
   notices: { flexDirection: 'row', flexGrow: 1, flexShrink: 1, gap: 10 },
+  compactNotices: { flexWrap: 'wrap' },
+  desktopNotices: { flexBasis: 340 },
   notice: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 8, gap: 3 },
+  compactNotice: { flexBasis: 205 },
   noticeRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
   noticeTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
-  noticeMain: { flex: 1, minWidth: 0, gap: 4 },
-  fuelLabel: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  noticeMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  fuelHeading: { flexDirection: 'row', gap: 4, minWidth: 0 },
+  desktopFuelHeading: { flex: 1, alignItems: 'flex-start' },
+  compactFuelHeading: { flexShrink: 1, alignItems: 'center' },
+  fuelText: { flexShrink: 1, alignItems: 'flex-start' },
+  compactFuelText: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 6 },
   nozzle: { width: 18, height: 18, flexShrink: 0 },
   headingText: { fontSize: 13 },
-  price: { flexShrink: 1, maxWidth: '100%' },
+  desktopPrice: { flex: 1, minWidth: 0 },
   amount: { fontSize: 13, fontVariant: ['tabular-nums'] },
-  priceLabel: { fontSize: 11, lineHeight: 15 },
+  priceCaption: { flexDirection: 'row', alignItems: 'flex-start', gap: 3 },
+  priceLabel: { flexShrink: 1, fontSize: 11, lineHeight: 15 },
   priceDetails: { padding: 14, borderRadius: 12, gap: 4 },
   overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.65)', padding: 16 },
   panel: { width: '100%', maxWidth: 960, maxHeight: '100%', flexShrink: 1, borderRadius: 20, overflow: 'hidden' },

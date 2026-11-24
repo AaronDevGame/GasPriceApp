@@ -1,10 +1,15 @@
 import { StyleSheet, View, type ColorValue } from 'react-native';
 
-export type AppIconName = 'overview' | 'fuel' | 'news' | 'changes' | 'location';
+export type AppIconName = 'overview' | 'fuel' | 'news' | 'changes' | 'location' | 'map-pin';
 
 /** Small cross-platform line icons without a font or native dependency. */
 export function AppIcon({ name, color = '#9DA9BA' }: { name: AppIconName; color?: ColorValue }) {
   const line = { borderColor: color };
+  if (name === 'map-pin') return <View style={[styles.frame, styles.pinFrame]} accessible={false}>
+    <View style={[styles.pinOutline, line]}>
+      <View style={[styles.pinDot, { backgroundColor: color }]} />
+    </View>
+  </View>;
   return <View style={styles.frame} accessible={false}>
     {name === 'location' ? <><View style={[styles.crosshairHorizontal, { backgroundColor: color }]} /><View style={[styles.crosshairVertical, { backgroundColor: color }]} /><View style={[styles.locationRing, line]} /><View style={[styles.locationDot, { backgroundColor: color }]} /></>
       : name === 'overview' ? <View style={styles.grid}>{[0, 1, 2, 3].map(n => <View key={n} style={[styles.square, line]} />)}</View>
@@ -19,6 +24,10 @@ const styles = StyleSheet.create({
   locationRing: { position: 'absolute', width: 17, height: 17, borderWidth: 2, borderRadius: 9, backgroundColor: '#1A2029' },
   locationDot: { width: 7, height: 7, borderRadius: 4 },
   frame: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  pinFrame: { width: 12, height: 15, flexShrink: 0 },
+  pinOutline: { width: 9, height: 9, borderWidth: 1.2, borderRadius: 5, borderBottomRightRadius: 0,
+    transform: [{ rotate: '45deg' }], alignItems: 'center', justifyContent: 'center' },
+  pinDot: { width: 2.5, height: 2.5, borderRadius: 2 },
   grid: { width: 21, height: 21, flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
   square: { width: 9, height: 9, borderWidth: 1.6, borderRadius: 2 },
   bars: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 22 },
