@@ -115,14 +115,15 @@ export function getDoePrices(coordinates: Coordinates) {
   return authClient.request<DoeFuelPriceFeed>(`/fuel-prices/doe?${params}`);
 }
 
-export async function refreshLocation(coordinates: Coordinates) {
+export async function refreshLocation(coordinates: Coordinates, onResolved?: (area: Area, estimate: FeedItem | null) => void) {
   const result = await authClient.request<LocationResult>('/ai/fuel-prices', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(coordinates),
   });
   const area = result.result.location;
   if (!areaQuery(area).size) throw new Error('No area resolved');
-  const feed = await getPrices(area);
   const local = localPriceItem(result.result);
+  onResolved?.(area, local);
+  const feed = await getPrices(area);
   const localizedFeed = local ? {
     ...feed,
     items: [local, ...feed.items.filter(item =>

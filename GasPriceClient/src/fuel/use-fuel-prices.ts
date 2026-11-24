@@ -34,6 +34,19 @@ export function useFuelPrices() {
     );
   }, []);
 
+  const loadLocal = useCallback(async (position: Coordinates, ticket: number) => {
+    const next = await refreshLocation(position, (area, estimate) => {
+      if (ticket === version.current) setHeaderLocation(area, estimate);
+    });
+    if (ticket !== version.current) return;
+    const local = next.feed.items.find(item => item.isLocal) ?? null;
+    setHeaderLocation(next.area, local);
+    publishLocal(local, ticket);
+    setDoePrices(next.doePrices);
+    setLocationNote(local ? `Prices near ${next.area.resolved_area}.` :
+      'No saved prices are available near your location yet.');
+  }, [publishLocal, setHeaderLocation]);
+
   const locate = useCallback(async (ticket: number) => {
     setLocationNote('Waiting for location permission…');
     let position: Coordinates | null;
@@ -56,22 +69,14 @@ export function useFuelPrices() {
     setUserCoordinates(position);
     setLocationNote('Location received. Updating prices near you…');
     try {
-      const next = await refreshLocation(position);
-      if (ticket !== version.current) return;
-      setHeaderLocation(next.area);
-      const local = next.feed.items.find(item => item.isLocal) ?? null;
-      publishLocal(local, ticket);
-      setDoePrices(next.doePrices);
-      setLocationNote(local ? `Prices near ${next.area.resolved_area}.` :
-        'No saved prices are available near your location yet.');
+      await loadLocal(position, ticket);
     } catch (failure) {
       if (ticket === version.current) {
-        setHeaderLocation(null);
         setError(errorMessage(failure));
         setLocationNote('Your location was received, but local prices could not be updated. Try refreshing prices.');
       }
     }
-  }, [publishLocal, setHeaderLocation]);
+  }, [loadLocal, setHeaderLocation]);
 
   const run = useCallback(async (operation: (ticket: number) => Promise<void>) => {
     if (running.current) return;
@@ -111,21 +116,9 @@ export function useFuelPrices() {
     if (!authenticated || authError) return restore();
     return run(async ticket => {
       if (coordinates.current) {
-        await locateWithSavedCoordinates(ticket);
+        await loadLocal(coordinates.current, ticket);
       }
     });
-  };
-  const locateWithSavedCoordinates = async (ticket: number) => {
-    const position = coordinates.current;
-    if (!position) return;
-    const next = await refreshLocation(position);
-    if (ticket !== version.current) return;
-    setHeaderLocation(next.area);
-    const local = next.feed.items.find(item => item.isLocal) ?? null;
-    publishLocal(local, ticket);
-    setDoePrices(next.doePrices);
-    setLocationNote(local ? `Prices near ${next.area.resolved_area}.` :
-      'No saved prices are available near your location yet.');
   };
   const useLocation = () => run(locate);
   const signOut = async () => {

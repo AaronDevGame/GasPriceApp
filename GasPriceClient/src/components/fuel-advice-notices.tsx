@@ -10,7 +10,7 @@ import { ThemedText } from '@/components/themed-text';
 import { adviceSummary, type AdviceFuel } from '@/fuel/advice';
 import { useFuelAdvice } from '@/fuel/use-fuel-advice';
 import { formatPrice, getFuelAdjustments, type FuelAdjustmentWeek } from '@/fuel/api';
-import { headerPrice, useHeaderComparison, useHeaderPrices, type HeaderFuel } from '@/fuel/header-prices';
+import { headerArea, headerPrice, useHeaderComparison, useHeaderPrices, type HeaderFuel } from '@/fuel/header-prices';
 import { useAuth } from '@/auth/auth-provider';
 import { useTheme } from '@/hooks/use-theme';
 import { reportDate } from '@/map/labels';
@@ -25,10 +25,11 @@ function AdviceNotice({ fuel, onOpen, active, compact }: { fuel: HeaderFuel; onO
   const { advice, loading, error } = useFuelAdvice(fuel, null, active);
   const prices = useHeaderPrices();
   const price = headerPrice(prices, fuel);
+  const area = price?.area ?? headerArea(prices.area);
   const amount = price ? `${formatPrice(price.range)}/L` : null;
   const priceLabel = price ? price.estimated ? `${price.area} estimate`
     : `${price.area} · DOE${price.baselineDate ? ` ${reportDate(price.baselineDate)}` : ''}${price.outdated ? ' · Outdated' : ''}`
-    : prices.loading ? 'Checking prices…' : 'Price unavailable';
+    : [area, prices.loading ? 'Checking prices…' : 'Price unavailable'].filter(Boolean).join(' · ');
   const [focused, setFocused] = useState(false);
   const label = fuel === 'gasoline' ? 'Gasoline 91' : 'Diesel';
   const status = advice?.status;
@@ -45,7 +46,7 @@ function AdviceNotice({ fuel, onOpen, active, compact }: { fuel: HeaderFuel; onO
   const priceView = <View style={!compact && styles.desktopPrice}>
     {amount && <ThemedText type="smallBold" style={styles.amount}>{amount}</ThemedText>}
     <View style={styles.priceCaption}>
-      {price && <AppIcon name="map-pin" color={theme.textSecondary} />}
+      {area && <AppIcon name="map-pin" color={theme.textSecondary} />}
       <ThemedText type="small" themeColor="textSecondary" style={styles.priceLabel}>{priceLabel}</ThemedText>
     </View>
   </View>;
@@ -133,7 +134,7 @@ function AdvicePanel({ initialFuel, onClose }: { initialFuel: HeaderFuel; onClos
           }]}>
             <ThemedText type="smallBold">{price.area}{fuel === 'gasoline' ? ' · Gasoline RON 91' : ' · Diesel'} · {formatPrice(price.range)}/L</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              {price.estimated ? 'Estimated using confirmed adjustments' : 'DOE reported range'}
+              {price.localEstimate ? 'Local estimate' : price.estimated ? 'Estimated using confirmed adjustments' : 'DOE reported range'}
               {price.baselineDate ? ` · DOE data through ${reportDate(price.baselineDate)}` : ''}
               {price.outdated ? ' · Outdated' : ''}
             </ThemedText>

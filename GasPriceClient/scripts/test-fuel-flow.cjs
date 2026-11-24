@@ -38,13 +38,15 @@ function harness(options = {}) {
           doePrices: options.doeInAi === false ? null : { city: 'Cebu City', province: 'Cebu', weekStart: '2026-09-22', weekEnd: '2026-09-28',
             prices: [{ oilCompany: 'Petron', fuelGrade: 'DIESEL', minPricePerLiter: 99, maxPricePerLiter: 101 }] } };
       }
+      if (options.feedFailure && url.startsWith('/fuel-prices?')) throw new Error('Saved prices unavailable');
       return feed;
     },
   };
   function load(relative) {
     if (modules.has(relative)) return modules.get(relative);
     const exports = {}; modules.set(relative, exports);
-    const filename = path.resolve(__dirname, '../src', relative + (relative.endsWith('auth-provider') ? '.tsx' : '.ts'));
+    const tsx = path.resolve(__dirname, '../src', relative + '.tsx');
+    const filename = fs.existsSync(tsx) ? tsx : path.resolve(__dirname, '../src', relative + '.ts');
     const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: {
       module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
     } }).outputText;
@@ -59,7 +61,8 @@ function harness(options = {}) {
           onForeground = callback; return () => { onForeground = undefined; };
         } };
         if (name === '@/auth/auth-provider') return { useAuth: () => auth };
-        if (name === './header-prices') return { useSetHeaderLocation: () => area => calls.push({ headerArea: area }) };
+        if (name === './header-prices') return { useSetHeaderLocation: () => (area, estimate) => calls.push({ headerArea: area, estimate }) };
+        if (relative === 'fuel/header-prices' && ['@/map/cache', '@/auth/foreground'].includes(name)) return {};
         if (name === '@/auth/session' || name === './session') return { authClient: client };
         if (name === './location' && relative === 'fuel/use-fuel-prices' && options.locationReason) return {
           requestLocation: async () => { throw new (load('fuel/location-error').LocationError)(options.locationReason); },
@@ -124,20 +127,37 @@ async function settle(h) {
   console.log('PASS foreground provider: no blocking loading, duplicate-return coalescing, cleanup and offline screen preservation');
   const granted = harness(); granted.load('fuel/use-fuel-prices').useFuelPrices(); granted.effects[0](); await settle(granted);
   assert.equal(granted.calls.find(call => call.headerArea)?.headerArea.city, 'Cebu City');
+  const { headerArea, estimate } = granted.calls.find(call => call.headerArea);
+  const { headerPrice } = granted.load('fuel/header-prices');
+  const manila = { city: { name: 'City of Manila', regionId: '1300000000' },
+    report: { gasoline: range(70), diesel: range(71) } };
+  const header = { area: headerArea, estimate, local: null, manila };
+  assert.equal(headerPrice(header, 'gasoline').area, 'Cebu City');
+  assert.equal(headerPrice(header, 'gasoline').range.minPrice, 60);
+  assert.equal(headerPrice(header, 'diesel').range.minPrice, 55);
+  const local = { city: { name: 'City of Cebu', groupName: 'Cebu' }, report: { gasoline: range(62), diesel: null } };
+  assert.equal(headerPrice({ ...header, local }, 'gasoline').range.minPrice, 62);
+  assert.equal(headerPrice({ ...header, local }, 'diesel').range.minPrice, 55);
+  assert.equal(headerPrice({ ...header, local, estimate: null }, 'diesel'), null);
+  assert.equal(headerPrice({ ...header, area: null, estimate: null }, 'diesel').area, 'Manila');
   assert.equal(granted.calls[0], 'permission');
   assert.equal(JSON.stringify(granted.states[7].value), JSON.stringify({ latitude: 10.3, longitude: 123.8 }), 'Expose the successful location fix to the map');
   assert.ok(!granted.calls.some(call => call.url === '/fuel-prices/featured'));
   const ai = granted.calls.find(call => call.url === '/ai/fuel-prices');
   assert.equal(ai.init.method, 'POST'); assert.equal(ai.init.body, JSON.stringify({ latitude: 10.3, longitude: 123.8 }));
-  const local = granted.calls.find(call => call.url?.startsWith('/fuel-prices?'));
-  assert.ok(granted.calls.indexOf(ai) < granted.calls.indexOf(local));
-  assert.equal(new URLSearchParams(local.url.split('?')[1]).get('city'), 'Cebu City');
+  const areaRequest = granted.calls.find(call => call.url?.startsWith('/fuel-prices?'));
+  assert.ok(granted.calls.indexOf(ai) < granted.calls.indexOf(areaRequest));
+  assert.equal(new URLSearchParams(areaRequest.url.split('?')[1]).get('city'), 'Cebu City');
   assert.equal(granted.states[1].value.prices[0].oilCompany, 'Petron');
   assert.equal(granted.states[0].value.area.name, 'Cebu City');
   assert.equal(granted.states[0].value.prices.gasoline91.minPrice, 60);
   assert.equal(granted.states[0].value.prices.gasoline91.maxPrice, 64);
   assert.ok(!granted.calls.some(call => call.url?.startsWith('/fuel-prices/doe?')));
   console.log('PASS permission, coordinates POST, then local-area GET');
+  const failedFeed = harness({ feedFailure: true });
+  failedFeed.load('fuel/use-fuel-prices').useFuelPrices(); failedFeed.effects[0](); await settle(failedFeed);
+  assert.equal(failedFeed.calls.findLast(call => call.headerArea !== undefined).headerArea.city, 'Cebu City');
+  console.log('PASS header uses local prices per fuel and retains the detected city if the saved-price feed fails');
   const fallback = harness({ doeInAi: false }); fallback.load('fuel/use-fuel-prices').useFuelPrices(); fallback.effects[0](); await settle(fallback);
   assert.equal(fallback.states[1].value.prices[0].oilCompany, 'Shell');
   assert.ok(fallback.calls.some(call => call.url === '/fuel-prices/doe?latitude=10.3&longitude=123.8'));
