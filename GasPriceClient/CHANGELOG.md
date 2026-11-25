@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-26
+
 ### Changed
 - Lead with the refueling recommendation in the advice popup and show the local price range below the adjustment timing.
 - Show gasoline RON 91 and diesel price ranges beside the adjustments in the header, with City of Manila as the fallback. Mark estimates and DOE report dates, show the underlying report date in advice, and open the company list with the matching fuel selected.
@@ -14,6 +16,7 @@
 - Use “Good time to refuel” for effective confirmed rollbacks and show the current per-liter decrease in green in the advice popup. Keep the next forecast separate in amber; forecast-only updates do not receive the confirmed-decrease message.
 
 ### Fixed
+- Align the adjustment date, amount, and refueling status in the header across screen sizes.
 - Use the detected location in both header fuel cards, with local estimates when city map prices are missing and an unavailable message when neither source has a range.
 - Keep loaded fuel-price cards visible and anchored to the map while dragging. Update which cards are shown when the map settles.
 - Show forecast adjustment ranges and estimated effective dates in the Gasoline and Diesel header notices instead of leaving the amount and date empty. Use amber for unconfirmed forecasts with clearer labels such as “Price drop not yet confirmed” in the notices and advice panel.
