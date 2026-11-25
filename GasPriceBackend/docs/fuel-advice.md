@@ -118,10 +118,12 @@ including DOE company reports when viewing nationwide advice. Each report keeps 
 company and source; this does not imply all Philippine companies made that change.
 Forecasts and future changes are excluded. Date-only reports use 06:00 Philippine
 time. Context uses the same expiry rules and ends sooner when a newer confirmed
-adjustment takes effect. An expired latest event blocks falling back to an older
-decrease. Clients may show positive current decrease context when all returned
-amounts are negative and current,
-and no confirmed upcoming rollback or conflicting recommendation takes priority.
+adjustment takes effect. When a company report expires, matching reports for the
+same change remain eligible until their own expiry. A conflicting expired report
+suppresses the context. Once all reports for the latest event expire, older
+decreases stay excluded. Clients may show current decreases when all returned
+amounts are negative and current, and no confirmed upcoming rollback or
+conflicting recommendation takes priority.
 
 Frontend UI integration is separate: when adding a caller using the Expo shared
 transport, include `/fuel-advice` in its API path allowlist.

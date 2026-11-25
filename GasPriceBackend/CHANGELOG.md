@@ -6,12 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed
-- Keep confirmed DOE company adjustments that start before 6:00 AM PHT eligible for refueling advice until the following week's 6:00 AM rollover, unless an earlier source expiry or confirmed replacement applies.
-- Keep confirmed current-adjustment reports visible when an earlier company report for the same change expires. Conflicting reports still block refueling reassurance.
+## [1.16.0] - 2026-11-26
 
 ### Added
 - Return latest applied confirmed adjustment context through `currentAdjustments` in fuel advice, including company-specific DOE records in the nationwide view while preserving their company names and sources. Keep forecasts and nationwide buying advice separate; expired or newer applied events block older rollback context.
+
+### Fixed
+- Keep confirmed DOE company adjustments that start before 6:00 AM PHT eligible for refueling advice until the following week's 6:00 AM rollover, unless an earlier source expiry or confirmed replacement applies.
+- Keep confirmed current-adjustment reports visible when an earlier company report for the same change expires. Conflicting reports still block refueling reassurance.
 
 ## [1.15.2] - 2026-11-23
 
