@@ -32,9 +32,6 @@ function AdviceNotice({ fuel, onOpen, active, compact }: { fuel: HeaderFuel; onO
     : [area, prices.loading ? 'Checking prices…' : 'Price unavailable'].filter(Boolean).join(' · ');
   const [focused, setFocused] = useState(false);
   const label = fuel === 'gasoline' ? 'Gasoline 91' : 'Diesel';
-  const status = advice?.status;
-  const color = status === 'gas_now' ? theme.advicePositive
-    : status === 'wait' || advice?.reason === 'forecast_only' ? theme.adviceWait : theme.textSecondary;
   const summary = adviceSummary(advice, loading, error);
   const changeColor = advice?.reason === 'forecast_only' ? theme.adviceWait
     : summary.direction === 'down' ? theme.advicePositive : summary.direction === 'up' ? theme.priceIncrease : theme.textSecondary;
@@ -70,7 +67,7 @@ function AdviceNotice({ fuel, onOpen, active, compact }: { fuel: HeaderFuel; onO
     </View>
     {compact && priceView}
     <View style={styles.noticeRow}>
-      <ThemedText type="smallBold" style={{ color }}>{notice}</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">{notice}</ThemedText>
     </View>
   </Pressable>;
 }
