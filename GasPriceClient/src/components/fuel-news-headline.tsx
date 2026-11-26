@@ -7,6 +7,9 @@ import { newsStatusLabel, type NewsItem } from '@/news/api';
 export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
   const { width } = useWindowDimensions();
   const compact = width < 600;
+  const desktop = Platform.OS === 'web' && width >= 900;
+  // Match the desktop navigation's side padding and content width.
+  const headerInset = desktop ? Math.max(28, (width - 1160) / 2) : 10;
   const [index, setIndex] = useState(0);
   const [reading, setReading] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -39,8 +42,8 @@ export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
   if (!item) return null;
   const { status, title } = item.article;
   const headline = status === 'confirmed' ? title.replace(/^\s*confirmed\s*:\s*/i, '') || title : title;
-  return <View style={[styles.strip, !compact && count > 1 && styles.roomForControls]}>
-    <View style={styles.label}>
+  return <View style={[styles.strip, { paddingRight: headerInset }]}>
+    <View style={[styles.label, { paddingLeft: headerInset }]}>
       <ThemedText type="smallBold" style={styles.labelText}>{newsStatusLabel(status)}</ThemedText>
     </View>
     <Link href={{ pathname: '/news-detail', params: { id: item.id } }} asChild>
@@ -52,7 +55,7 @@ export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
         </Animated.View>
       </Pressable>
     </Link>
-    {count > 1 && <View style={[styles.controls, !compact && styles.desktopControls]}>
+    {count > 1 && <View style={styles.controls}>
       <Pressable accessibilityRole="button" accessibilityLabel="Previous headline" onPress={() => setIndex(current => (current + count - 1) % count)}
         style={styles.control}><ThemedText style={styles.arrow}>‹</ThemedText></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Next headline" onPress={() => setIndex(current => (current + 1) % count)}
@@ -63,13 +66,11 @@ export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
 
 const styles = StyleSheet.create({
   headline: { color: '#F2F6FC' },
-  strip: { alignSelf: 'stretch', flexDirection: 'row', justifyContent: 'center', alignItems: 'stretch', minHeight: 44, backgroundColor: '#182332' },
-  label: { backgroundColor: '#203650', justifyContent: 'center', paddingHorizontal: 10 },
+  strip: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'stretch', minHeight: 44, backgroundColor: '#182332' },
+  label: { backgroundColor: '#203650', justifyContent: 'center', paddingRight: 14 },
   labelText: { color: '#9BC7FF', fontSize: 11, letterSpacing: 1 },
-  link: { flexShrink: 1, minWidth: 0, justifyContent: 'center', marginHorizontal: 10, overflow: 'hidden', paddingVertical: 2 },
-  roomForControls: { paddingHorizontal: 72 },
+  link: { flex: 1, minWidth: 0, justifyContent: 'center', marginHorizontal: 10, overflow: 'hidden', paddingVertical: 2 },
   controls: { flexDirection: 'row' },
-  desktopControls: { position: 'absolute', right: 0, top: 0, bottom: 0 },
   control: { width: 36, justifyContent: 'center', alignItems: 'center' },
   arrow: { fontSize: 24, color: '#9BC7FF' },
 });

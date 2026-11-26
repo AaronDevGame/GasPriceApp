@@ -3,10 +3,11 @@
 ## [Unreleased]
 
 ### Changed
-- Rotate up to three recent headlines in a full-width strip directly below the Fuel Prices navigation header, with one story per topic and one price adjustment at a time. Center each headline with its FUEL NEWS, CONFIRMED, or FORECAST label, omit a repeated “Confirmed:” prefix on confirmed stories, and provide previous and next arrows.
+- Rotate up to three recent headlines in a full-width strip directly below the Fuel Prices navigation header, with one story per topic and one price adjustment at a time. Align the FUEL NEWS, CONFIRMED, or FORECAST label beneath GasUp on desktop and extend its background to the left edge of the ticker. Place the headline beside the label, omit a repeated “Confirmed:” prefix on confirmed stories, and provide previous and next arrows.
 - Rename the app to GasUp in mobile and desktop headers, the installed app name, and the location permission prompt.
 
 ### Fixed
+- Keep desktop pages in place during background refreshes by hiding the top refresh indicator.
 - Fix a blank homepage on web when the fuel-news headline initializes its animation.
 - Show one fuel-price summary per selected area, with DOE-reported ranges when available and an estimate when no DOE report is available.
 - Make map price cards clickable so selecting one centers and highlights the area named on the card.
