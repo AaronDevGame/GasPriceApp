@@ -43,6 +43,7 @@ export default function FuelPricesScreen() {
   const [mode, setMode] = useState<'map' | 'list'>('map');
   const map = useRef<FuelMapHandle>(null);
   const scroll = useRef<ScrollView>(null);
+  const [contentY, setContentY] = useState(0);
   const [comparisonY, setComparisonY] = useState<number | null>(null);
   const [handledComparison, setHandledComparison] = useState<typeof comparison>(null);
   const [mapRefreshing, setMapRefreshing] = useState(false);
@@ -108,11 +109,11 @@ export default function FuelPricesScreen() {
         choose(area);
         return;
       }
-      scroll.current?.scrollTo({ y: comparisonY + scrollPadding, animated: false });
+      scroll.current?.scrollTo({ y: contentY + comparisonY, animated: false });
       setComparison(null);
     });
     return () => cancelAnimationFrame(frame);
-  }, [authenticated, authLoading, choose, comparison, comparisonY, focused, loading, mode, selected, setComparison]);
+  }, [authenticated, authLoading, choose, comparison, comparisonY, contentY, focused, loading, mode, selected, setComparison]);
   useEffect(() => {
     if (!authenticated) return;
     let active = true;
@@ -182,9 +183,9 @@ export default function FuelPricesScreen() {
       <RefreshableScrollView ref={scroll} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
         refreshing={refreshing || mapRefreshing} onRefresh={refresh}
         refreshEnabled={(!authenticated || !loading) && !fuel.busy}>
-        <View style={styles.content}>
-          <MobileHeader />
-          {news.items.length > 0 && <FuelNewsHeadline items={news.items} />}
+        <MobileHeader style={styles.mobileHeader} />
+        <FuelNewsHeadline items={news.items} />
+        <View style={styles.content} onLayout={event => setContentY(event.nativeEvent.layout.y)}>
           {news.error && <View><ThemedText type="small" themeColor="textSecondary">News could not be updated.</ThemedText><DashboardAction title="Retry news" onPress={() => void news.reload()} disabled={news.loading} /></View>}
           <View style={styles.header}>
             <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>
@@ -285,8 +286,9 @@ export default function FuelPricesScreen() {
 
 const styles = StyleSheet.create({
   hidden: { display: 'none' }, locationHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  page: { flex: 1 }, scroll: { padding: scrollPadding, alignItems: 'center' },
-  content: { width: '100%', maxWidth: 1160, gap: 16, paddingVertical: 12 },
+  page: { flex: 1 }, scroll: { alignItems: 'center' },
+  mobileHeader: { width: '100%', maxWidth: 1200, paddingHorizontal: scrollPadding, paddingTop: scrollPadding },
+  content: { width: '100%', maxWidth: 1200, gap: 16, padding: scrollPadding },
   header: { gap: 8, marginBottom: 12 }, accent: { color: '#76B4FF' },
   title: { fontSize: 28, lineHeight: 36, fontWeight: '600' }, loading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   card: { padding: 20, borderRadius: 14, gap: 12 },

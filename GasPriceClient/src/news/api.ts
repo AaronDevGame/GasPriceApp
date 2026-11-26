@@ -21,6 +21,10 @@ export const getLatestNews = () => send<NewsItem | null>('/fuel-news/latest');
 export const getNewsPage = (cursor?: string) => send<NewsPage>(`/fuel-news?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
 export const getNewsItem = (id: string) => send<NewsItem>(`/fuel-news/${id}`);
 
+export function newsStatusLabel(status: NewsItem['article']['status']) {
+  return status === 'forecast' ? 'FORECAST' : status === 'confirmed' ? 'CONFIRMED' : 'FUEL NEWS';
+}
+
 export function newsDate(value: string, includeTime = false) {
   return new Date(value.length === 10 ? `${value}T12:00:00+08:00` : value).toLocaleString('en-PH', {
     timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric',

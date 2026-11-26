@@ -96,12 +96,14 @@ function harness(options = {}) {
   const scroll = comparison.nodes().find(n => n.type === 'RefreshableScrollView');
   let comparisonOffset;
   scroll.props.ref.current = { scrollTo: ({ y }) => { comparisonOffset = y; } };
-  comparison.nodes().find(n => n.props?.onLayout).props.onLayout({ nativeEvent: { layout: { y: 200 } } });
+  const [content, gradeControls] = comparison.nodes().filter(n => n.props?.onLayout);
+  content.props.onLayout({ nativeEvent: { layout: { y: 44 } } });
+  gradeControls.props.onLayout({ nativeEvent: { layout: { y: 200 } } });
   await comparison.settle();
   assert(comparison.button('Company list').props.accessibilityState.selected);
   assert(comparison.button('Diesel').props.accessibilityState.selected);
   assert.equal(comparison.nodes().find(n => n.type === 'DoePriceSummary').props.report.city, 'Cebu City');
-  assert.equal(comparisonOffset, 220);
+  assert.equal(comparisonOffset, 244);
   const h = harness(); await h.settle();
   assert.equal(h.calls.length, 1);
   assert.equal(h.nodes().find(n => n.type === 'FuelMap').props.location, null, 'The default company report does not drive the map camera');

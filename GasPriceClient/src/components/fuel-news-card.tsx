@@ -2,7 +2,7 @@ import { Link } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { changeLabel, newsDate, type NewsItem } from '@/news/api';
+import { changeLabel, newsDate, newsStatusLabel, type NewsItem } from '@/news/api';
 import { useNewsClock } from '@/news/use-news-clock';
 
 export function FuelNewsCard({ item, compact = false, detail = false }: { item: NewsItem; compact?: boolean; detail?: boolean }) {
@@ -11,7 +11,7 @@ export function FuelNewsCard({ item, compact = false, detail = false }: { item: 
   const title = <ThemedText style={styles.title}>{a.title}</ThemedText>;
   return <ThemedView type="backgroundElement" style={styles.card}>
     <View style={styles.metadata}>
-      <ThemedText type="smallBold" style={styles.badge}>{a.status === 'forecast' ? 'FORECAST' : a.status === 'confirmed' ? 'CONFIRMED' : 'FUEL NEWS'}</ThemedText>
+      <ThemedText type="smallBold" style={styles.badge}>{newsStatusLabel(a.status)}</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">{newsDate(item.publishedAtUtc)}</ThemedText>
     </View>
     {detail ? title : <Link href={{ pathname: '/news-detail', params: { id: item.id } }} accessibilityLabel={`Read ${a.title}`}>{title}</Link>}
