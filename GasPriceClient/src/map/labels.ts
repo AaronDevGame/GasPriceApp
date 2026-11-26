@@ -1,4 +1,4 @@
-import { pointAtPixel, project } from './geometry';
+import { boundsCenter, pointAtPixel, project } from './geometry';
 import { areaPrices, mapLevel, visibleAreas, type MapArea } from './hierarchy';
 import type { MapSnapshot, Point, PriceRange, Viewport } from './types';
 
@@ -39,7 +39,7 @@ export function priceLabel(price: ReturnType<typeof areaPrices>) {
 }
 export type MapLabel = {
   id: string; name: string; priceLines: string[]; coverage: string; accessibilityLabel: string;
-  price: ReturnType<typeof areaPrices>; anchor: Point; x: number; y: number; width: number; height: number; fontSize: number;
+  price: ReturnType<typeof areaPrices>; center: Point; anchor: Point; x: number; y: number; width: number; height: number; fontSize: number;
 };
 // Search the part of the city's bounding box where a full label can fit on screen.
 function* candidates(city: MapArea, viewport: Viewport, width: number, height: number): Generator<Point> {
@@ -97,7 +97,8 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null): Map
     // Selected areas go first. Never force a colliding card into the remaining space.
     if (position) {
       const [x, y] = position;
-      placed.push({ id: area.id, price, priceLines, coverage, accessibilityLabel, name, height, fontSize, anchor: pointAtPixel(position, viewport), x, y, width });
+      placed.push({ id: area.id, price, priceLines, coverage, accessibilityLabel, name, height, fontSize,
+        center: boundsCenter(area.bbox), anchor: pointAtPixel(position, viewport), x, y, width });
     }
   }
   return placed;

@@ -422,7 +422,10 @@ function lifecycle(h, initial = {}) {
     prices: new Map([[imus.id, h.feed([imus.id]).items[0]]]) };
   const [relocated] = placeLabels(imusSnapshot, null);
   assert(relocated, 'A visible part of Imus still has room for both price ranges');
+  assert.deepEqual(relocated.center, geometry.boundsCenter(imus.bbox));
+  assert.notDeepEqual(relocated.center, relocated.anchor, 'Center Imus itself when the card is displaced');
   const [withoutPrices] = placeLabels({ ...imusSnapshot, prices: new Map() }, imus.id);
+  assert.deepEqual(withoutPrices.center, relocated.center, 'Cards without reports center the same area');
   assert.equal(withoutPrices.priceLines.length, 0);
   assert.equal(withoutPrices.coverage, 'No recent report');
   assert.equal(withoutPrices.accessibilityLabel, `${withoutPrices.name}, No recent report`);

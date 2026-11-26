@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Make map price cards clickable so selecting one centers and highlights the area named on the card.
+
 ## [1.2.0] - 2026-11-26
 
 ### Changed

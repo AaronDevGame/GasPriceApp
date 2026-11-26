@@ -169,8 +169,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       onMapReady={() => setReady(true)} onRegionChange={start} onRegionChangeComplete={() => void settle()}>
       {polygonOverlays}
     </MapView>
-    {/* Keep price cards outside native markers so they cannot intercept map gestures. */}
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {labels.map((label, priority) => {
         const [x, y] = liveViewport ? project(label.anchor, liveViewport) : [label.x, label.y];
         const left = x - label.width / 2, top = y - label.height / 2;
@@ -180,18 +179,19 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         const labelStyle = hasPrices ? (highlighted ? styles.selectedLabel : styles.unselectedLabel) : styles.unavailableLabel;
         const borderColor = highlighted ? mapLabelColors.selected.border : (hasPrices ? mapLabelColors.unselected.border : mapLabelColors.unavailable.border);
         const priceStyle = [styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }];
-        return <View accessible key={`${label.id}:${label.accessibilityLabel}:${highlighted}`}
-          style={{ position: 'absolute', left, top, zIndex: labels.length - priority }}
-          accessibilityLabel={label.accessibilityLabel}>
-          <View style={[styles.label, labelStyle,
-            { width: label.width, height: label.height, borderColor, borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
-            <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, !hasPrices && styles.unavailableText]}>{label.name}</Text>
-            {label.priceLines.map((line, i) => <Text key={i} allowFontScaling={false} style={priceStyle}>{line}</Text>)}
-            <Text allowFontScaling={false} style={[styles.price, styles.coverage, hasPrices
-              ? !highlighted && { color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB' }
-              : [styles.unavailableText, styles.noReport]]}>{label.coverage}</Text>
-          </View>
-        </View>;
+        return <Pressable key={label.id} accessibilityRole="button" accessibilityLabel={label.accessibilityLabel}
+          onPress={() => {
+            map.current?.setCamera({ center: coordinate(label.center) });
+            onSelect(label.id);
+          }}
+          style={[styles.label, labelStyle, { position: 'absolute', left, top, zIndex: labels.length - priority,
+            width: label.width, height: label.height, borderColor, borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
+          <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, !hasPrices && styles.unavailableText]}>{label.name}</Text>
+          {label.priceLines.map((line, i) => <Text key={i} allowFontScaling={false} style={priceStyle}>{line}</Text>)}
+          <Text allowFontScaling={false} style={[styles.price, styles.coverage, hasPrices
+            ? !highlighted && { color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB' }
+            : [styles.unavailableText, styles.noReport]]}>{label.coverage}</Text>
+        </Pressable>;
       })}
     </View>
     {failure && <View style={styles.warning}><Text style={styles.notice}>The map could not update. Check your connection.</Text>

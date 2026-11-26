@@ -10,23 +10,23 @@ import type { Bounds, MapRendererProps } from './types';
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
 type LabelOverlay = google.maps.OverlayView & { setLabels(labels: MapLabel[], selected: string | null): void };
 type AreaPolygon = { shape: google.maps.Polygon; areaId: string; hasOutline: boolean };
-function createLabels() {
+function createLabels(onSelect: (label: MapLabel) => void) {
       class Labels extends google.maps.OverlayView {
         private root = document.createElement('div');
-        private cards: { anchor: google.maps.LatLng; element: HTMLDivElement }[] = [];
-        // Keep cards above polygon fills/outlines while all gestures pass through.
+        private cards: { anchor: google.maps.LatLng; element: HTMLButtonElement }[] = [];
         onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.floatPane.appendChild(this.root); }
         setLabels(labels: MapLabel[], selectedId: string | null) {
           this.cards = labels.map((label, priority) => {
-            // Display-only labels let mouse, touch and wheel gestures reach the map.
-            const card = document.createElement('div');
+            const card = document.createElement('button');
+            card.type = 'button';
+            google.maps.OverlayView.preventMapHitsFrom(card);
+            card.addEventListener('click', () => onSelect(label));
             const selected = label.id === selectedId;
             const hasPrices = label.priceLines.length > 0;
             const colors = hasPrices ? (selected ? mapLabelColors.selected : mapLabelColors.unselected) : mapLabelColors.unavailable;
             const border = selected ? mapLabelColors.selected.border : colors.border;
-            card.setAttribute('role', 'img');
             card.setAttribute('aria-label', label.accessibilityLabel);
-            card.style.cssText = `box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${labels.length - priority};visibility:hidden;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:${hasPrices ? 'white' : mapLabelColors.unavailable.text};border:2px solid ${border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:none;user-select:none;font-variant-numeric:tabular-nums;`;
+            card.style.cssText = `appearance:none;box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${labels.length - priority};visibility:hidden;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:${hasPrices ? 'white' : mapLabelColors.unavailable.text};border:2px solid ${border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:auto;cursor:pointer;user-select:none;font-variant-numeric:tabular-nums;`;
             card.style.backgroundColor = colors.background;
             if (hasPrices && !selected) {
               card.style.backgroundImage = mapLabelColors.unselected.gradient;
@@ -104,7 +104,12 @@ export default function MapRenderer(props: MapRendererProps) {
         styles: [{ featureType: 'poi', stylers: [{ visibility: 'off' }] }, { featureType: 'transit', stylers: [{ visibility: 'off' }] }],
       });
       map.current = instance; focusedBounds.current = null; focusedLocation.current = null; focusedZoom.current = null;
-      const labels = createLabels(); labels.setMap(instance); overlay.current = labels;
+      const labels = createLabels(label => {
+        const [lng, lat] = label.center;
+        instance.setCenter({ lng, lat });
+        latest.current.onSelect(label.id);
+      });
+      labels.setMap(instance); overlay.current = labels;
       listeners.push(instance.addListener('bounds_changed', () => latest.current.onMove()));
       listeners.push(instance.addListener('idle', () => {
         const visible = instance.getBounds();
