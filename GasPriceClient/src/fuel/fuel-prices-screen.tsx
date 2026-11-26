@@ -170,12 +170,13 @@ export default function FuelPricesScreen() {
 
   const locations = feed?.locations.filter(location =>
     `${location.city} ${location.province}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) ?? [];
-  const rows = feed?.selected?.prices.filter(row => row.fuelGrade === grade) ?? [];
+  const browsedReport = feed?.selected;
+  const locationReport = showLocal ? fuel.doePrices : null;
+  const report = browsedReport?.prices.length ? browsedReport : locationReport?.prices.length ? locationReport : null;
+  const rows = report?.prices.filter(row => row.fuelGrade === grade) ?? [];
   const sorted = [...rows].sort(sortByPrice
     ? (a, b) => a.minPricePerLiter - b.minPricePerLiter || a.maxPricePerLiter - b.maxPricePerLiter || a.oilCompany.localeCompare(b.oilCompany)
     : (a, b) => a.oilCompany.localeCompare(b.oilCompany));
-  const report = feed?.selected;
-
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.page}>
       <RefreshableScrollView ref={scroll} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
@@ -226,8 +227,7 @@ export default function FuelPricesScreen() {
             </ThemedView>
             {authenticated && fuel.error && <ThemedText accessibilityRole="alert">{fuel.error}</ThemedText>}
             {authenticated && fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">Updating local prices…</ThemedText></View>}
-            {showLocal && <LocalPriceBoard item={showLocal} />}
-            {report && <DoePriceSummary report={report} />}
+            {report ? <DoePriceSummary report={report} /> : showLocal && <LocalPriceBoard item={showLocal} />}
             {!loading && selected && !report && <ThemedText themeColor="textSecondary">No DOE company report is available for {doeLocationLabel(selected)}. Choose another area or explore the map.</ThemedText>}
             <View style={styles.controls} onLayout={event => setComparisonY(event.nativeEvent.layout.y)}>
               {grades.map(item => <Pressable key={item.value} accessibilityRole="button"
@@ -276,7 +276,7 @@ export default function FuelPricesScreen() {
             </>}
           </>
           {showLocal && <RecentPriceUpdates area={showLocal.area.name} updates={fuel.updates} error={fuel.historyError} />}
-          {showLocal && <ThemedText type="small" themeColor="textSecondary">Location lookup uses Geoapify and OpenStreetMap contributors. Local estimates may differ from DOE report ranges.</ThemedText>}
+          {showLocal && <ThemedText type="small" themeColor="textSecondary">Location lookup uses Geoapify and OpenStreetMap contributors.</ThemedText>}
         </View>
       </RefreshableScrollView>
     </SafeAreaView>

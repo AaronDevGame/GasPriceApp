@@ -28,6 +28,8 @@ function PriceGrid({ prices }: { prices: Prices }) {
 }
 
 export function DoePriceSummary({ report }: { report: DoeFuelPriceFeed }) {
+  const provinceWide = report.scope === 'province' || !report.city;
+  const area = provinceWide ? report.province : report.city;
   const range = (grade: string) => {
     const rows = report.prices.filter(row => row.fuelGrade === grade);
     return { minPrice: rows.length ? Math.min(...rows.map(row => row.minPricePerLiter)) : null,
@@ -35,8 +37,8 @@ export function DoePriceSummary({ report }: { report: DoeFuelPriceFeed }) {
       currency: 'PHP', unit: 'liter' };
   };
   return <ThemedView type="backgroundElement" style={styles.card}>
-    <ThemedText type="smallBold">DOE reported</ThemedText>
-    <ThemedText type="small" themeColor="textSecondary">{report.scope === 'province' || !report.city ? 'Province' : 'City'}-level company ranges · {report.weekStart} to {report.weekEnd}</ThemedText>
+    <ThemedText accessibilityRole="header" type="smallBold">DOE-reported fuel prices{area ? ` in ${area}` : ''}</ThemedText>
+    <ThemedText type="small" themeColor="textSecondary">{provinceWide ? 'Province' : 'City'}-level company ranges · {report.weekStart} to {report.weekEnd}</ThemedText>
     <PriceGrid prices={{ diesel: range('DIESEL'), gasoline91: range('RON 91'), gasoline95: range('RON 95') }} />
     <ThemedText type="small" themeColor="textSecondary">Reported company ranges, not individual station prices.</ThemedText>
     {!!report.prices.length && <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(report.prices[0].sourceUrl)} style={styles.toggle}>

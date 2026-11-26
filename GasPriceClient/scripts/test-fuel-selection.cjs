@@ -29,6 +29,7 @@ const index = require('../../GasPriceBackend/Geography/ph-2026q3-v1/index.json')
 const manila = { city: 'Manila', province: 'Metro Manila' };
 const cebu = { city: 'Cebu City', province: 'Cebu' };
 const cavite = { city: '', province: 'Cavite', scope: 'province' };
+const reportedPrice = { oilCompany: 'Example Oil', fuelGrade: 'RON 91', minPricePerLiter: 64, maxPricePerLiter: 75.08 };
 for (const location of [manila, cebu, cavite]) {
   const area = selection.mapAreaForLocation(index, location);
   assert(area, `Map must resolve ${location.city || location.province}`);
@@ -49,7 +50,7 @@ function harness(options = {}) {
     locationNote: 'Use your location', updates: [], refresh: async () => { calls.push('local refresh'); }, useLocation: async () => {} };
   const news = { item: null, reload: async () => { calls.push('news refresh'); } };
   let response = location => Promise.resolve({ locations: [manila, cebu, cavite], selected: {
-    ...location, scope: location.city ? 'city' : 'province', weekStart: '2026-11-01', weekEnd: '2026-11-07', prices: [],
+    ...location, scope: location.city ? 'city' : 'province', weekStart: '2026-11-01', weekEnd: '2026-11-07', prices: [reportedPrice],
   } });
   const equal = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
   const memo = (fn, deps) => { const i = cursor++; if (!cells[i] || !equal(cells[i].deps, deps)) cells[i] = { deps, value: fn() }; return cells[i].value; };
@@ -121,8 +122,8 @@ function harness(options = {}) {
   h.setResponse(location => new Promise(resolve => { if (location.city === 'Manila') first = resolve; else second = resolve; }));
   h.nodes().find(n => n.type === 'FuelMap').props.onLocationChange(manila); await h.settle();
   h.nodes().find(n => n.type === 'FuelMap').props.onLocationChange(cebu); await h.settle();
-  second({ locations: [manila, cebu], selected: { ...cebu, prices: [] } }); await h.settle();
-  first({ locations: [manila, cebu], selected: { ...manila, prices: [] } }); await h.settle();
+  second({ locations: [manila, cebu], selected: { ...cebu, prices: [reportedPrice] } }); await h.settle();
+  first({ locations: [manila, cebu], selected: { ...manila, prices: [reportedPrice] } }); await h.settle();
   assert.equal(h.nodes().find(n => n.type === 'DoePriceSummary').props.report.city, 'Cebu City', 'Stale responses cannot overwrite latest area');
   h.setResponse(async location => ({ locations: [manila, cebu], selected: { ...location, prices: [] } }));
   h.foreground(); h.foreground(); await h.settle();
@@ -137,11 +138,20 @@ function harness(options = {}) {
   local.fuel.localItem = { area: { city: 'Cebu City', province: 'Cebu', name: 'Cebu City' } };
   local.render(); await local.settle();
   assert.equal(local.nodes().find(n => n.type === 'FuelMap').props.location.city, 'Cebu City');
-  assert(local.nodes().some(n => n.type === 'LocalPriceBoard'));
+  const summaries = () => local.nodes().filter(n => ['DoePriceSummary', 'LocalPriceBoard'].includes(n.type));
+  assert.deepEqual(summaries().map(n => n.type), ['DoePriceSummary'], 'A reported range replaces the local estimate card');
   assert(local.nodes().some(n => n.type === 'RecentPriceUpdates'));
+  local.setResponse(async () => { throw new Error('DOE browse unavailable'); });
   const beforeRefresh = local.calls.filter(value => value?.city).length;
   local.foreground(); await local.settle();
   assert.equal(local.calls.filter(value => value?.city).length, beforeRefresh + 1, 'One DOE browse per refresh');
+  local.fuel.doePrices = { ...cebu, prices: [reportedPrice] };
+  local.setResponse(async () => ({ locations: [manila], selected: null }));
+  local.foreground(); await local.settle();
+  assert.deepEqual(summaries().map(n => n.type), ['DoePriceSummary'], 'A matching location report can supply the only summary');
+  local.fuel.doePrices = null;
+  local.render(); await local.settle();
+  assert.deepEqual(summaries().map(n => n.type), ['LocalPriceBoard'], 'A local estimate remains available without a report');
   const mapProps = { userCoordinates: null, onReturnToLocation: () => { returned++; } };
   let returned = 0;
   const mapSnapshot = { index, cities: [], features: [], prices: new Map(), viewport: null, loading: false, error: null };
