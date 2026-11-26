@@ -112,17 +112,17 @@ const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(
   assert.equal(decrease.direction, 'down');
   assert.equal(decrease.action, 'Wait if you can');
   assert.equal(decrease.amount, '₱2.00/L');
-  assert.equal(decrease.compactStatus, 'Effective Nov 10');
+  assert.equal(decrease.updateStatus, 'Effective Nov 10');
   const increase = api.adviceSummary(fixture({ status: 'gas_now', reason: 'increase_upcoming',
     evidence: [{ ...fixture().evidence[0], minChangePerLiter: 1.2, maxChangePerLiter: 1.2 }] }), false, false);
   assert.equal(increase.direction, 'up');
   assert.equal(increase.action, 'Gas up now');
   assert.equal(increase.amount, '₱1.20/L');
-  assert.equal(increase.compactStatus, 'Effective Nov 10');
+  assert.equal(increase.updateStatus, 'Effective Nov 10');
   const conflict = api.adviceSummary(fixture({ status: 'unknown', reason: 'conflicting_adjustments' }), false, false);
   assert.equal(conflict.amount, '—');
   assert.equal(conflict.action, 'Check sources');
-  assert.equal(conflict.compactStatus, 'Sources disagree');
+  assert.equal(conflict.updateStatus, 'Sources disagree');
   for (const [reason, status, change, label] of [
     ['rollback_effective', 'gas_now', -2, 'Rollback since Nov 10'],
     ['increase_effective', 'neutral', 2, 'Increase since Nov 10'],
@@ -130,10 +130,10 @@ const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(
   ]) {
     const advice = fixture({ reason, status, evidence: [{ ...fixture().evidence[0],
       minChangePerLiter: change, maxChangePerLiter: change }] });
-    assert.equal(api.adviceSummary(advice, false, false).compactStatus, label);
+    assert.equal(api.adviceSummary(advice, false, false).updateStatus, label);
   }
   assert.equal(api.adviceSummary(fixture({ status: 'unknown', reason: 'no_confirmed_adjustment', evidence: [] }),
-    false, false).compactStatus, 'No confirmed update');
+    false, false).updateStatus, 'No confirmed update');
   const forecast = api.adviceSummary(fixture({ status: 'unknown', reason: 'forecast_only', evidence: [],
     forecast: { ...fixture().evidence[0], confirmationStatus: 'forecast', minChangePerLiter: -2, maxChangePerLiter: -1 } }), false, false);
   assert.equal(forecast.amount, '₱1.00–2.00/L');
@@ -147,7 +147,7 @@ const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(
         minChangePerLiter: min, maxChangePerLiter: max } });
     const summary = api.adviceSummary(advice, false, false);
     assert.equal(summary.action, label);
-    assert.equal(summary.compactStatus, 'Unconfirmed · Expected Nov 10');
+    assert.equal(summary.updateStatus, 'Unconfirmed · Expected Nov 10');
     assert.equal(api.adviceHeadline(advice, false, false), label);
   }
   assert.equal(api.adviceSummary(null, false, true).action, 'Temporarily unavailable');

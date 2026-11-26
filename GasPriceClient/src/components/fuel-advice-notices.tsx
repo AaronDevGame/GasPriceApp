@@ -40,11 +40,7 @@ function AdviceNotice({ fuel, onOpen, active, compact }: { fuel: HeaderFuel; onO
     : summary.direction === 'down' ? theme.advicePositive : summary.direction === 'up' ? theme.priceIncrease : theme.textSecondary;
   const arrow = summary.direction === 'down' ? '↓' : summary.direction === 'up' ? '↑' : summary.direction === 'flat' ? '↔' : '';
   const change = summary.direction !== 'none' ? `${arrow} ${summary.amount}`.trim() : null;
-  const timing = compact ? '' : summary.timing;
-  const notice = !advice ? loading ? 'Checking…' : error ? 'Tap to retry' : 'View advice'
-    : compact ? summary.compactStatus
-    : advice.reason === 'rollback_effective' ? 'Rollback in effect'
-    : status === 'gas_now' ? 'Gas up now' : status === 'wait' ? 'Wait for rollback' : status === 'neutral' ? 'No rush to fill' : summary.action;
+  const notice = advice ? summary.updateStatus : loading ? 'Checking…' : error ? 'Tap to retry' : 'View advice';
   const priceView = <View style={!compact && styles.desktopPrice}>
     {amount && <ThemedText type="smallBold" style={styles.amount}>{amount}</ThemedText>}
     <View style={styles.priceCaption}>
@@ -53,7 +49,7 @@ function AdviceNotice({ fuel, onOpen, active, compact }: { fuel: HeaderFuel; onO
     </View>
   </View>;
   return <Pressable accessibilityRole="button"
-    accessibilityLabel={[fuel === 'gasoline' ? 'Gasoline RON 91' : label, amount, priceLabel, change, timing, notice].filter(Boolean).join('. ')}
+    accessibilityLabel={[fuel === 'gasoline' ? 'Gasoline RON 91' : label, amount, priceLabel, change, notice].filter(Boolean).join('. ')}
     accessibilityHint="Opens Should I gas up with this fuel selected"
     onPress={onOpen} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
     style={({ hovered, pressed }) => [styles.notice, compact && styles.compactNotice, { backgroundColor: theme.backgroundElement,
@@ -74,7 +70,6 @@ function AdviceNotice({ fuel, onOpen, active, compact }: { fuel: HeaderFuel; onO
     </View>
     {compact && priceView}
     <View style={styles.noticeRow}>
-      {!!timing && <ThemedText type="small" themeColor="textSecondary">{timing}</ThemedText>}
       <ThemedText type="smallBold" style={{ color }}>{notice}</ThemedText>
     </View>
   </Pressable>;

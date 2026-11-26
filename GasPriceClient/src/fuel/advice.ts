@@ -58,7 +58,7 @@ export function adviceIsCurrent(advice: FuelAdvice, now: number) {
   return adviceExpiresAt(advice) > now;
 }
 
-function compactAdviceStatus(reason: string | undefined, date?: string) {
+function fuelUpdateStatus(reason: string | undefined, date?: string) {
   switch (reason) {
     case 'rollback_upcoming':
     case 'increase_upcoming': return date ? `Effective ${date}` : 'No confirmed update';
@@ -87,7 +87,7 @@ export function adviceSummary(advice: FuelAdvice | null, loading: boolean, error
   const evidence = confirmed ? advice.evidence[0] : advice?.evidence.length ? null : advice?.forecast;
   if (!evidence || !Number.isFinite(evidence.minChangePerLiter) || !Number.isFinite(evidence.maxChangePerLiter))
     return { action, direction: 'none', amount: '—', timing: advice?.reason === 'conflicting_adjustments'
-      ? 'Sources disagree' : '', compactStatus: compactAdviceStatus(advice?.reason) };
+      ? 'Sources disagree' : '', updateStatus: fuelUpdateStatus(advice?.reason) };
   const min = evidence.minChangePerLiter, max = evidence.maxChangePerLiter;
   const direction = max < 0 ? 'down' : min > 0 ? 'up' : min === 0 && max === 0 ? 'flat' : 'mixed';
   const amount = min === max ? `₱${Math.abs(min).toFixed(2)}/L`
@@ -96,7 +96,7 @@ export function adviceSummary(advice: FuelAdvice | null, loading: boolean, error
   const date = new Date(evidence.effectiveAtUtc ?? `${evidence.effectiveDatePhilippines}T12:00:00+08:00`);
   const when = date.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' });
   return { action, direction, amount, timing: `${confirmed ? 'Effective' : 'Estimated effective'} ${when}`,
-    compactStatus: compactAdviceStatus(advice?.reason, Number.isFinite(date.getTime()) ? when : undefined) };
+    updateStatus: fuelUpdateStatus(advice?.reason, Number.isFinite(date.getTime()) ? when : undefined) };
 }
 
 export function adviceCurrentDecrease(advice: FuelAdvice) {
