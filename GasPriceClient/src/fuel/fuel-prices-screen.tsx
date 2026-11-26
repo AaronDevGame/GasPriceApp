@@ -1,3 +1,4 @@
+import { AppIcon } from '@/components/app-icon';
 import { MobileHeader } from '@/components/mobile-header';
 import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -187,10 +188,6 @@ export default function FuelPricesScreen() {
         <FuelNewsHeadline items={news.items} />
         <View style={styles.content} onLayout={event => setContentY(event.nativeEvent.layout.y)}>
           {news.error && <View><ThemedText type="small" themeColor="textSecondary">News could not be updated.</ThemedText><DashboardAction title="Retry news" onPress={() => void news.reload()} disabled={news.loading} /></View>}
-          <View style={styles.header}>
-            <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>
-            <ThemedText themeColor="textSecondary">Find prices in your area and compare reported company ranges.</ThemedText>
-          </View>
           {!authenticated && !authLoading && <ThemedText accessibilityRole="alert">{authError ?? 'You are signed out. Reconnect to load fuel prices.'}</ThemedText>}
           {!authenticated && !authLoading && <DashboardAction title="Reconnect" onPress={() => void restore()} />}
           {(authLoading || (authenticated && loading && !refreshing)) && <View style={styles.loading}><ActivityIndicator /><ThemedText>Loading DOE prices…</ThemedText></View>}
@@ -203,17 +200,27 @@ export default function FuelPricesScreen() {
           <>
             <ThemedView type="backgroundElement" style={styles.card}>
               <View style={styles.locationHeading}>
-                <ThemedText type="smallBold">Where are you filling up?</ThemedText>
-                <DashboardAction title="Use my location" primary disabled={fuel.busy || !authenticated} onPress={() => { followLocal.current = true; void fuel.useLocation(); }} />
+                <ThemedText accessibilityRole="header" style={[styles.sectionTitle, styles.areaTitle]}>
+                  {selected ? doeLocationLabel(selected) : 'Choose an area'}
+                </ThemedText>
+                <View style={styles.actions}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Choose city or province"
+                    accessibilityState={{ expanded: showCities, disabled: !authenticated }} disabled={!authenticated}
+                    onPress={() => setShowCities(value => !value)}
+                    style={({ pressed }) => [styles.iconButton, { backgroundColor: theme.background, borderColor: showCities ? theme.text : theme.backgroundSelected, opacity: pressed || !authenticated ? 0.6 : 1 }]}>
+                    <AppIcon name="search" color={theme.text} />
+                  </Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={fuel.userCoordinates ? 'Use my location' : 'Allow location access'}
+                    accessibilityState={{ disabled: fuel.busy || !authenticated }} disabled={fuel.busy || !authenticated}
+                    onPress={() => { followLocal.current = true; setShowCities(false); void fuel.useLocation(); }}
+                    style={({ pressed }) => [styles.iconButton, { backgroundColor: theme.background, borderColor: theme.backgroundSelected, opacity: pressed || fuel.busy || !authenticated ? 0.6 : 1 }]}>
+                    <AppIcon name="location" color={fuel.userCoordinates ? '#76B4FF' : theme.textSecondary} />
+                  </Pressable>
+                </View>
               </View>
-              <ThemedText type="small" themeColor="textSecondary">{historyVisible || !selected || !fuel.userCoordinates ? fuel.locationNote : 'Browse reported prices or use your location for local estimates.'}</ThemedText>
-              <Pressable accessibilityRole="button" accessibilityLabel="Choose city or province" accessibilityState={{ expanded: showCities, disabled: !authenticated }} disabled={!authenticated} onPress={() => setShowCities(value => !value)}
-                style={[styles.selector, { borderColor: theme.backgroundSelected, backgroundColor: theme.background }]}>
-                <ThemedText>{selected ? doeLocationLabel(selected) : 'Choose a city or province'}</ThemedText>
-                <ThemedText themeColor="textSecondary">{showCities ? '▲' : '▼'}</ThemedText>
-              </Pressable>
+              {(!fuel.userCoordinates || fuel.busy || fuel.error) && <ThemedText type="small" themeColor="textSecondary">{fuel.locationNote}</ThemedText>}
               {showCities && <View style={styles.cityList}>
-                <TextInput value={search} onChangeText={setSearch} placeholder="Search city or province"
+                <TextInput autoFocus value={search} onChangeText={setSearch} placeholder="Search city or province"
                   placeholderTextColor={theme.textSecondary} accessibilityLabel="Search city or province"
                   style={[styles.search, { color: theme.text, borderColor: theme.backgroundSelected, backgroundColor: theme.background }]} />
                 {locations.slice(0, 30).map(location => <Pressable key={`${location.city}|${location.province}`}
@@ -225,11 +232,11 @@ export default function FuelPricesScreen() {
                 {locations.length > 30 && <ThemedText type="small" themeColor="textSecondary">Showing the first 30 matches. Type to narrow the list.</ThemedText>}
                 {locations.length === 0 && <ThemedText type="small" themeColor="textSecondary">No matching location.</ThemedText>}
               </View>}
+              {authenticated && fuel.error && <ThemedText accessibilityRole="alert">{fuel.error}</ThemedText>}
+              {authenticated && fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">Updating local prices…</ThemedText></View>}
+              {report ? <DoePriceSummary report={report} /> : showLocal && <LocalPriceBoard item={showLocal} />}
+              {!loading && selected && !report && <ThemedText themeColor="textSecondary">No DOE company report is available for {doeLocationLabel(selected)}. Choose another area or explore the map.</ThemedText>}
             </ThemedView>
-            {authenticated && fuel.error && <ThemedText accessibilityRole="alert">{fuel.error}</ThemedText>}
-            {authenticated && fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">Updating local prices…</ThemedText></View>}
-            {report ? <DoePriceSummary report={report} /> : showLocal && <LocalPriceBoard item={showLocal} />}
-            {!loading && selected && !report && <ThemedText themeColor="textSecondary">No DOE company report is available for {doeLocationLabel(selected)}. Choose another area or explore the map.</ThemedText>}
             <View style={styles.controls} onLayout={event => setComparisonY(event.nativeEvent.layout.y)}>
               {grades.map(item => <Pressable key={item.value} accessibilityRole="button"
                 accessibilityState={{ selected: grade === item.value }} onPress={() => setGrade(item.value)}
@@ -285,14 +292,15 @@ export default function FuelPricesScreen() {
 }
 
 const styles = StyleSheet.create({
-  hidden: { display: 'none' }, locationHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  hidden: { display: 'none' }, locationHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   page: { flex: 1 }, scroll: { alignItems: 'center' },
   mobileHeader: { width: '100%', maxWidth: 1200, paddingHorizontal: scrollPadding, paddingTop: scrollPadding, paddingBottom: 10 },
   content: { width: '100%', maxWidth: 1200, gap: 16, padding: scrollPadding },
-  header: { gap: 8, marginBottom: 12 }, accent: { color: '#76B4FF' },
-  title: { fontSize: 28, lineHeight: 36, fontWeight: '600' }, loading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  accent: { color: '#76B4FF' },
+  loading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   card: { padding: 20, borderRadius: 14, gap: 12 },
-  selector: { borderWidth: 1, borderRadius: 12, padding: 14, flexDirection: 'row', justifyContent: 'space-between' },
+  areaTitle: { flex: 1 }, actions: { flexDirection: 'row', gap: 8 },
+  iconButton: { width: 44, height: 44, borderWidth: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   cityList: { gap: 8 }, search: { borderWidth: 1, borderRadius: 10, padding: 12 },
   cityOption: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#77777733' },
   reportHeading: { gap: 4 }, sectionTitle: { fontSize: 22, lineHeight: 28, fontWeight: '700' },

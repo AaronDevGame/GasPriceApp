@@ -62,7 +62,7 @@ export function useFuelPrices() {
       setHeaderLocation(null);
       setUserCoordinates(null);
       coordinates.current = undefined;
-      setLocationNote('Location access is blocked. You can still browse the map or choose a city or province.');
+      setLocationNote('Location access is blocked. Allow location in your browser or device settings, then tap the location icon to retry.');
       return;
     }
     coordinates.current = position;
@@ -104,10 +104,11 @@ export function useFuelPrices() {
     if (!authenticated) return;
     void run(async ticket => {
       if (ticket !== version.current || prompted.current) return;
-      prompted.current = true;
       // Give the Fuel Prices screen a chance to render before the OS/browser prompt.
       await new Promise(resolve => setTimeout(resolve, 300));
-      if (ticket === version.current) await locate(ticket);
+      if (ticket !== version.current) return;
+      prompted.current = true;
+      await locate(ticket);
     });
     return cancel;
   }, [authenticated, run, locate, cancel]);

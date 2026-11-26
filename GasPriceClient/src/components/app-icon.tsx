@@ -1,10 +1,14 @@
 import { StyleSheet, View, type ColorValue } from 'react-native';
 
-export type AppIconName = 'overview' | 'fuel' | 'news' | 'changes' | 'location' | 'map-pin';
+export type AppIconName = 'overview' | 'fuel' | 'news' | 'changes' | 'location' | 'map-pin' | 'search';
 
 /** Small cross-platform line icons without a font or native dependency. */
 export function AppIcon({ name, color = '#9DA9BA' }: { name: AppIconName; color?: ColorValue }) {
   const line = { borderColor: color };
+  if (name === 'search') return <View style={styles.frame} accessible={false}>
+    <View style={[styles.lens, line]} />
+    <View style={[styles.handle, { backgroundColor: color }]} />
+  </View>;
   if (name === 'map-pin') return <View style={[styles.frame, styles.pinFrame]} accessible={false}>
     <View style={[styles.pinOutline, line]}>
       <View style={[styles.pinDot, { backgroundColor: color }]} />
@@ -19,6 +23,8 @@ export function AppIcon({ name, color = '#9DA9BA' }: { name: AppIconName; color?
   </View>;
 }
 const styles = StyleSheet.create({
+  lens: { position: 'absolute', left: 2, top: 2, width: 15, height: 15, borderRadius: 8, borderWidth: 2 },
+  handle: { position: 'absolute', left: 14, top: 17, width: 9, height: 2, borderRadius: 1, transform: [{ rotate: '45deg' }] },
   crosshairHorizontal: { position: 'absolute', width: 24, height: 2 },
   crosshairVertical: { position: 'absolute', width: 2, height: 24 },
   locationRing: { position: 'absolute', width: 17, height: 17, borderWidth: 2, borderRadius: 9, backgroundColor: '#1A2029' },

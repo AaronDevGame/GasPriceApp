@@ -32,42 +32,40 @@ export function LocalPriceBoard({ item, doePrices }: { item: FeedItem; doePrices
   </View>);
 
   return <View style={styles.sections}>
-    <View style={styles.card}>
-      <View style={styles.content} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
-        <View style={styles.heading}>
-          <View style={styles.badge}>
-            <ThemedText type="smallBold" style={styles.badgeText}>YOUR AREA</ThemedText>
-          </View>
-          <ThemedText type="small" themeColor="textSecondary">₱ / liter</ThemedText>
+    <View style={styles.content} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
+      <View style={styles.heading}>
+        <View style={styles.badge}>
+          <ThemedText type="smallBold" style={styles.badgeText}>YOUR AREA</ThemedText>
         </View>
-        <View style={styles.location}>
-          <ThemedText accessibilityRole="header" style={styles.area}>Fuel prices in {item.area.name}</ThemedText>
-          {details ? <ThemedText type="small" themeColor="textSecondary">{details}</ThemedText> : null}
-        </View>
-        <ThemedText type="small" themeColor="textSecondary">
-          Estimated · As of {date}{item.freshness !== 'current' ? ' · Outdated' : ''}
-        </ThemedText>
-        <View style={[styles.board, compact && styles.boardCompact]}>
-          {fuels.map(fuel => {
-            const formatted = formatPrice(item.prices[fuel.key]);
-            const missing = formatted === 'Not available';
-            const fontSize = missing ? 14 : compact ? (width < 360 ? 17 : 20) : 23;
-            return <View key={fuel.key} accessible accessibilityLabel={`${fuel.label}, ${formatted}${missing ? '' : ' per liter'}`}
-              style={[styles.column, compact && styles.columnCompact]}>
-              <View style={styles.fuel}>
-                <ThemedText style={styles.grade}>{fuel.label}</ThemedText>
-              </View>
-              <View style={[styles.price, compact && styles.priceCompact]}>
-                <ThemedText style={[styles.amount, { fontSize, lineHeight: fontSize + 8 }]}>
-                  {formatted}
-                </ThemedText>
-                {!missing && <ThemedText style={styles.unit}>per liter</ThemedText>}
-              </View>
-            </View>;
-          })}
-        </View>
-        <ThemedText type="small" themeColor="textSecondary" style={styles.note}>Area estimates · Actual pump prices vary by station</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">₱ / liter</ThemedText>
       </View>
+      <View style={styles.location}>
+        <ThemedText accessibilityRole="header" style={styles.area}>Fuel prices in {item.area.name}</ThemedText>
+        {details ? <ThemedText type="small" themeColor="textSecondary">{details}</ThemedText> : null}
+      </View>
+      <ThemedText type="small" themeColor="textSecondary">
+        Estimated · As of {date}{item.freshness !== 'current' ? ' · Outdated' : ''}
+      </ThemedText>
+      <View style={[styles.board, compact && styles.boardCompact]}>
+        {fuels.map(fuel => {
+          const formatted = formatPrice(item.prices[fuel.key]);
+          const missing = formatted === 'Not available';
+          const fontSize = missing ? 14 : compact ? (width < 360 ? 17 : 20) : 23;
+          return <View key={fuel.key} accessible accessibilityLabel={`${fuel.label}, ${formatted}${missing ? '' : ' per liter'}`}
+            style={[styles.column, compact && styles.columnCompact]}>
+            <View style={styles.fuel}>
+              <ThemedText style={styles.grade}>{fuel.label}</ThemedText>
+            </View>
+            <View style={[styles.price, compact && styles.priceCompact]}>
+              <ThemedText style={[styles.amount, { fontSize, lineHeight: fontSize + 8 }]}>
+                {formatted}
+              </ThemedText>
+              {!missing && <ThemedText style={styles.unit}>per liter</ThemedText>}
+            </View>
+          </View>;
+        })}
+      </View>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.note}>Area estimates · Actual pump prices vary by station</ThemedText>
     </View>
     {doePrices && cheapest.length > 0 && <View style={styles.doeSection}>
       <View style={styles.doeHeading}>
@@ -112,8 +110,7 @@ export function LocalPriceBoard({ item, doePrices }: { item: FeedItem; doePrices
 
 const styles = StyleSheet.create({
   sections: { gap: 20 },
-  card: { backgroundColor: '#1A2029', borderRadius: 16 },
-  content: { padding: 20, gap: 12 },
+  content: { gap: 12 },
   heading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   badge: { backgroundColor: '#21334B', borderRadius: 6, paddingHorizontal: 9, paddingVertical: 4 },
   badgeText: { color: '#76B4FF', fontSize: 10, lineHeight: 16, letterSpacing: 1.3 },

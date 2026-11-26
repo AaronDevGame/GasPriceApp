@@ -29,22 +29,20 @@ function PriceGrid({ prices }: { prices: Prices }) {
 
 export function DoePriceSummary({ report }: { report: DoeFuelPriceFeed }) {
   const provinceWide = report.scope === 'province' || !report.city;
-  const area = provinceWide ? report.province : report.city;
   const range = (grade: string) => {
     const rows = report.prices.filter(row => row.fuelGrade === grade);
     return { minPrice: rows.length ? Math.min(...rows.map(row => row.minPricePerLiter)) : null,
       maxPrice: rows.length ? Math.max(...rows.map(row => row.maxPricePerLiter)) : null,
       currency: 'PHP', unit: 'liter' };
   };
-  return <ThemedView type="backgroundElement" style={styles.card}>
-    <ThemedText accessibilityRole="header" type="smallBold">DOE-reported fuel prices{area ? ` in ${area}` : ''}</ThemedText>
-    <ThemedText type="small" themeColor="textSecondary">{provinceWide ? 'Province' : 'City'}-level company ranges · {report.weekStart} to {report.weekEnd}</ThemedText>
+  return <>
+    <ThemedText type="small" themeColor="textSecondary">DOE-reported {provinceWide ? 'province' : 'city'}-level company ranges · {report.weekStart} to {report.weekEnd}</ThemedText>
     <PriceGrid prices={{ diesel: range('DIESEL'), gasoline91: range('RON 91'), gasoline95: range('RON 95') }} />
     <ThemedText type="small" themeColor="textSecondary">Reported company ranges, not individual station prices.</ThemedText>
     {!!report.prices.length && <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(report.prices[0].sourceUrl)} style={styles.toggle}>
       <ThemedText type="smallBold" themeColor="textSecondary">View DOE report ↗</ThemedText>
     </Pressable>}
-  </ThemedView>;
+  </>;
 }
 export function RecentPriceUpdates({ area, updates, error }: { area: string; updates: PricePoint[]; error: boolean }) {
   const [expanded, setExpanded] = useState(false);
