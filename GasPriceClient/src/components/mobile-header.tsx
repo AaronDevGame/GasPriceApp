@@ -1,8 +1,7 @@
-import { Link } from 'expo-router';
 import { Platform, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { FuelAdviceNotices } from '@/components/fuel-advice-notices';
-import { ThemedText } from '@/components/themed-text';
+import { GasUpBrand } from '@/components/gasup-brand';
 
 // Render inside the screen's scroll content so branding and prices scroll together.
 export function MobileHeader({ style }: { style?: StyleProp<ViewStyle> }) {
@@ -10,15 +9,12 @@ export function MobileHeader({ style }: { style?: StyleProp<ViewStyle> }) {
   if (Platform.OS === 'web' && width >= 900) return null;
 
   return <View style={[styles.header, style]}>
-    <Link href="/" accessibilityLabel="GasUp Philippines home" style={styles.brandLink}>
-      <ThemedText type="smallBold" style={styles.brand}>GasUp · PHILIPPINES</ThemedText>
-    </Link>
+    <View style={styles.brand}><GasUpBrand /></View>
     <FuelAdviceNotices compact />
   </View>;
 }
 
 const styles = StyleSheet.create({
   header: { gap: 12 },
-  brandLink: { alignSelf: 'flex-start', paddingVertical: 4 },
-  brand: { color: '#76B4FF' },
+  brand: { alignSelf: 'flex-start' },
 });

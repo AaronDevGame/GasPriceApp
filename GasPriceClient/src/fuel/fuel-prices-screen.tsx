@@ -287,7 +287,7 @@ export default function FuelPricesScreen() {
 const styles = StyleSheet.create({
   hidden: { display: 'none' }, locationHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   page: { flex: 1 }, scroll: { alignItems: 'center' },
-  mobileHeader: { width: '100%', maxWidth: 1200, paddingHorizontal: scrollPadding, paddingTop: scrollPadding },
+  mobileHeader: { width: '100%', maxWidth: 1200, paddingHorizontal: scrollPadding, paddingTop: scrollPadding, paddingBottom: 10 },
   content: { width: '100%', maxWidth: 1200, gap: 16, padding: scrollPadding },
   header: { gap: 8, marginBottom: 12 }, accent: { color: '#76B4FF' },
   title: { fontSize: 28, lineHeight: 36, fontWeight: '600' }, loading: { flexDirection: 'row', alignItems: 'center', gap: 12 },

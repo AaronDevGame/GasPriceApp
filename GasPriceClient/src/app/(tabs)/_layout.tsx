@@ -3,6 +3,7 @@ import { Platform, Pressable, StyleSheet, useWindowDimensions, View, type Pressa
 
 import { FuelAdviceNotices } from '@/components/fuel-advice-notices';
 
+import { GasUpBrand } from '@/components/gasup-brand';
 import { AppIcon } from '@/components/app-icon';
 import { ThemedText } from '@/components/themed-text';
 import { HeaderPricesProvider } from '@/fuel/header-prices';
@@ -35,12 +36,7 @@ export default function TabLayout() {
     tabBarItemStyle: { paddingTop: 8 },
   }} tabBar={desktop ? ({ state, navigation }) => <View style={styles.nav}>
     <View style={styles.navInner}>
-      <Link href="/" style={styles.brandLink} accessibilityLabel="GasUp Philippines home">
-        <View style={styles.brand}>
-          <View style={styles.brandIcon}><AppIcon name="fuel" color="#76B4FF" /></View>
-          <View><ThemedText style={styles.brandName}>GasUp</ThemedText><ThemedText style={styles.country}>PHILIPPINES</ThemedText></View>
-        </View>
-      </Link>
+      <GasUpBrand />
       <FuelAdviceNotices active={state.routes[state.index].name === 'index'} />
       <View style={styles.links}>{destinations.map(item => {
         const route = state.routes.find(r => r.name === item.name);
@@ -69,9 +65,6 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   nav: { backgroundColor: '#151A21', borderBottomWidth: 1, borderColor: '#2B3441', alignItems: 'center', paddingHorizontal: 28 },
   navInner: { width: '100%', maxWidth: 1160, minHeight: 84, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', paddingVertical: 10 },
-  brandLink: { flexShrink: 0 }, brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandIcon: { backgroundColor: '#21334B', borderRadius: 12, padding: 10 },
-  brandName: { fontSize: 20, lineHeight: 25, fontWeight: '700' }, country: { fontSize: 9, lineHeight: 15, letterSpacing: 2, color: '#9DA9BA' },
   links: { flexDirection: 'row', gap: 4 }, navLink: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 12, borderRadius: 10 },
   navLabel: { fontSize: 11, lineHeight: 16 },
   navLinkActive: { backgroundColor: '#21334B' }, activeText: { color: '#76B4FF' }, inactiveText: { color: '#9DA9BA' },

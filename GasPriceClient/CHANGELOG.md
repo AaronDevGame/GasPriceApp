@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Show the desktop GasUp brand lockup on mobile and add space between the fuel adjustment cards and news ticker.
 - Rotate up to three recent headlines in a full-width strip directly below the Fuel Prices navigation header, with one story per topic and one price adjustment at a time. Align the FUEL NEWS, CONFIRMED, or FORECAST label beneath GasUp on desktop and extend its background to the left edge of the ticker. Place the headline beside the label, omit a repeated “Confirmed:” prefix on confirmed stories, and provide previous and next arrows.
 - Rename the app to GasUp in mobile and desktop headers, the installed app name, and the location permission prompt.
 
