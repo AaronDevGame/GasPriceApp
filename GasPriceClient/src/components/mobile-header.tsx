@@ -10,8 +10,8 @@ export function MobileHeader() {
   if (Platform.OS === 'web' && width >= 900) return null;
 
   return <View style={styles.header}>
-    <Link href="/" accessibilityLabel="GasPrice Philippines home" style={styles.brandLink}>
-      <ThemedText type="smallBold" style={styles.brand}>GASPRICE · PHILIPPINES</ThemedText>
+    <Link href="/" accessibilityLabel="GasUp Philippines home" style={styles.brandLink}>
+      <ThemedText type="smallBold" style={styles.brand}>GasUp · PHILIPPINES</ThemedText>
     </Link>
     <FuelAdviceNotices compact />
   </View>;

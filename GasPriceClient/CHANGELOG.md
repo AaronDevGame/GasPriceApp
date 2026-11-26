@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Rename the app to GasUp in mobile and desktop headers, the installed app name, and the location permission prompt.
+
 ### Fixed
 - Make map price cards clickable so selecting one centers and highlights the area named on the card.
 

@@ -49,7 +49,7 @@ export default function NewsScreen() {
         onRefresh={() => load(undefined, true)} refreshEnabled={!loading}>
         <View style={styles.content}>
           <MobileHeader />
-          {Platform.OS === 'web' && width >= 900 && <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>}
+          {Platform.OS === 'web' && width >= 900 && <ThemedText type="smallBold" style={styles.accent}>GasUp · PHILIPPINES</ThemedText>}
           <ThemedText type="title" style={styles.title}>News</ThemedText>
           <ThemedText themeColor="textSecondary">Fuel announcements, forecasts, and the context behind price changes.</ThemedText>
           <NewsAlerts />

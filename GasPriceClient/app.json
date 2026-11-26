@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "GasPrice",
+    "name": "GasUp",
     "slug": "gasprice-client",
     "version": "1.2.0",
     "orientation": "portrait",
@@ -38,7 +38,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow GasPrice to use your location to show fuel prices near you."
+          "locationWhenInUsePermission": "Allow GasUp to use your location to show fuel prices near you."
         }
       ]
     ],

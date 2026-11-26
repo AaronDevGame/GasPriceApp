@@ -35,10 +35,10 @@ export default function TabLayout() {
     tabBarItemStyle: { paddingTop: 8 },
   }} tabBar={desktop ? ({ state, navigation }) => <View style={styles.nav}>
     <View style={styles.navInner}>
-      <Link href="/" style={styles.brandLink} accessibilityLabel="GasPrice Philippines home">
+      <Link href="/" style={styles.brandLink} accessibilityLabel="GasUp Philippines home">
         <View style={styles.brand}>
           <View style={styles.brandIcon}><AppIcon name="fuel" color="#76B4FF" /></View>
-          <View><ThemedText style={styles.brandName}>GasPrice</ThemedText><ThemedText style={styles.country}>PHILIPPINES</ThemedText></View>
+          <View><ThemedText style={styles.brandName}>GasUp</ThemedText><ThemedText style={styles.country}>PHILIPPINES</ThemedText></View>
         </View>
       </Link>
       <FuelAdviceNotices active={state.routes[state.index].name === 'index'} />

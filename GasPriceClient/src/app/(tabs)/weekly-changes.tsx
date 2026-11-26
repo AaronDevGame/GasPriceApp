@@ -181,7 +181,7 @@ export default function WeeklyChangesScreen() {
         <View style={styles.content}>
           <MobileHeader />
           <View style={styles.header}>
-            {Platform.OS === 'web' && width >= 900 && <ThemedText type="smallBold" style={styles.accent}>GASPRICE · PHILIPPINES</ThemedText>}
+            {Platform.OS === 'web' && width >= 900 && <ThemedText type="smallBold" style={styles.accent}>GasUp · PHILIPPINES</ThemedText>}
             <ThemedText type="title" style={styles.title}>Weekly Changes</ThemedText>
             <ThemedText themeColor="textSecondary">Announced fuel price increases and decreases by oil company, in pesos per liter.</ThemedText>
           </View>
