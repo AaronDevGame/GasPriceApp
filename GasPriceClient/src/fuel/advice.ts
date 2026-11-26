@@ -58,6 +58,19 @@ export function adviceIsCurrent(advice: FuelAdvice, now: number) {
   return adviceExpiresAt(advice) > now;
 }
 
+function compactAdviceStatus(reason: string | undefined, date?: string) {
+  switch (reason) {
+    case 'rollback_upcoming':
+    case 'increase_upcoming': return date ? `Effective ${date}` : 'No confirmed update';
+    case 'rollback_effective': return date ? `Rollback since ${date}` : 'No confirmed update';
+    case 'increase_effective': return date ? `Increase since ${date}` : 'No confirmed update';
+    case 'no_price_change': return 'No price change';
+    case 'forecast_only': return date ? `Unconfirmed · Expected ${date}` : 'Unconfirmed';
+    case 'conflicting_adjustments': return 'Sources disagree';
+    default: return 'No confirmed update';
+  }
+}
+
 // Keep price direction independent from the recommendation to buy or wait.
 export function adviceSummary(advice: FuelAdvice | null, loading: boolean, error: boolean) {
   const action = !advice ? (loading ? 'Checking…' : error ? 'Temporarily unavailable' : 'No confirmed update')
@@ -74,7 +87,7 @@ export function adviceSummary(advice: FuelAdvice | null, loading: boolean, error
   const evidence = confirmed ? advice.evidence[0] : advice?.evidence.length ? null : advice?.forecast;
   if (!evidence || !Number.isFinite(evidence.minChangePerLiter) || !Number.isFinite(evidence.maxChangePerLiter))
     return { action, direction: 'none', amount: '—', timing: advice?.reason === 'conflicting_adjustments'
-      ? 'Sources disagree' : '' };
+      ? 'Sources disagree' : '', compactStatus: compactAdviceStatus(advice?.reason) };
   const min = evidence.minChangePerLiter, max = evidence.maxChangePerLiter;
   const direction = max < 0 ? 'down' : min > 0 ? 'up' : min === 0 && max === 0 ? 'flat' : 'mixed';
   const amount = min === max ? `₱${Math.abs(min).toFixed(2)}/L`
@@ -82,7 +95,8 @@ export function adviceSummary(advice: FuelAdvice | null, loading: boolean, error
     : `₱${Math.min(Math.abs(min), Math.abs(max)).toFixed(2)}–${Math.max(Math.abs(min), Math.abs(max)).toFixed(2)}/L`;
   const date = new Date(evidence.effectiveAtUtc ?? `${evidence.effectiveDatePhilippines}T12:00:00+08:00`);
   const when = date.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' });
-  return { action, direction, amount, timing: `${confirmed ? 'Effective' : 'Estimated effective'} ${when}` };
+  return { action, direction, amount, timing: `${confirmed ? 'Effective' : 'Estimated effective'} ${when}`,
+    compactStatus: compactAdviceStatus(advice?.reason, Number.isFinite(date.getTime()) ? when : undefined) };
 }
 
 export function adviceCurrentDecrease(advice: FuelAdvice) {
