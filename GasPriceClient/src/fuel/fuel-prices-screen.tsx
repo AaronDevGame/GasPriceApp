@@ -184,7 +184,7 @@ export default function FuelPricesScreen() {
         refreshEnabled={(!authenticated || !loading) && !fuel.busy}>
         <View style={styles.content}>
           <MobileHeader />
-          {news.item && <FuelNewsHeadline item={news.item} />}
+          {news.items.length > 0 && <FuelNewsHeadline items={news.items} />}
           {news.error && <View><ThemedText type="small" themeColor="textSecondary">News could not be updated.</ThemedText><DashboardAction title="Retry news" onPress={() => void news.reload()} disabled={news.loading} /></View>}
           <View style={styles.header}>
             <ThemedText type="title" style={styles.title}>Fuel Prices</ThemedText>

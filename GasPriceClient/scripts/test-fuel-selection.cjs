@@ -48,7 +48,7 @@ function harness(options = {}) {
   const auth = { session: { state: 'authenticated' }, loading: false, restore: async () => { calls.push('restore'); } };
   const fuel = { localItem: null, doePrices: null, busy: false, authenticated: true,
     locationNote: 'Use your location', updates: [], refresh: async () => { calls.push('local refresh'); }, useLocation: async () => {} };
-  const news = { item: null, reload: async () => { calls.push('news refresh'); } };
+  const news = { items: [], reload: async () => { calls.push('news refresh'); } };
   let response = location => Promise.resolve({ locations: [manila, cebu, cavite], selected: {
     ...location, scope: location.city ? 'city' : 'province', weekStart: '2026-11-01', weekEnd: '2026-11-07', prices: [reportedPrice],
   } });

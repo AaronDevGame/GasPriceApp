@@ -3,9 +3,11 @@
 ## [Unreleased]
 
 ### Changed
+- Rotate up to three recent headlines in a compact strip on Fuel Prices, with one story per topic and one price adjustment at a time.
 - Rename the app to GasUp in mobile and desktop headers, the installed app name, and the location permission prompt.
 
 ### Fixed
+- Fix a blank homepage on web when the fuel-news headline initializes its animation.
 - Show one fuel-price summary per selected area, with DOE-reported ranges when available and an estimate when no DOE report is available.
 - Make map price cards clickable so selecting one centers and highlights the area named on the card.
 
