@@ -115,12 +115,16 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, prev
       positions.unshift(previousPosition);
       if (dragOffset) {
         const [preferredX, preferredY] = positions[1];
-        // Return only along axes where the map is moving back toward the displaced card.
+        const [labelX, labelY] = project(area.labelPoint, viewport);
+        const visibleWidth = Math.max(0, Math.min(viewport.width, labelX + width / 2) - Math.max(0, labelX - width / 2));
+        const visibleHeight = Math.max(0, Math.min(viewport.height, labelY + height / 2) - Math.max(0, labelY - height / 2));
         const dx = preferredX - insetX;
         const dy = preferredY - insetY;
-        const stepX = dx * dragOffset[0] < 0 ? Math.sign(dx) * Math.min(Math.abs(dx), Math.abs(dragOffset[0]), 12) : 0;
-        const stepY = dy * dragOffset[1] < 0 ? Math.sign(dy) * Math.min(Math.abs(dy), Math.abs(dragOffset[1]), 12) : 0;
-        if (stepX || stepY) positions.unshift([insetX + stepX, insetY + stepY]);
+        const distance = Math.hypot(dx, dy);
+        const step = Math.min(distance, Math.hypot(...dragOffset), 12);
+        if (visibleWidth * visibleHeight > width * height / 2 && step > 0.001) {
+          positions.unshift([insetX + dx * step / distance, insetY + dy * step / distance]);
+        }
       }
     }
     const position = positions.find(([x, y]) => !placed.some(other =>
