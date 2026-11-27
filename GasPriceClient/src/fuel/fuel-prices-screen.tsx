@@ -30,10 +30,30 @@ const grades = [
 ] as const;
 const scrollPadding = 20;
 
-function priceLabel(row: DoeFuelPrice) {
-  const low = `₱${row.minPricePerLiter.toFixed(2)}`;
-  return row.minPricePerLiter === row.maxPricePerLiter
-    ? low : `${low}–₱${row.maxPricePerLiter.toFixed(2)}`;
+type PriceRange = Pick<DoeFuelPrice, 'minPricePerLiter' | 'maxPricePerLiter'>;
+
+function companyRows(prices: DoeFuelPrice[], sortByPrice: boolean) {
+  const companies = new Map<string, { name: string; prices: Map<string, PriceRange>; lowest: number }>();
+  for (const price of prices) {
+    if (!grades.some(grade => grade.value === price.fuelGrade)) continue;
+    const company = companies.get(price.oilCompany) ?? {
+      name: price.oilCompany, prices: new Map<string, PriceRange>(), lowest: Infinity,
+    };
+    const previous = company.prices.get(price.fuelGrade) ?? price;
+    company.prices.set(price.fuelGrade, {
+      minPricePerLiter: Math.min(previous.minPricePerLiter, price.minPricePerLiter),
+      maxPricePerLiter: Math.max(previous.maxPricePerLiter, price.maxPricePerLiter),
+    });
+    company.lowest = Math.min(company.lowest, price.minPricePerLiter);
+    companies.set(company.name, company);
+  }
+  return [...companies.values()].sort((a, b) =>
+    (sortByPrice ? a.lowest - b.lowest : 0) || a.name.localeCompare(b.name));
+}
+
+function priceLabel(range: PriceRange) {
+  const low = range.minPricePerLiter.toFixed(2);
+  return range.minPricePerLiter === range.maxPricePerLiter ? low : `${low}–\u200b${range.maxPricePerLiter.toFixed(2)}`;
 }
 
 export default function FuelPricesScreen() {
@@ -55,7 +75,6 @@ export default function FuelPricesScreen() {
   const [feed, setFeed] = useState<DoePriceBrowseFeed | null>(null);
   const [selected, setSelected] = useState<DoePriceLocation | null>(null);
   const [selectedManually, setSelectedManually] = useState(false);
-  const [grade, setGrade] = useState<string>('RON 91');
   const [search, setSearch] = useState('');
   const [showCities, setShowCities] = useState(false);
   const [sortByPrice, setSortByPrice] = useState(true);
@@ -66,10 +85,7 @@ export default function FuelPricesScreen() {
   const authenticated = session?.state === 'authenticated';
   if (comparison !== handledComparison) {
     setHandledComparison(comparison);
-    if (comparison) {
-      setGrade(comparison.fuel === 'gasoline' ? 'RON 91' : 'DIESEL');
-      setMode('list');
-    }
+    if (comparison) setMode('list');
   }
   const load = useCallback(async (location?: DoePriceLocation, refresh = false) => {
     const ticket = ++requestId.current;
@@ -175,10 +191,7 @@ export default function FuelPricesScreen() {
   const browsedReport = feed?.selected;
   const locationReport = showLocal ? fuel.doePrices : null;
   const report = browsedReport?.prices.length ? browsedReport : locationReport?.prices.length ? locationReport : null;
-  const rows = report?.prices.filter(row => row.fuelGrade === grade) ?? [];
-  const sorted = [...rows].sort(sortByPrice
-    ? (a, b) => a.minPricePerLiter - b.minPricePerLiter || a.maxPricePerLiter - b.maxPricePerLiter || a.oilCompany.localeCompare(b.oilCompany)
-    : (a, b) => a.oilCompany.localeCompare(b.oilCompany));
+  const rows = mode === 'list' && report ? companyRows(report.prices, sortByPrice) : [];
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.page}>
       <RefreshableScrollView ref={scroll} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
@@ -238,13 +251,7 @@ export default function FuelPricesScreen() {
               {!loading && selected && !report && <ThemedText themeColor="textSecondary">No DOE company report is available for {doeLocationLabel(selected)}. Choose another area or explore the map.</ThemedText>}
             </ThemedView>
             <View style={styles.controls} onLayout={event => setComparisonY(event.nativeEvent.layout.y)}>
-              {grades.map(item => <Pressable key={item.value} accessibilityRole="button"
-                accessibilityState={{ selected: grade === item.value }} onPress={() => setGrade(item.value)}
-                style={[styles.chip, { borderColor: grade === item.value ? '#76B4FF' : theme.backgroundSelected }]}>
-                <ThemedText type="smallBold">{item.label}</ThemedText>
-              </Pressable>)}
-            </View>
-            <View style={styles.controls}>{(['map', 'list'] as const).map(value =>
+              {(['map', 'list'] as const).map(value =>
               <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: mode === value }}
                 onPress={() => setMode(value)} style={[styles.chip, { borderColor: mode === value ? '#76B4FF' : theme.backgroundSelected }]}>
                 <ThemedText type="smallBold">{value === 'map' ? 'Map' : 'Company list'}</ThemedText>
@@ -259,24 +266,33 @@ export default function FuelPricesScreen() {
                   setHistoryVisible(true);
                   followLocal.current = true;
                 }} locations={feed?.locations ?? []} onLocationChange={choose}
-                grade={grade} active={mode === 'map'} initialLocationPending={fuel.busy && !fuel.localItem} foregroundRefreshing={refreshing || mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
+                active={mode === 'map'} initialLocationPending={fuel.busy && !fuel.localItem} foregroundRefreshing={refreshing || mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
             </View>
             {mode === 'list' && report && <>
               <View style={styles.reportHeading}>
                 <ThemedText style={styles.sectionTitle}>{doeCoverageLabel(report)}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">DOE reported · {report.weekStart} to {report.weekEnd}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">DOE reported · ₱/L · {report.weekStart} to {report.weekEnd}</ThemedText>
               </View>
               <Pressable accessibilityRole="button" onPress={() => setSortByPrice(value => !value)}>
                 <ThemedText type="smallBold" style={styles.accent}>Sort: {sortByPrice ? 'Lowest reported price' : 'Company name'} ↕</ThemedText>
               </Pressable>
-              {sorted.length ? sorted.map((row, index) => <ThemedView key={`${row.oilCompany}|${row.fuelGrade}|${index}`}
-                type="backgroundElement" style={styles.priceRow}>
-                <View style={styles.company}>
-                  <ThemedText type="smallBold">{row.oilCompany}</ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">{row.fuelGrade}</ThemedText>
+              {rows.length ? <ThemedView type="backgroundElement" style={styles.table}>
+                <View style={styles.priceRow}>
+                  <ThemedText type="smallBold" style={styles.company}>Company</ThemedText>
+                  {grades.map(grade => <ThemedText key={grade.value} type="smallBold" style={styles.amount}>{grade.label}</ThemedText>)}
                 </View>
-                <ThemedText type="smallBold" style={styles.amount}>{priceLabel(row)} / L</ThemedText>
-              </ThemedView>) : <ThemedText themeColor="textSecondary">No prices for this fuel grade in the selected report.</ThemedText>}
+                {rows.map(company => <View key={company.name} style={[styles.priceRow, { borderTopWidth: 1, borderColor: theme.backgroundSelected }]}>
+                  <ThemedText type="smallBold" style={styles.company}>{company.name}</ThemedText>
+                  {grades.map(grade => {
+                    const range = company.prices.get(grade.value);
+                    const label = range ? priceLabel(range) : '—';
+                    return <ThemedText key={grade.value} type="small" style={styles.amount}
+                      accessibilityLabel={`${company.name}, ${grade.label}, ${range ? label + ' pesos per liter' : 'not reported'}`}>
+                      {label}
+                    </ThemedText>;
+                  })}
+                </View>)}
+              </ThemedView> : <ThemedText themeColor="textSecondary">No company prices for these fuels in the selected report.</ThemedText>}
               {!!report.prices.length && <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(report.prices[0].sourceUrl)}>
                 <ThemedText type="smallBold" style={styles.accent}>View DOE report ↗</ThemedText>
               </Pressable>}
@@ -306,6 +322,7 @@ const styles = StyleSheet.create({
   reportHeading: { gap: 4 }, sectionTitle: { fontSize: 22, lineHeight: 28, fontWeight: '700' },
   controls: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
-  priceRow: { borderRadius: 14, padding: 16, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
-  company: { flex: 1, minWidth: 110, gap: 4 }, amount: { textAlign: 'right', fontVariant: ['tabular-nums'] },
+  table: { borderRadius: 14, paddingHorizontal: 8 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 12 },
+  company: { flex: 1.15 }, amount: { flex: 1, textAlign: 'right', fontVariant: ['tabular-nums'] },
 });

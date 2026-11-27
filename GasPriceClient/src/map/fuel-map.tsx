@@ -19,14 +19,13 @@ import type { LocationFocus, MapSnapshot, Viewport, ZoomFocus } from './types';
 const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: true, detail: false, error: null };
 export type FuelMapHandle = { refresh(): Promise<void> };
 
-export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange, location, userLocation, userCoordinates, onReturnToLocation, locations = [], onLocationChange, grade, active = true, initialLocationPending = false }: {
+export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange, location, userLocation, userCoordinates, onReturnToLocation, locations = [], onLocationChange, active = true, initialLocationPending = false }: {
   location?: DoePriceLocation | null;
   userCoordinates?: Coordinates | null;
   userLocation?: DoePriceLocation | null;
   onReturnToLocation?(): void;
   locations?: DoePriceLocation[];
   onLocationChange?(location: DoePriceLocation): void;
-  grade?: string;
   active?: boolean;
   initialLocationPending?: boolean;
   ref?: Ref<FuelMapHandle>;
@@ -145,7 +144,6 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const noPrices = authenticated && !snapshot.loading && !snapshot.error && snapshot.prices.size > 0 &&
     [...snapshot.prices.values()].every(price => price.status === 'unavailable');
   return <View style={styles.wrapper}>
-    {grade === 'RON 95' && <ThemedText type="small" themeColor="textSecondary">The map shows RON 91 and diesel. Choose Company list for RON 95 reports.</ThemedText>}
     <ThemedText type="small" themeColor="textSecondary">Select a reported city or province to update the company list. Broader areas show map ranges only.</ThemedText>
     <View style={styles.levelButtons} accessibilityLabel="Map geographic levels">
       {mapLevelButtons.map(item => <Pressable key={item.level} accessibilityRole="button"

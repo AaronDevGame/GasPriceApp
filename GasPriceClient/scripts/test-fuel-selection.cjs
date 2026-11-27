@@ -96,12 +96,12 @@ function harness(options = {}) {
   const scroll = comparison.nodes().find(n => n.type === 'RefreshableScrollView');
   let comparisonOffset;
   scroll.props.ref.current = { scrollTo: ({ y }) => { comparisonOffset = y; } };
-  const [content, gradeControls] = comparison.nodes().filter(n => n.props?.onLayout);
+  const [content, viewControls] = comparison.nodes().filter(n => n.props?.onLayout);
   content.props.onLayout({ nativeEvent: { layout: { y: 44 } } });
-  gradeControls.props.onLayout({ nativeEvent: { layout: { y: 200 } } });
+  viewControls.props.onLayout({ nativeEvent: { layout: { y: 200 } } });
   await comparison.settle();
   assert(comparison.button('Company list').props.accessibilityState.selected);
-  assert(comparison.button('Diesel').props.accessibilityState.selected);
+  assert.equal(comparison.button('Diesel'), undefined);
   assert.equal(comparison.nodes().find(n => n.type === 'DoePriceSummary').props.report.city, 'Cebu City');
   assert.equal(comparisonOffset, 244);
   const h = harness(); await h.settle();
@@ -109,17 +109,19 @@ function harness(options = {}) {
   assert.equal(h.nodes().find(n => n.type === 'FuelMap').props.location, null, 'The default company report does not drive the map camera');
   assert.equal(h.nodes().find(n => n.type === 'DoePriceSummary').props.report.city, 'Manila');
   h.button('Company list').props.onPress(); await h.settle();
-  h.button('Gasoline 95').props.onPress();
-  await h.settle();
+  for (const heading of ['Diesel', 'Gasoline 91', 'Gasoline 95']) {
+    assert.equal(h.button(heading), undefined);
+    assert(h.nodes().some(n => n.type === 'ThemedText' && n.props.children === heading));
+  }
+  assert(h.nodes().some(n => n.props?.accessibilityLabel === 'Example Oil, Diesel, not reported'));
+  assert(h.nodes().some(n => n.props?.accessibilityLabel?.startsWith('Example Oil, Gasoline 91, 64.00')));
   h.nodes().find(n => n.props?.accessibilityLabel === 'Choose city or province').props.onPress(); await h.settle();
   h.button('Cebu City').props.onPress(); await h.settle();
   assert.equal(h.nodes().find(n => n.type === 'FuelMap').props.location.city, 'Cebu City');
-  assert.equal(h.nodes().find(n => n.type === 'FuelMap').props.grade, 'RON 95');
   const count = h.calls.length;
   h.button('Map').props.onPress(); await h.settle();
   h.button('Company list').props.onPress(); await h.settle();
   assert.equal(h.calls.length, count, 'View changes must not refetch or discard location');
-  assert(h.button('Gasoline 95').props.accessibilityState.selected);
   let first, second;
   h.setResponse(location => new Promise(resolve => { if (location.city === 'Manila') first = resolve; else second = resolve; }));
   h.nodes().find(n => n.type === 'FuelMap').props.onLocationChange(manila); await h.settle();
@@ -246,5 +248,5 @@ function harness(options = {}) {
   assert.equal(mapHarness.nodes().find(n => n.type === 'MapRenderer').props.zoomFocus, null, 'Returning to location clears the old level command');
   console.log('PASS map levels: five controls, initial disabled state, city/province zoom synchronization, single active level and button camera commands');
   console.log('PASS map location: Metro Manila city default and reset, Imus fix, stable panning, repeat recenter and out-of-coverage handling');
-  console.log('PASS merged screen: shared area/grade, view persistence, stale response protection, deduplicated refresh, GPS race and reconnect');
+  console.log('PASS merged screen: shared area and fuel columns, view persistence, stale response protection, deduplicated refresh, GPS race and reconnect');
 })().catch(error => { console.error(error); process.exitCode = 1; });
