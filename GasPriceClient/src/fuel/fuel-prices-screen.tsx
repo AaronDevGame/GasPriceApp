@@ -82,6 +82,11 @@ export default function FuelPricesScreen() {
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
   const authenticated = session?.state === 'authenticated';
+  const showDefaultArea = !fuel.initialLocationPending && !fuel.userCoordinates;
+  const visibleSelection = authenticated && (selectedManually || historyVisible || showDefaultArea) ? selected : null;
+  const localArea = fuel.localItem?.area ?? fuel.resolvedArea;
+  const detectedLocation = localLocation(localArea, fuel.doePrices);
+  const localBrowsePending = authenticated && !!detectedLocation && !visibleSelection;
   const load = useCallback(async (location?: DoePriceLocation, refresh = false) => {
     const ticket = ++requestId.current;
     setLoading(true);
@@ -117,7 +122,7 @@ export default function FuelPricesScreen() {
     if (!focused || !comparison || comparisonY === null || authLoading || (authenticated && loading)) return;
     const frame = requestAnimationFrame(() => {
       const area = authenticated ? comparison.location : null;
-      if (area && (!selected || !sameLocation(selected, area))) {
+      if (area && (!visibleSelection || !sameLocation(visibleSelection, area))) {
         choose(area);
         return;
       }
@@ -125,7 +130,7 @@ export default function FuelPricesScreen() {
       setComparison(null);
     });
     return () => cancelAnimationFrame(frame);
-  }, [authenticated, authLoading, choose, comparison, comparisonY, contentY, focused, loading, selected, setComparison]);
+  }, [authenticated, authLoading, choose, comparison, comparisonY, contentY, focused, loading, visibleSelection, setComparison]);
   useEffect(() => {
     if (!authenticated) return;
     let active = true;
@@ -140,29 +145,30 @@ export default function FuelPricesScreen() {
     }).finally(() => { if (active && ticket === requestId.current) setLoading(false); });
     return () => { active = false; };
   }, [authenticated]);
-  const observedLocal = useRef(fuel.localItem);
   useEffect(() => {
-    if (!authenticated || !followLocal.current || !fuel.localItem || fuel.busy || observedLocal.current === fuel.localItem) return;
-    observedLocal.current = fuel.localItem;
-    const location = localLocation(fuel.localItem, fuel.doePrices);
+    if (!authenticated || !followLocal.current || fuel.busy) return;
+    const location = localLocation(localArea, fuel.doePrices);
     if (!location || (historyVisible && selected && sameLocation(location, selected))) return;
     const ticket = ++requestId.current;
     let active = true;
-    void getDoePriceBrowse(location).then(next => {
-      if (!active || ticket !== requestId.current || !followLocal.current) return;
+    void (async () => {
+      try {
+        const next = await getDoePriceBrowse(location);
+        if (!active || ticket !== requestId.current) return;
+        setFeed(next);
+        setError(null);
+      } catch (failure) {
+        if (!active || ticket !== requestId.current) return;
+        setFeed(current => current ? { ...current, selected: null } : current);
+        setError(errorMessage(failure));
+      }
       setSelected(location);
-      setFeed(next);
+      setSelectedManually(false);
       setHistoryVisible(true);
-      setError(null);
-    }, failure => {
-      if (!active || ticket !== requestId.current || !followLocal.current) return;
-      setSelected(location);
-      setFeed(current => current ? { ...current, selected: null } : current);
-      setHistoryVisible(true);
-      setError(errorMessage(failure));
-    }).finally(() => { if (active && ticket === requestId.current) setLoading(false); });
+      setLoading(false);
+    })();
     return () => { active = false; };
-  }, [authenticated, fuel.localItem, fuel.doePrices, fuel.busy, historyVisible, selected]);
+  }, [authenticated, localArea, fuel.doePrices, fuel.busy, historyVisible, selected]);
   useEffect(() => {
     const requests = requestId;
     return () => { ++requests.current; };
@@ -170,7 +176,7 @@ export default function FuelPricesScreen() {
 
   const refreshingRef = useRef(false);
   const refresh = async () => {
-    if (refreshingRef.current || (authenticated && loading) || fuel.busy) return;
+    if (refreshingRef.current || (authenticated && loading) || fuel.busy || localBrowsePending) return;
     refreshingRef.current = true;
     setRefreshing(true);
     try {
@@ -179,19 +185,20 @@ export default function FuelPricesScreen() {
     } finally { refreshingRef.current = false; setRefreshing(false); }
   };
   useForegroundRefresh(() => { void refresh(); });
-  const showLocal = fuel.localItem && selected && sameLocation(selected, localLocation(fuel.localItem, fuel.doePrices) ?? { city: '', province: '' }) ? fuel.localItem : null;
+  const showingLocal = visibleSelection && detectedLocation && sameLocation(visibleSelection, detectedLocation);
+  const showLocal = showingLocal ? fuel.localItem : null;
 
   const locations = feed?.locations.filter(location =>
     `${location.city} ${location.province}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) ?? [];
-  const browsedReport = feed?.selected;
-  const locationReport = showLocal ? fuel.doePrices : null;
+  const browsedReport = visibleSelection ? feed?.selected : null;
+  const locationReport = showingLocal ? fuel.doePrices : null;
   const report = browsedReport?.prices.length ? browsedReport : locationReport?.prices.length ? locationReport : null;
   const rows = report ? companyRows(report.prices, sortByPrice) : [];
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.page}>
       <RefreshableScrollView ref={scroll} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
         refreshing={refreshing || mapRefreshing} onRefresh={refresh}
-        refreshEnabled={(!authenticated || !loading) && !fuel.busy}>
+        refreshEnabled={(!authenticated || !loading) && !fuel.busy && !localBrowsePending}>
         <MobileHeader style={styles.mobileHeader} />
         <FuelNewsHeadline items={news.items} />
         <View style={styles.content} onLayout={event => setContentY(event.nativeEvent.layout.y)}>
@@ -209,7 +216,7 @@ export default function FuelPricesScreen() {
             <ThemedView type="backgroundElement" style={styles.card}>
               <View style={styles.locationHeading}>
                 <ThemedText accessibilityRole="header" style={[styles.sectionTitle, styles.areaTitle]}>
-                  {selected ? doeLocationLabel(selected) : 'Choose an area'}
+                  {visibleSelection ? doeLocationLabel(visibleSelection) : fuel.initialLocationPending || detectedLocation ? 'Local fuel prices' : 'Choose an area'}
                 </ThemedText>
                 <View style={styles.actions}>
                   <Pressable accessibilityRole="button" accessibilityLabel="Choose city or province"
@@ -241,20 +248,20 @@ export default function FuelPricesScreen() {
                 {locations.length === 0 && <ThemedText type="small" themeColor="textSecondary">No matching location.</ThemedText>}
               </View>}
               {authenticated && fuel.error && <ThemedText accessibilityRole="alert">{fuel.error}</ThemedText>}
-              {authenticated && fuel.busy && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">Updating local prices…</ThemedText></View>}
+              {authenticated && (fuel.busy || localBrowsePending) && !refreshing && <View style={styles.loading}><ActivityIndicator /><ThemedText type="small">Updating local prices…</ThemedText></View>}
               {report ? <DoePriceSummary report={report} /> : showLocal && <LocalPriceBoard item={showLocal} />}
-              {!loading && selected && !report && <ThemedText themeColor="textSecondary">No DOE company report is available for {doeLocationLabel(selected)}. Choose another area or explore the map.</ThemedText>}
+              {!loading && visibleSelection && !report && <ThemedText themeColor="textSecondary">No DOE company report is available for {doeLocationLabel(visibleSelection)}. Choose another area or explore the map.</ThemedText>}
             </ThemedView>
-            <FuelMap ref={map} location={historyVisible && fuel.localItem ? localLocation(fuel.localItem, null) ?? selected : selectedManually ? selected : null} userCoordinates={fuel.userCoordinates}
-              userLocation={fuel.localItem ? localLocation(fuel.localItem, null) : null}
+            <FuelMap ref={map} location={historyVisible ? localLocation(localArea, null) ?? selected : selectedManually ? selected : null} userCoordinates={fuel.userCoordinates}
+              userLocation={localLocation(localArea, null)}
               onReturnToLocation={() => {
-                if (!fuel.localItem) return;
-                const local = localLocation(fuel.localItem, fuel.doePrices);
-                if (local && (!selected || !sameLocation(local, selected))) choose(local);
+                const local = detectedLocation;
+                if (!local) return;
+                if (!selected || !sameLocation(local, selected)) choose(local);
                 setHistoryVisible(true);
                 followLocal.current = true;
               }} locations={feed?.locations ?? []} onLocationChange={choose}
-              initialLocationPending={fuel.busy && !fuel.localItem} foregroundRefreshing={refreshing || mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
+              initialLocationPending={fuel.initialLocationPending} foregroundRefreshing={refreshing || mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
           </>
           <View style={styles.comparison} onLayout={event => setComparisonY(event.nativeEvent.layout.y)}>
             {report && <>

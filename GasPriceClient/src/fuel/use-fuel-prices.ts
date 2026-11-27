@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/auth/auth-provider';
 import { errorMessage } from '@/auth/http';
-import { getHistory, refreshLocation, type Coordinates, type DoeFuelPriceFeed, type FeedItem, type PricePoint } from './api';
+import { getHistory, refreshLocation, type Area, type Coordinates, type DoeFuelPriceFeed, type FeedItem, type PricePoint } from './api';
 import { requestLocation } from './location';
 import { locationErrorMessage } from './location-error';
 import { useSetHeaderLocation } from './header-prices';
@@ -17,6 +17,8 @@ export function useFuelPrices() {
   const [error, setError] = useState<string | null>(null);
   const [locationNote, setLocationNote] = useState('Use your location to see prices near you.');
   const [userCoordinates, setUserCoordinates] = useState<Coordinates | null>(null);
+  const [resolvedArea, setResolvedArea] = useState<Area | null>(null);
+  const [initialLocationPending, setInitialLocationPending] = useState(true);
   const coordinates = useRef<Coordinates | undefined>(undefined);
   const version = useRef(0);
   const running = useRef(false);
@@ -36,7 +38,9 @@ export function useFuelPrices() {
 
   const loadLocal = useCallback(async (position: Coordinates, ticket: number) => {
     const next = await refreshLocation(position, (area, estimate) => {
-      if (ticket === version.current) setHeaderLocation(area, estimate);
+      if (ticket !== version.current) return;
+      setResolvedArea(area);
+      setHeaderLocation(area, estimate);
     });
     if (ticket !== version.current) return;
     const local = next.feed.items.find(item => item.isLocal) ?? null;
@@ -53,6 +57,7 @@ export function useFuelPrices() {
     try { position = await requestLocation(); } catch (failure) {
       if (ticket === version.current) {
         setHeaderLocation(null);
+        setResolvedArea(null);
         setUserCoordinates(null); coordinates.current = undefined; setLocationNote(locationErrorMessage(failure));
       }
       return;
@@ -60,6 +65,7 @@ export function useFuelPrices() {
     if (ticket !== version.current) return;
     if (!position) {
       setHeaderLocation(null);
+      setResolvedArea(null);
       setUserCoordinates(null);
       coordinates.current = undefined;
       setLocationNote('Location access is blocked. Allow location in your browser or device settings, then tap the location icon to retry.');
@@ -102,13 +108,15 @@ export function useFuelPrices() {
 
   useEffect(() => {
     if (!authenticated) return;
+    if (prompted.current) return cancel;
     void run(async ticket => {
-      if (ticket !== version.current || prompted.current) return;
       // Give the Fuel Prices screen a chance to render before the OS/browser prompt.
       await new Promise(resolve => setTimeout(resolve, 300));
       if (ticket !== version.current) return;
-      prompted.current = true;
       await locate(ticket);
+      if (ticket !== version.current) return;
+      prompted.current = true;
+      setInitialLocationPending(false);
     });
     return cancel;
   }, [authenticated, run, locate, cancel]);
@@ -126,7 +134,8 @@ export function useFuelPrices() {
     cancel();
     await logout();
   };
-  return { localItem, doePrices, updates, historyError, userCoordinates,
+  return { localItem, doePrices, updates, historyError, userCoordinates, resolvedArea,
+    initialLocationPending: authLoading || (authenticated && initialLocationPending),
     busy: busy || authLoading, error: authError ?? error,
     locationNote, authenticated, refresh, useLocation, signOut };
 }

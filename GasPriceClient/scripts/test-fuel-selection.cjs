@@ -46,7 +46,8 @@ function harness(options = {}) {
   let cursor = 0, dirty = false, tree, foreground;
   const cells = [], pendingEffects = [], calls = [];
   const auth = { session: { state: 'authenticated' }, loading: false, restore: async () => { calls.push('restore'); } };
-  const fuel = { localItem: null, doePrices: null, busy: false, authenticated: true,
+  const fuel = { localItem: null, doePrices: null, resolvedArea: null, userCoordinates: null,
+    initialLocationPending: options.initialLocationPending ?? false, busy: false, authenticated: true,
     locationNote: 'Use your location', updates: [], refresh: async () => { calls.push('local refresh'); }, useLocation: async () => {} };
   const news = { items: [], reload: async () => { calls.push('news refresh'); } };
   let response = location => Promise.resolve({ locations: [manila, cebu, cavite], selected: {
@@ -92,6 +93,39 @@ function harness(options = {}) {
   return { settle, nodes, button, calls, fuel, auth, render, foreground: () => foreground(), setResponse: fn => { response = fn; } };
 }
 (async () => {
+  const reload = harness({ initialLocationPending: true });
+  const summary = screen => screen.nodes().find(n => n.type === 'DoePriceSummary');
+  const areaHeading = screen => screen.nodes().find(n => n.props?.accessibilityRole === 'header').props.children;
+  await reload.settle();
+  assert.equal(reload.calls[0], 'default', 'The city list can load while GPS is pending');
+  assert.equal(areaHeading(reload), 'Local fuel prices');
+  assert.equal(summary(reload), undefined, 'The default report stays hidden while waiting for permission');
+  reload.fuel.userCoordinates = { latitude: 14.43, longitude: 120.94 };
+  reload.fuel.busy = true;
+  reload.render(); await reload.settle();
+  assert.equal(summary(reload), undefined, 'The default report stays hidden while resolving coordinates');
+  reload.fuel.initialLocationPending = false;
+  reload.fuel.busy = false;
+  reload.render(); await reload.settle();
+  assert.equal(summary(reload), undefined, 'A price lookup failure with valid coordinates does not show Manila');
+  const imusLocation = { city: 'Imus', province: 'Cavite' };
+  let resolveImus;
+  reload.setResponse(() => new Promise(resolve => { resolveImus = resolve; }));
+  reload.fuel.resolvedArea = imusLocation;
+  reload.render(); await reload.settle();
+  assert.equal(areaHeading(reload), 'Local fuel prices');
+  assert.equal(summary(reload), undefined, 'The default report stays hidden while fetching the Imus report');
+  resolveImus({ locations: [manila, imusLocation], selected: { ...imusLocation, prices: [reportedPrice] } });
+  await reload.settle();
+  assert.equal(areaHeading(reload), 'Imus');
+  assert.equal(summary(reload).props.report.city, 'Imus', 'The resolved area loads even without a saved estimate');
+  const blocked = harness({ initialLocationPending: true });
+  await blocked.settle();
+  blocked.fuel.initialLocationPending = false;
+  blocked.render(); await blocked.settle();
+  assert.equal(summary(blocked).props.report.city, 'Manila', 'The default report is available when no coordinates are obtained');
+  console.log('PASS reload: hide the default report during and after a location fix, use Imus when resolved, and fall back when location is unavailable');
+
   const comparison = harness({ comparison: { fuel: 'diesel', location: cebu } }); await comparison.settle();
   const scroll = comparison.nodes().find(n => n.type === 'RefreshableScrollView');
   let comparisonOffset;

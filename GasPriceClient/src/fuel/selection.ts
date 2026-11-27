@@ -1,4 +1,4 @@
-import type { DoeFuelPriceFeed, DoePriceLocation, FeedItem } from './api';
+import type { Area, DoeFuelPriceFeed, DoePriceLocation } from './api';
 import { mapAreas, type MapArea } from '@/map/hierarchy';
 import type { City, GeographicIndex } from '@/map/types';
 
@@ -16,11 +16,11 @@ function cityMatchesProvince(city: City, province: string) {
 export function sameLocation(a: DoePriceLocation, b: DoePriceLocation) {
   return areaName(a.city) === areaName(b.city) && areaName(a.province) === areaName(b.province);
 }
-export function localLocation(item: FeedItem, report: DoeFuelPriceFeed | null): DoePriceLocation | null {
+export function localLocation(area: Area | null, report: DoeFuelPriceFeed | null): DoePriceLocation | null {
   if (report?.province && report.prices.length) return {
     city: report.city ?? '', province: report.province, scope: report.scope ?? undefined,
   };
-  return item.area.province ? { city: item.area.city ?? '', province: item.area.province } : null;
+  return area?.province ? { city: area.city ?? '', province: area.province } : null;
 }
 export function mapAreaForLocation(index: GeographicIndex, location: DoePriceLocation): MapArea | null {
   const matches = mapAreas(index, location.city ? 'city' : 'province').filter(area => {

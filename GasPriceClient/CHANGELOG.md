@@ -16,6 +16,7 @@
 - Rename the app to GasUp in mobile and desktop headers, the installed app name, and the location permission prompt.
 
 ### Fixed
+- Keep Manila’s default price report hidden on reload while the app locates the device and when a device location is available.
 - Remove the desktop scroll gutter so the news strip reaches the right edge and tab content aligns with the header.
 - Keep the news ticker label width consistent as stories rotate.
 - Keep desktop pages in place during background refreshes by hiding the top refresh indicator.
