@@ -485,17 +485,28 @@ function lifecycle(h, initial = {}) {
   const imusFeature = h.cache.feature(imus.id);
   const imusSnapshot = { index, detail: true, viewport: clipped, cities: [imus], features: [imusFeature], pendingPriceIds: new Set(),
     prices: new Map([[imus.id, h.feed([imus.id]).items[0]]]) };
-  const [relocated] = placeLabels(imusSnapshot, null);
+  const [relocated] = placeLabels(imusSnapshot, imus.id);
   assert(relocated, 'A visible part of Imus still has room for both price ranges');
   assert.deepEqual(relocated.center, geometry.boundsCenter(imus.bbox));
   assert.notDeepEqual(relocated.center, relocated.anchor, 'Center Imus itself when the card is displaced');
+  const imusPrices = imusSnapshot.prices.get(imus.id);
+  const [compact] = placeLabels(imusSnapshot, null);
+  const displayRows = label => Array.from(label.priceRows, ({ fuel, text }) => [fuel, text]);
+  assert.deepEqual(displayRows(compact), [
+    ['gasoline', `₱${imusPrices.gasoline.minPrice.toFixed(2)}`],
+    ['diesel', `₱${imusPrices.diesel.minPrice.toFixed(2)}`],
+  ]);
+  assert.equal(compact.coverage, '');
+  assert.equal(compact.height, 14 + 3 * 16);
+  assert.match(compact.accessibilityLabel, /RON 91 lowest price .+ per liter, Diesel lowest price .+ per liter/);
+  assert.deepEqual(Array.from(relocated.priceRows, row => row.text), [rangeText(imusPrices.gasoline), rangeText(imusPrices.diesel)]);
+  assert.equal(relocated.coverage, h.load('labels').cityPriceLabel(imusPrices));
   const [withoutPrices] = placeLabels({ ...imusSnapshot, prices: new Map() }, imus.id);
   assert.deepEqual(withoutPrices.center, relocated.center, 'Cards without reports center the same area');
-  assert.equal(withoutPrices.priceLines.length, 0);
+  assert.equal(withoutPrices.priceRows.length, 0);
   assert.equal(withoutPrices.coverage, 'No recent report');
   assert.equal(withoutPrices.accessibilityLabel, `${withoutPrices.name}, No recent report`);
   assert.equal(withoutPrices.height, relocated.height - 32, 'Omitting both price rows shrinks the card');
-  const imusPrices = imusSnapshot.prices.get(imus.id);
   const interiorAnchor = geometry.pointAtPixel([200, 150], clipped);
   const [pendingDuringPan] = placeLabels({ ...imusSnapshot, prices: new Map(), pendingPriceIds: new Set([imus.id]) },
     imus.id, new Map([[imus.id, interiorAnchor]]));
@@ -504,7 +515,7 @@ function lifecycle(h, initial = {}) {
   const [updatedDuringPan] = placeLabels({ ...imusSnapshot, viewport: panned }, imus.id,
     new Map([[imus.id, pendingDuringPan.anchor]]));
   assert.equal(updatedDuringPan.anchor, pendingDuringPan.anchor, 'Keep the visible anchor as prices arrive during a drag');
-  assert.deepEqual(updatedDuringPan.priceLines, relocated.priceLines);
+  assert.deepEqual(updatedDuringPan.priceRows, relocated.priceRows);
   assert.equal(updatedDuringPan.skeletonWidths.length, 0);
   const displacedAnchor = geometry.pointAtPixel([relocated.x + 40, relocated.y + 1], clipped);
   const [held] = placeLabels(imusSnapshot, imus.id, new Map([[imus.id, displacedAnchor]]));
@@ -530,11 +541,15 @@ function lifecycle(h, initial = {}) {
     { ...imusPrices, status: 'unavailable', gasoline: null, diesel: null }]]) }, imus.id);
   assert.equal(noReport.skeletonWidths.length, 0, 'A confirmed empty report has no skeleton');
   assert.equal(noReport.coverage, 'No recent report');
-  for (const [missing, fuel] of [['gasoline', 'Diesel'], ['diesel', 'RON 91']]) {
-    const [partial] = placeLabels({ ...imusSnapshot, prices: new Map([[imus.id, { ...imusPrices, [missing]: null }]]) }, imus.id);
-    assert.equal(partial.priceLines.length, 1);
-    assert(partial.priceLines[0].startsWith(`${fuel} ₱`));
+  for (const [missing, fuel, name] of [['gasoline', 'diesel', 'Diesel'], ['diesel', 'gasoline', 'RON 91']]) {
+    const partialSnapshot = { ...imusSnapshot, prices: new Map([[imus.id, { ...imusPrices, [missing]: null }]]) };
+    const [partial] = placeLabels(partialSnapshot, imus.id);
+    assert.deepEqual(displayRows(partial), [[fuel, `${name} ${rangeText(imusPrices[fuel])}`]]);
     assert.equal(partial.height, relocated.height - 16);
+    const [compactPartial] = placeLabels(partialSnapshot, null);
+    assert.deepEqual(displayRows(compactPartial), displayRows(compact).filter(([grade]) => grade === fuel));
+    assert.equal(compactPartial.coverage, '');
+    assert.equal(compactPartial.height, compact.height - 16);
   }
   const [x, y] = geometry.project(relocated.anchor, clipped);
   assert(x >= relocated.width / 2 + 7.99 && y >= relocated.height / 2 + 7.99);

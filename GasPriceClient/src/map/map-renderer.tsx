@@ -1,7 +1,10 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+
+import { fuelNozzles } from '@/fuel/nozzles';
 
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
@@ -180,12 +183,12 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         const left = x - label.width / 2, top = y - label.height / 2;
         if (liveViewport && (left + label.width < 0 || left > size.width || top + label.height < 0 || top > size.height)) return null;
         const highlighted = label.id === selected;
-        const hasPrices = label.priceLines.length > 0;
+        const hasPrices = label.priceRows.length > 0;
         const pending = label.skeletonWidths.length > 0;
-        const labelStyle = highlighted && (hasPrices || pending) ? styles.selectedLabel : pending ? styles.skeletonLabel :
-          hasPrices ? styles.unselectedLabel : styles.unavailableLabel;
+        const labelStyle = highlighted && (hasPrices || pending) ? styles.selectedLabel : pending ? styles.skeletonLabel : styles.neutralLabel;
         const borderColor = highlighted ? mapLabelColors.selected.border : pending ? mapLabelColors.skeleton.border :
-          hasPrices ? mapLabelColors.unselected.border : mapLabelColors.unavailable.border;
+          mapLabelColors.neutral.border;
+        const dashed = highlighted && (label.price.estimated || label.price.outdated);
         const priceStyle = [styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }];
         return <Pressable key={label.id} accessibilityRole="button" accessibilityLabel={label.accessibilityLabel}
           accessibilityState={{ busy: pending }}
@@ -194,15 +197,19 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
             onSelect(label.id);
           }}
           style={[styles.label, labelStyle, { position: 'absolute', left, top, zIndex: labels.length - priority,
-            width: label.width, height: label.height, borderColor, borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
+            width: label.width, height: label.height, borderColor, borderStyle: dashed ? 'dashed' : 'solid' }]}>
           <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, !hasPrices && !pending && styles.unavailableText]}>{label.name}</Text>
           {pending ? label.skeletonWidths.map(width => (
             <View key={width} style={styles.skeletonRow}><View style={[styles.skeletonBar, { width: `${width}%` }]} /></View>
           )) : <>
-            {label.priceLines.map((line, i) => <Text key={i} allowFontScaling={false} style={priceStyle}>{line}</Text>)}
-            <Text allowFontScaling={false} style={[styles.price, styles.coverage, hasPrices
-              ? !highlighted && { color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB' }
-              : [styles.unavailableText, styles.noReport]]}>{label.coverage}</Text>
+            {label.priceRows.map(({ fuel, text }) => highlighted
+              ? <Text key={fuel} allowFontScaling={false} style={priceStyle}>{text}</Text>
+              : <View key={fuel} style={styles.priceRow}>
+                <Image source={fuelNozzles[fuel]} style={styles.nozzle} contentFit="contain" accessible={false} />
+                <Text allowFontScaling={false} style={priceStyle}>{text}</Text>
+              </View>)}
+            {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, styles.coverage,
+              !hasPrices && [styles.unavailableText, styles.noReport]]}>{label.coverage}</Text>}
           </>}
         </Pressable>;
       })}
@@ -217,16 +224,16 @@ const styles = StyleSheet.create({
   notice: { color: '#E8EDF5', textAlign: 'center' }, warning: { position: 'absolute', top: 10, left: 12, right: 12, padding: 10, backgroundColor: '#243142' },
   label: { height: 46, paddingVertical: 5, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   selectedLabel: { backgroundColor: mapLabelColors.selected.background },
-  unselectedLabel: { backgroundColor: mapLabelColors.unselected.background,
-    experimental_backgroundImage: mapLabelColors.unselected.gradient },
-  unavailableLabel: { backgroundColor: mapLabelColors.unavailable.background },
+  neutralLabel: { backgroundColor: mapLabelColors.neutral.background },
   skeletonLabel: { backgroundColor: mapLabelColors.skeleton.background },
   skeletonRow: { height: 16, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   skeletonBar: { height: 7, borderRadius: 4, backgroundColor: mapLabelColors.skeleton.bar },
-  unavailableText: { color: mapLabelColors.unavailable.text },
+  unavailableText: { color: mapLabelColors.unavailableText },
   noReport: { fontStyle: 'italic' },
   coverage: { fontSize: 10, textAlign: 'center' },
   retry: { padding: 10, marginTop: 6, borderRadius: 8, backgroundColor: '#354B64' },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  nozzle: { width: 14, height: 14 },
   price: { fontSize: 11, lineHeight: 17, color: '#FFFFFF', fontWeight: '600', fontVariant: ['tabular-nums'],
     textShadowColor: mapLabelColors.textShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
 });

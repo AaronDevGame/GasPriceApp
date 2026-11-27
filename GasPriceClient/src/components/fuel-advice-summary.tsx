@@ -6,13 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FuelAdviceCard } from '@/components/fuel-advice-card';
 import { ThemedText } from '@/components/themed-text';
 import { adviceSummary, type AdviceFuel } from '@/fuel/advice';
+import { fuelNozzles } from '@/fuel/nozzles';
 import { useFuelAdvice } from '@/fuel/use-fuel-advice';
 import { useTheme } from '@/hooks/use-theme';
-
-const fuelNozzles = {
-  gasoline: require('@/assets/images/fuel-nozzles/gasoline-green.png'),
-  diesel: require('@/assets/images/fuel-nozzles/diesel-yellow.png'),
-};
 
 function AdviceDetails({ fuel, onFuelChange, onClose }: {
   fuel: AdviceFuel; onFuelChange: (fuel: AdviceFuel) => void; onClose: () => void;

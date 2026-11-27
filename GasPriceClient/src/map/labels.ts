@@ -3,13 +3,9 @@ import { areaPrices, mapLevel, visibleAreas, type MapArea } from './hierarchy';
 import type { CityPrices, MapSnapshot, Point, PriceRange, Viewport } from './types';
 
 export const mapLabelColors = {
-  unselected: {
-    background: 'rgba(8, 22, 38, 0.22)',
-    gradient: 'linear-gradient(145deg, rgba(10, 24, 41, 0.86) 0%, rgba(16, 36, 56, 0.64) 48%, rgba(36, 67, 91, 0.12) 100%)',
-    border: '#6CB4F8',
-  },
   selected: { background: '#115442', border: '#69E0B3' },
-  unavailable: { background: 'rgba(60, 68, 77, 0.87)', border: '#9AA5B1', text: '#E7EBF0' },
+  neutral: { background: 'rgba(60, 68, 77, 0.87)', border: '#9AA5B1' },
+  unavailableText: '#E7EBF0',
   skeleton: { background: 'rgba(17, 31, 48, 0.92)', border: '#7997B5', bar: '#58718C' },
   textShadow: '#071322',
 };
@@ -38,8 +34,11 @@ export function priceLabel(price: ReturnType<typeof areaPrices>) {
   if (price.report) return cityPriceLabel(price.report);
   return `${price.estimated ? 'Includes estimates' : 'DOE reported'}${price.outdated ? ' · Outdated reports' : ''}`;
 }
+const fuelNames = { gasoline: 'RON 91', diesel: 'Diesel' };
+const mapFuels = ['gasoline', 'diesel'] as const;
 export type MapLabel = {
-  id: string; name: string; priceLines: string[]; skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
+  id: string; name: string; priceRows: { fuel: typeof mapFuels[number]; text: string }[];
+  skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
   price: ReturnType<typeof areaPrices>; center: Point; anchor: Point; x: number; y: number; width: number; height: number; fontSize: number;
 };
 const cardInset = 8;
@@ -90,15 +89,22 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, prev
   for (const { area, price, pending } of sorted) {
     const name = area.name;
     const fontSize = 11;
-    const priceRows = [{ fuel: 'RON 91', range: price.gasoline }, { fuel: 'Diesel', range: price.diesel }]
-      .flatMap(({ fuel, range }) => range ? [{ fuel, text: rangeText(range) }] : []);
-    const priceLines = priceRows.map(({ fuel, text }) => priceRows.length === 1 ? `${fuel} ${text}` : text);
+    const isSelected = area.id === selected;
+    const prices = mapFuels.flatMap(fuel => {
+      const range = price[fuel];
+      return range ? [{ fuel, amount: isSelected ? rangeText(range) : `₱${range.minPrice.toFixed(2)}` }] : [];
+    });
+    const compact = !isSelected && prices.length > 0;
+    const priceRows = prices.map(({ fuel, amount }) => ({
+      fuel, text: isSelected && prices.length === 1 ? `${fuelNames[fuel]} ${amount}` : amount,
+    }));
     const skeletonWidths = pending ? (level === 'city' ? [74, 62, 46] : [74, 62, 46, 58]) : [];
-    const coverage = pending ? '' : [priceLabel(price), !priceLines.length ? '' : level === 'city' ? (price.complete ? '' : 'Incomplete') :
+    const coverage = pending || compact ? '' : [priceLabel(price), !prices.length ? '' : level === 'city' ? (price.complete ? '' : 'Incomplete') :
       `${price.reported}/${price.total} cities with prices${price.complete ? '' : ' · incomplete'}`].filter(Boolean).join('\n');
     const accessibilityLabel = pending ? `${name}, loading fuel prices` :
-      [name, ...priceRows.map(({ fuel, text }) => `${fuel} ${text}`), coverage].join(', ');
-    const lines = [name, ...priceLines, ...coverage.split('\n')];
+      [name, ...prices.map(({ fuel, amount }) => compact ?
+        `${fuelNames[fuel]} lowest price ${amount} per liter` : `${fuelNames[fuel]} ${amount}`), coverage].filter(Boolean).join(', ');
+    const lines = [name, ...priceRows.map(row => row.text), ...(coverage ? coverage.split('\n') : [])];
     const height = 14 + (pending ? 1 + skeletonWidths.length : lines.length) * 16;
     const longestLine = Math.max(...lines.map(line => line.length));
     const width = Math.min(viewport.width - 16, Math.max(pending ? 154 : 130, longestLine * fontSize * 0.64 + 18));
@@ -128,7 +134,7 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, prev
     // Selected areas go first. Never force a colliding card into the remaining space.
     if (position) {
       const [x, y] = position;
-      placed.push({ id: area.id, price, priceLines, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
+      placed.push({ id: area.id, price, priceRows, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
         center: boundsCenter(area.bbox), anchor: previousAnchor && keepPreviousAnchor && position === previousPosition
           ? previousAnchor : pointAtPixel(position, viewport), x, y, width });
     }

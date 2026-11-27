@@ -6,6 +6,9 @@
 - Show skeletons in map price cards while waiting for fuel prices on web and mobile.
 - Show a smaller, muted publication date after each headline in the single-line fuel news ticker, and label the date on News cards and article pages.
 
+### Changed
+- Show only the lowest available price per fuel on unselected map cards, using the gasoline and diesel nozzle icons and a compact gray design with white text.
+
 ### Fixed
 - Update web fuel map cards during drags while keeping visible cards anchored where space allows. Glide cards inward at the map margin and back toward their preferred positions on a reverse drag. Preserve displaced positions when the map settles.
 

@@ -11,14 +11,10 @@ import { adviceSummary, type AdviceFuel } from '@/fuel/advice';
 import { useFuelAdvice } from '@/fuel/use-fuel-advice';
 import { formatPrice, getFuelAdjustments, type FuelAdjustmentWeek } from '@/fuel/api';
 import { headerArea, headerPrice, useHeaderComparison, useHeaderPrices, type HeaderFuel } from '@/fuel/header-prices';
+import { fuelNozzles } from '@/fuel/nozzles';
 import { useAuth } from '@/auth/auth-provider';
 import { useTheme } from '@/hooks/use-theme';
 import { reportDate } from '@/map/labels';
-
-const fuelNozzles = {
-  gasoline: require('@/assets/images/fuel-nozzles/gasoline-green.png'),
-  diesel: require('@/assets/images/fuel-nozzles/diesel-yellow.png'),
-};
 
 function AdviceNotice({ fuel, onOpen, active, compact }: { fuel: HeaderFuel; onOpen: () => void; active: boolean; compact: boolean }) {
   const theme = useTheme();
