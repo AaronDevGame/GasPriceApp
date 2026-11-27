@@ -299,8 +299,8 @@ export default function FuelPricesScreen() {
               <ThemedText type="small" themeColor="textSecondary">DOE reports {report.scope === 'province' ? 'province' : 'city'}-level prices by oil company. Individual station locations and availability are not included.</ThemedText>
             </>}
           </>
-          {showLocal && <RecentPriceUpdates area={showLocal.area.name} updates={fuel.updates} error={fuel.historyError} />}
-          {showLocal && <ThemedText type="small" themeColor="textSecondary">Location lookup uses Geoapify and OpenStreetMap contributors.</ThemedText>}
+          {mode === 'list' && showLocal && <RecentPriceUpdates area={showLocal.area.name} updates={fuel.updates} error={fuel.historyError} />}
+          {mode === 'list' && showLocal && <ThemedText type="small" themeColor="textSecondary">Location lookup uses Geoapify and OpenStreetMap contributors.</ThemedText>}
         </View>
       </RefreshableScrollView>
     </SafeAreaView>

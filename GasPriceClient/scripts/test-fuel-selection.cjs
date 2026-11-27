@@ -144,7 +144,10 @@ function harness(options = {}) {
   assert.equal(local.nodes().find(n => n.type === 'FuelMap').props.location.city, 'Cebu City');
   const summaries = () => local.nodes().filter(n => ['DoePriceSummary', 'LocalPriceBoard'].includes(n.type));
   assert.deepEqual(summaries().map(n => n.type), ['DoePriceSummary'], 'A reported range replaces the local estimate card');
+  assert(!local.nodes().some(n => n.type === 'RecentPriceUpdates'));
+  local.button('Company list').props.onPress(); await local.settle();
   assert(local.nodes().some(n => n.type === 'RecentPriceUpdates'));
+  local.button('Map').props.onPress(); await local.settle();
   local.setResponse(async () => { throw new Error('DOE browse unavailable'); });
   const beforeRefresh = local.calls.filter(value => value?.city).length;
   local.foreground(); await local.settle();

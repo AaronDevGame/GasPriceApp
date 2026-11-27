@@ -9,9 +9,8 @@ import { ThemedText } from '@/components/themed-text';
 import { MapController } from './controller';
 import { mapCache } from './cache';
 import MapRenderer from './map-renderer';
-import { areaPrices, defaultMapCamera, levelNames, mapLevel, mapLevelButtons, metroManilaBounds, zoomForLevel, visibleAreas } from './hierarchy';
+import { defaultMapCamera, levelNames, mapLevel, mapLevelButtons, metroManilaBounds, zoomForLevel, visibleAreas } from './hierarchy';
 import { cameraCenter } from './geometry';
-import { adjustmentSummaries, priceLabel, rangeText, reportDate } from './labels';
 import { mapAreaForLocation, locationForMapArea } from '@/fuel/selection';
 import type { Coordinates, DoePriceLocation } from '@/fuel/api';
 import type { LocationFocus, MapSnapshot, Viewport, ZoomFocus } from './types';
@@ -40,6 +39,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const authState = useRef(authenticated);
   const locating = useRef(initialLocationPending);
   const updateActivity = useRef<((visible: boolean) => void) | null>(null);
+  const [showCredits, setShowCredits] = useState(false);
   const [snapshot, setSnapshot] = useState(empty);
   const [mapSelection, setMapSelection] = useState<{ id: string | null; targetId: string | undefined } | null>(null);
   const [zoomCommand, setZoomCommand] = useState<{ focus: ZoomFocus; location: LocationFocus | null } | null>(null);
@@ -138,9 +138,6 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
     if (next) onLocationChange?.(next);
   }, [snapshot.index, snapshot.viewport, locations, onLocationChange, targetId]);
   const level = snapshot.index && snapshot.viewport ? mapLevel(snapshot.index, snapshot.viewport) : metroBounds ? 'city' : 'country';
-  const areas = snapshot.index && snapshot.viewport ? visibleAreas(snapshot.index, snapshot.viewport) : [];
-  const selection = areas.find(area => area.id === selected);
-  const prices = selection ? areaPrices(selection, snapshot) : null;
   const noPrices = authenticated && !snapshot.loading && !snapshot.error && snapshot.prices.size > 0 &&
     [...snapshot.prices.values()].every(price => price.status === 'unavailable');
   return <View style={styles.wrapper}>
@@ -170,6 +167,24 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
       }}>
       <ThemedText type="smallBold">Center on Metro Manila</ThemedText>
     </Pressable>}
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded: showCredits }}
+      onPress={() => setShowCredits(value => !value)}>
+      <ThemedText type="small" themeColor="textSecondary">Map credits {showCredits ? '↑' : '↓'}</ThemedText>
+    </Pressable>
+    {showCredits && <View style={styles.status}>
+      <Pressable accessibilityRole="link" accessibilityLabel="Boundary source and license" onPress={() => void Linking.openURL('https://github.com/faeldon/philippines-json-maps')}>
+        <ThemedText style={styles.attribution}>Boundaries: NAMRIA / PSA through OCHA COD-AB · CC BY 3.0 IGO · James Faeldon · MIT. GasPriceApp regrouped city boundaries, normalized ring orientation, and merged and simplified area outlines.</ThemedText>
+      </Pressable>
+      <Pressable accessibilityRole="link" onPress={() => void Linking.openURL('https://creativecommons.org/licenses/by/3.0/igo/legalcode')}>
+        <ThemedText style={styles.attribution}>Boundary license ↗</ThemedText>
+      </Pressable>
+      <ThemedText style={styles.attribution}>Location lookup uses Geoapify and OpenStreetMap contributors.</ThemedText>
+    </View>}
+    {snapshot.loading && !foregroundRefreshing && <View style={styles.loading}><ActivityIndicator size="small" /><ThemedText type="small">Updating map…</ThemedText></View>}
+    {!authenticated && !authLoading && <ThemedText type="small">Tap Reconnect above to load city prices.</ThemedText>}
+    {noPrices && <ThemedText type="small">No city reports from the last 30 days are available in this view.</ThemedText>}
+    {snapshot.error && <View style={styles.error}><ThemedText type="small" accessibilityRole="alert">{snapshot.error}</ThemedText>
+      <Pressable accessibilityRole="button" onPress={() => controller.current?.retry()} style={styles.retry}><ThemedText type="smallBold">Retry</ThemedText></Pressable></View>}
     <View style={styles.canvas}>
       {snapshot.index ? <MapRenderer snapshot={snapshot} selected={selected} focusBounds={target?.bbox} locationFocus={locationFocus} zoomFocus={zoomFocus} metroBounds={metroBounds} active={eligible && isAppForeground()} onMove={onMove} onIdle={onIdle} onSelect={onSelect} /> :
         <View style={styles.initial}><ActivityIndicator /><ThemedText>Loading Philippine map…</ThemedText></View>}
@@ -180,41 +195,6 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
         <AppIcon name="location" color="#76B4FF" />
       </Pressable>}
     </View>
-    <View style={styles.status}>
-      {selection && prices && <View style={styles.selection}>
-        <ThemedText type="smallBold">{selection.name}</ThemedText>
-        <ThemedText type="smallBold">{priceLabel(prices)}</ThemedText>
-        <ThemedText type="small">RON 91 {rangeText(prices.gasoline)} · Diesel {rangeText(prices.diesel)}</ThemedText>
-        {prices.report?.weekStart && prices.report.weekEnd && <ThemedText type="small" themeColor="textSecondary">
-          DOE report: {reportDate(prices.report.weekStart)}–{reportDate(prices.report.weekEnd)}
-        </ThemedText>}
-        {prices.report?.priceKind === 'estimated' && <>
-          <ThemedText type="small">Original DOE reported: RON 91 {rangeText(prices.report.reportedGasoline ?? null)} · Diesel {rangeText(prices.report.reportedDiesel ?? null)}</ThemedText>
-          {adjustmentSummaries(prices.report.adjustments ?? []).map((change, i) => <ThemedText key={i} type="small" themeColor="textSecondary">
-            {reportDate(change.date)} · {change.fuel === 'gasoline' ? 'RON 91' : 'Diesel'} {change.amount >= 0 ? '+' : '−'}₱{Math.abs(change.amount).toFixed(2)}/L · {[...change.companies].join(', ')}
-          </ThemedText>)}
-          <ThemedText type="small" themeColor="textSecondary">Estimated from the DOE baseline and confirmed effective adjustments. Actual station prices may differ.</ThemedText>
-        </>}
-        {prices.report?.isOutdated && <ThemedText type="small" themeColor="textSecondary">Last DOE-reported prices. A complete set of confirmed adjustments is unavailable; current pump prices may differ.</ThemedText>}
-        {[...new Set([...(prices.report?.sourceUrls ?? []), ...(prices.report?.adjustments ?? []).flatMap(change => change.sourceUrls)])]
-          .map((url, i) => <Pressable key={url} accessibilityRole="link" onPress={() => void Linking.openURL(url)}><ThemedText type="small" themeColor="textSecondary">{i === 0 ? 'View DOE report' : `Adjustment source ${i}`} ↗</ThemedText></Pressable>)}
-        {level !== 'city' && <ThemedText type="small">{prices.reported} of {prices.total} cities / municipalities with prices · {prices.estimated} estimated · {prices.outdated} outdated</ThemedText>}
-      </View>}
-      {snapshot.loading && !foregroundRefreshing && <View style={styles.loading}><ActivityIndicator size="small" /><ThemedText type="small">Updating map…</ThemedText></View>}
-      {!authenticated && !authLoading && <ThemedText type="small">Tap Reconnect above to load city prices.</ThemedText>}
-      {noPrices && <ThemedText type="small">No city reports from the last 30 days are available in this view.</ThemedText>}
-      {snapshot.error && <View style={styles.error}><ThemedText type="small" accessibilityRole="alert">{snapshot.error}</ThemedText>
-        <Pressable accessibilityRole="button" onPress={() => controller.current?.retry()} style={styles.retry}><ThemedText type="smallBold">Retry</ThemedText></Pressable></View>}
-      {/* Fuel descriptions belong outside the map; overlays show the location above the two ranges. */}
-      <ThemedText type="small" themeColor="textSecondary">Top: gasoline RON 91 · Bottom: diesel · PHP per liter · — unavailable</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">DOE reported = original report prices. Estimated = DOE baseline plus confirmed adjustments. Outdated = report ended over 7 days ago. Reports over 30 days old are hidden. Area ranges combine city minima and maxima; station prices vary.</ThemedText>
-      <Pressable accessibilityRole="link" accessibilityLabel="Boundary source and license" onPress={() => void Linking.openURL('https://github.com/faeldon/philippines-json-maps')}>
-        <ThemedText style={styles.attribution}>Boundaries: NAMRIA / PSA through OCHA COD-AB · CC BY 3.0 IGO · James Faeldon · MIT. GasPriceApp regrouped city boundaries, normalized ring orientation, and merged and simplified area outlines.</ThemedText>
-      </Pressable>
-      <Pressable accessibilityRole="link" onPress={() => void Linking.openURL('https://creativecommons.org/licenses/by/3.0/igo/legalcode')}>
-        <ThemedText style={styles.attribution}>Boundary license ↗</ThemedText>
-      </Pressable>
-    </View>
   </View>;
 }
 const styles = StyleSheet.create({
@@ -223,7 +203,6 @@ const styles = StyleSheet.create({
   levelButtonSelected: { borderColor: '#76B4FF', backgroundColor: '#21334B' }, levelButtonTextSelected: { color: '#76B4FF' }, levelButtonDisabled: { opacity: 0.5 },
   metroButton: { alignSelf: 'flex-start', minHeight: 44, paddingHorizontal: 12, justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#495569' },
   locationButton: { position: 'absolute', left: 12, top: 12, width: 48, height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#76B4FF', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A2029', zIndex: 20 },
-  selection: { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#D38B00', gap: 4 },
   wrapper: { gap: 10 }, canvas: { height: 560, minHeight: 380, borderRadius: 14, overflow: 'hidden', backgroundColor: '#202832' },
   initial: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }, status: { gap: 8 },
   loading: { flexDirection: 'row', alignItems: 'center', gap: 8 }, error: { gap: 6 },

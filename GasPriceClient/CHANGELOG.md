@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Remove the details below the fuel map and make map credits available above it.
 - Give the desktop navigation header a deep blue background to distinguish it from the charcoal page body.
 - Combine area selection and local prices in one card, with inline city search and a location icon that supports retrying after permission is denied.
 - Show the desktop GasUp brand lockup on mobile and add space between the fuel adjustment cards and news ticker.
