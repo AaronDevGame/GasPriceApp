@@ -16,25 +16,21 @@ const nozzleUris = {
   diesel: Asset.fromModule(fuelNozzles.diesel).uri,
 };
 type LabelOverlay = google.maps.OverlayView & {
-  setLabels(labels: MapLabel[], selected: string | null, animate: boolean): void;
-  stopGlides(): void;
+  setLabels(labels: MapLabel[], selected: string | null): void;
 };
 type AreaPolygon = { shape: google.maps.Polygon; areaId: string; hasOutline: boolean };
 type LabelCard = {
   anchor: google.maps.LatLng;
   positioner: HTMLDivElement;
   appearance: string;
-  glide?: Animation;
 };
 function createLabels(onSelect: (label: MapLabel) => void) {
       class Labels extends google.maps.OverlayView {
         private root = document.createElement('div');
         private cards = new Map<string, LabelCard>();
         onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.floatPane.appendChild(this.root); }
-        setLabels(labels: MapLabel[], selectedId: string | null, animate: boolean) {
+        setLabels(labels: MapLabel[], selectedId: string | null) {
           const nextCards = new Map<string, LabelCard>();
-          const projection = this.getProjection();
-          const shouldGlide = animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
           labels.forEach((label, priority) => {
             const selected = label.id === selectedId;
             const appearance = JSON.stringify([selected, label.center, label.accessibilityLabel, label.name,
@@ -47,25 +43,7 @@ function createLabels(onSelect: (label: MapLabel) => void) {
               this.root.appendChild(positioner);
             }
             positioner.style.zIndex = String(labels.length - priority);
-            let glide = previous?.glide;
-            if (!shouldGlide) {
-              glide?.cancel();
-              glide = undefined;
-            }
-            if (previous && shouldGlide && !previous.anchor.equals(anchor)) {
-              const from = projection?.fromLatLngToDivPixel(previous.anchor);
-              const to = projection?.fromLatLngToDivPixel(anchor);
-              if (from && to) {
-                // Add only the layout displacement. The camera transform still updates immediately.
-                const [x, y] = getComputedStyle(positioner).translate.split(' ').map(parseFloat);
-                glide?.cancel();
-                glide = positioner.animate([
-                  { translate: `${from.x - to.x + (x || 0)}px ${from.y - to.y + (y || 0)}px` },
-                  { translate: '0px 0px' },
-                ], { duration: 150, easing: 'ease-out' });
-              }
-            }
-            nextCards.set(label.id, { anchor, positioner, appearance, glide });
+            nextCards.set(label.id, { anchor, positioner, appearance });
             if (previous?.appearance === appearance) return;
             const card = document.createElement('button');
             card.type = 'button';
@@ -113,10 +91,7 @@ function createLabels(onSelect: (label: MapLabel) => void) {
             positioner.replaceChildren(card);
           });
           for (const [id, card] of this.cards) {
-            if (!nextCards.has(id)) {
-              card.glide?.cancel();
-              card.positioner.remove();
-            }
+            if (!nextCards.has(id)) card.positioner.remove();
           }
           this.cards = nextCards;
           this.draw();
@@ -133,16 +108,7 @@ function createLabels(onSelect: (label: MapLabel) => void) {
             }
           }
         }
-        stopGlides() {
-          for (const card of this.cards.values()) {
-            card.glide?.cancel();
-            card.glide = undefined;
-          }
-        }
-        onRemove() {
-          this.stopGlides();
-          this.root.remove();
-        }
+        onRemove() { this.root.remove(); }
       }
   return new Labels();
 }
@@ -209,13 +175,9 @@ export default function MapRenderer(props: MapRendererProps) {
       };
       listeners.push(instance.addListener('bounds_changed', () => latest.current.onMove(readViewport())));
       listeners.push(instance.addListener('dragstart', () => { isPanning.current = true; }));
-      const stopDrag = () => {
-        isPanning.current = false;
-        labels.stopGlides();
-      };
-      listeners.push(instance.addListener('dragend', stopDrag));
+      listeners.push(instance.addListener('dragend', () => { isPanning.current = false; }));
       listeners.push(instance.addListener('idle', () => {
-        stopDrag();
+        isPanning.current = false;
         const viewport = readViewport();
         if (viewport) latest.current.onIdle(viewport);
       }));
@@ -304,7 +266,7 @@ export default function MapRenderer(props: MapRendererProps) {
     const labels = placeLabels(props.snapshot, props.selected, sameScale ? labelAnchors.current : undefined, dragOffset);
     labelAnchors.current = new Map(labels.map(label => [label.id, label.anchor]));
     labelViewport.current = viewport;
-    overlay.current.setLabels(labels, props.selected, isPanning.current);
+    overlay.current.setLabels(labels, props.selected);
   }, [ready, props.snapshot, props.selected]);
   return <View style={styles.fill}>
     <div ref={host} data-pull-refresh-ignore aria-label="Philippine fuel price map by geographic level" style={{ height: '100%', width: '100%' }} />
