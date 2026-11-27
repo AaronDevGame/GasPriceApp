@@ -10,6 +10,7 @@
 - Make circular map markers smaller and show only the area name when prices are unavailable.
 
 ### Fixed
+- Restore the detected city's map highlight when returning to your location after selecting another city.
 - Keep fuel station pins steady while moving the map.
 - Keep station cluster counts and positions fixed as clusters reach the edge of the map.
 

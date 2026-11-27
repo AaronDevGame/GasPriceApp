@@ -253,7 +253,13 @@ export default function FuelPricesScreen() {
                   </Pressable>
                   <Pressable accessibilityRole="button" accessibilityLabel={fuel.userCoordinates ? 'Use my location' : 'Allow location access'}
                     accessibilityState={{ disabled: fuel.busy || !authenticated }} disabled={fuel.busy || !authenticated}
-                    onPress={() => { setSelection(null); setCompanyOpen(false); setShowCities(false); void fuel.useLocation(); }}
+                    onPress={() => {
+                      map.current?.clearSelection();
+                      setSelection(null);
+                      setCompanyOpen(false);
+                      setShowCities(false);
+                      void fuel.useLocation();
+                    }}
                     style={({ pressed }) => [styles.iconButton, { backgroundColor: theme.background, borderColor: theme.backgroundSelected, opacity: pressed || fuel.busy || !authenticated ? 0.6 : 1 }]}>
                     <AppIcon name="location" color={fuel.userCoordinates ? '#76B4FF' : theme.textSecondary} />
                   </Pressable>

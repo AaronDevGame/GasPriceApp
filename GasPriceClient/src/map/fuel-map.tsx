@@ -18,7 +18,7 @@ import type { LocationFocus, MapSnapshot, Viewport, ZoomFocus } from './types';
 const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), pendingPriceIds: new Set(),
   viewport: null, loading: true, detail: false, error: null };
 const showMapCredits = false;
-export type FuelMapHandle = { refresh(): Promise<void> };
+export type FuelMapHandle = { refresh(): Promise<void>; clearSelection(): void };
 
 export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange, location, userLocation, userCoordinates, onReturnToLocation, locations = [], onLocationChange, active = true, initialLocationPending = false }: {
   location?: DoePriceLocation | null;
@@ -63,7 +63,8 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
     refreshRequest.current = request;
     return request;
   }, [onForegroundRefreshChange]);
-  useImperativeHandle(ref, () => ({ refresh }), [refresh]);
+  const clearSelection = useCallback(() => setMapSelection(null), []);
+  useImperativeHandle(ref, () => ({ refresh, clearSelection }), [refresh, clearSelection]);
   useEffect(() => {
     mapCache.setSession(authenticated ? String(session?.playerId ?? 'authenticated') : null);
     controller.current?.resetPriceRequests();
@@ -202,7 +203,12 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
         <View style={styles.initial}><ActivityIndicator /><ThemedText>Loading Philippine map…</ThemedText></View>}
       {canLocate && <Pressable accessibilityRole="button" accessibilityLabel="Return to my location"
         accessibilityHint="Center the map on your detected location."
-        onPress={() => { setZoomCommand(null); setLocationRequest(value => value + 1); onReturnToLocation?.(); }}
+        onPress={() => {
+          clearSelection();
+          setZoomCommand(null);
+          setLocationRequest(value => value + 1);
+          onReturnToLocation?.();
+        }}
         style={styles.locationButton}>
         <AppIcon name="location" color="#76B4FF" />
       </Pressable>}

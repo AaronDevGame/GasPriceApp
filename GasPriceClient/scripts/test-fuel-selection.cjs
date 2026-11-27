@@ -207,7 +207,8 @@ function harness(options = {}) {
   const mapProps = { userCoordinates: null, onReturnToLocation: () => { returned++; },
     onLocationChange: (location, id) => { selectedCity = { location, id }; } };
   let returned = 0;
-  const mapSnapshot = { index, cities: [], features: [], prices: new Map(), viewport: null, loading: false, error: null };
+  const mapSnapshot = { index, cities: [], features: [], prices: new Map(), pendingPriceIds: new Set(),
+    viewport: null, loading: false, error: null };
   const mapHarness = harness({ props: mapProps, snapshot: mapSnapshot });
   await mapHarness.settle();
   const locationButton = () => mapHarness.nodes().find(n => n.props?.accessibilityLabel === 'Return to my location');
@@ -252,6 +253,13 @@ function harness(options = {}) {
   locationButton().props.onPress(); await mapHarness.settle();
   assert.equal(camera().request, 2);
   assert.equal(returned, 2);
+  mapProps.location = mapProps.userLocation;
+  mapHarness.render(); await mapHarness.settle();
+  renderer().onSelect(index.defaultCityId); await mapHarness.settle();
+  assert.equal(renderer().selected, index.defaultCityId, 'Selecting another city overrides the detected city highlight');
+  locationButton().props.onPress(); await mapHarness.settle();
+  assert.equal(renderer().selected, imus.id, 'Returning to the same GPS location restores the detected city highlight');
+  mapProps.location = cebu;
   mapProps.userCoordinates = { latitude: 51.5, longitude: -0.1 };
   mapHarness.render(); await mapHarness.settle();
   assert.equal(locationButton(), undefined, 'Do not move the Philippines map outside its coverage');
