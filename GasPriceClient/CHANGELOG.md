@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Show the DOE company list below the fuel map and remove the Map and Company list buttons.
 - Remove the details below the fuel map and make map credits available above it.
 - Give the desktop navigation header a neutral dark gray background to distinguish it from the blue news label and charcoal page body.
 - Combine area selection and local prices in one card, with inline city search and a location icon that supports retrying after permission is denied.

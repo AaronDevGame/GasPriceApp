@@ -141,7 +141,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const noPrices = authenticated && !snapshot.loading && !snapshot.error && snapshot.prices.size > 0 &&
     [...snapshot.prices.values()].every(price => price.status === 'unavailable');
   return <View style={styles.wrapper}>
-    <ThemedText type="small" themeColor="textSecondary">Select a reported city or province to update the company list. Broader areas show map ranges only.</ThemedText>
+    <ThemedText type="small" themeColor="textSecondary">Select a reported city or province to update the company list below. Broader areas show map ranges only.</ThemedText>
     <View style={styles.levelButtons} accessibilityLabel="Map geographic levels">
       {mapLevelButtons.map(item => <Pressable key={item.level} accessibilityRole="button"
         accessibilityLabel={`Show ${item.label.toLowerCase()}`} accessibilityHint={`Zoom the map to ${levelNames[item.level].toLowerCase()} level.`}
