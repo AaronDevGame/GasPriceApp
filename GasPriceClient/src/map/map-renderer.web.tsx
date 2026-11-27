@@ -7,7 +7,7 @@ import { fuelNozzles } from '@/fuel/nozzles';
 import { boundsCenter, cameraBounds, fitZoom, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
-import { type MapLabel, mapLabelColors, mapLabelNozzle, placeLabels } from './labels';
+import { clampLabelCenter, type MapLabel, mapLabelColors, mapLabelNozzle, placeLabels } from './labels';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
@@ -17,17 +17,21 @@ const nozzleUris = {
 };
 type LabelOverlay = google.maps.OverlayView & {
   setLabels(labels: MapLabel[], selected: string | null): void;
+  scheduleDraw(): void;
 };
 type AreaPolygon = { shape: google.maps.Polygon; areaId: string; hasOutline: boolean };
 type LabelCard = {
   anchor: google.maps.LatLng;
   positioner: HTMLDivElement;
   appearance: string;
+  width: number;
+  height: number;
 };
-function createLabels(onSelect: (label: MapLabel) => void) {
+function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void) {
       class Labels extends google.maps.OverlayView {
         private root = document.createElement('div');
         private cards = new Map<string, LabelCard>();
+        private frame: number | undefined;
         onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.floatPane.appendChild(this.root); }
         setLabels(labels: MapLabel[], selectedId: string | null) {
           const nextCards = new Map<string, LabelCard>();
@@ -43,7 +47,7 @@ function createLabels(onSelect: (label: MapLabel) => void) {
               this.root.appendChild(positioner);
             }
             positioner.style.zIndex = String(labels.length - priority);
-            nextCards.set(label.id, { anchor, positioner, appearance });
+            nextCards.set(label.id, { anchor, positioner, appearance, width: label.width, height: label.height });
             if (previous?.appearance === appearance) return;
             const card = document.createElement('button');
             card.type = 'button';
@@ -96,19 +100,40 @@ function createLabels(onSelect: (label: MapLabel) => void) {
           this.cards = nextCards;
           this.draw();
         }
+        scheduleDraw() {
+          this.frame ??= requestAnimationFrame(() => {
+            this.frame = undefined;
+            this.draw();
+          });
+        }
         draw() {
           const projection = this.getProjection();
           if (!projection) return;
-          // Google Maps calls draw as the camera moves. Reuse the cards and update only their positions.
-          for (const { anchor, positioner } of this.cards.values()) {
+          const center = map.getCenter();
+          const paneCenter = center && projection.fromLatLngToDivPixel(center);
+          const containerCenter = center && projection.fromLatLngToContainerPixel(center);
+          const host = map.getDiv();
+          const viewport = { width: host.clientWidth, height: host.clientHeight };
+          // Convert the live viewport edges to pane coordinates. Price and collision layout
+          // can keep its existing cadence while the edge constraint follows the camera.
+          const left = paneCenter && containerCenter ? paneCenter.x - containerCenter.x : 0;
+          const top = paneCenter && containerCenter ? paneCenter.y - containerCenter.y : 0;
+          for (const { anchor, positioner, width, height } of this.cards.values()) {
             const point = projection.fromLatLngToDivPixel(anchor);
             positioner.style.visibility = point ? 'visible' : 'hidden';
             if (point) {
-              positioner.style.transform = `translate(${point.x}px, ${point.y}px)`;
+              const [x, y] = paneCenter && containerCenter && viewport.width && viewport.height
+                ? clampLabelCenter([point.x - left, point.y - top], viewport, width, height)
+                : [point.x - left, point.y - top];
+              positioner.style.transform = `translate(${x + left}px, ${y + top}px)`;
             }
           }
         }
-        onRemove() { this.root.remove(); }
+        onRemove() {
+          if (this.frame !== undefined) cancelAnimationFrame(this.frame);
+          this.frame = undefined;
+          this.root.remove();
+        }
       }
   return new Labels();
 }
@@ -160,7 +185,7 @@ export default function MapRenderer(props: MapRendererProps) {
         styles: [{ featureType: 'poi', stylers: [{ visibility: 'off' }] }, { featureType: 'transit', stylers: [{ visibility: 'off' }] }],
       });
       map.current = instance; focusedBounds.current = null; focusedLocation.current = null; focusedZoom.current = null;
-      const labels = createLabels(label => {
+      const labels = createLabels(instance, label => {
         const [lng, lat] = label.center;
         instance.setCenter({ lng, lat });
         latest.current.onSelect(label.id);
@@ -173,7 +198,10 @@ export default function MapRenderer(props: MapRendererProps) {
         return { bounds: [sw.lng(), sw.lat(), ne.lng(), ne.lat()], zoom: instance.getZoom() ?? 12,
           width: host.current.clientWidth, height: host.current.clientHeight };
       };
-      listeners.push(instance.addListener('bounds_changed', () => latest.current.onMove(readViewport())));
+      listeners.push(instance.addListener('bounds_changed', () => {
+        labels.scheduleDraw();
+        latest.current.onMove(readViewport());
+      }));
       listeners.push(instance.addListener('dragstart', () => { isPanning.current = true; }));
       listeners.push(instance.addListener('dragend', () => { isPanning.current = false; }));
       listeners.push(instance.addListener('idle', () => {

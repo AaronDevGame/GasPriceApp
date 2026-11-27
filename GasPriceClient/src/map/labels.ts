@@ -44,6 +44,13 @@ export type MapLabel = {
 };
 const cardInset = 8;
 const cardBottomInset = 36;
+export function clampLabelCenter([x, y]: Point, viewport: Pick<Viewport, 'width' | 'height'>,
+  width: number, height: number): Point {
+  return [
+    Math.max(cardInset + width / 2, Math.min(x, viewport.width - cardInset - width / 2)),
+    Math.max(cardInset + height / 2, Math.min(y, viewport.height - cardBottomInset - height / 2)),
+  ];
+}
 // Search the part of the city's bounding box where a full label can fit on screen.
 function* candidates(city: MapArea, viewport: Viewport, width: number, height: number): Generator<Point> {
   const nw = project([city.bbox[0], city.bbox[3]], viewport);
@@ -53,8 +60,7 @@ function* candidates(city: MapArea, viewport: Viewport, width: number, height: n
   if (viewport.width < width + 2 * cardInset || viewport.height < height + cardInset + cardBottomInset) return;
   if (nw[0] > viewport.width || se[0] < 0 || nw[1] > viewport.height || se[1] < 0) return;
   if (left > right || top > bottom) {
-    yield [Math.max(cardInset + width / 2, Math.min(viewport.width - cardInset - width / 2, (nw[0] + se[0]) / 2)),
-      Math.max(cardInset + height / 2, Math.min(viewport.height - cardBottomInset - height / 2, (nw[1] + se[1]) / 2))];
+    yield clampLabelCenter([(nw[0] + se[0]) / 2, (nw[1] + se[1]) / 2], viewport, width, height);
     return;
   }
   const [x, y] = project(city.labelPoint, viewport);
@@ -117,8 +123,7 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, prev
     let keepPreviousAnchor = false;
     if (positions.length && previousPosition) {
       const [x, y] = previousPosition;
-      const insetX = Math.max(cardInset + width / 2, Math.min(x, viewport.width - cardInset - width / 2));
-      const insetY = Math.max(cardInset + height / 2, Math.min(y, viewport.height - cardBottomInset - height / 2));
+      const [insetX, insetY] = clampLabelCenter(previousPosition, viewport, width, height);
       keepPreviousAnchor = insetX === x && insetY === y;
       previousPosition = [insetX, insetY];
       positions.unshift(previousPosition);

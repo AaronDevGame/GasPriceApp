@@ -526,6 +526,14 @@ function lifecycle(h, initial = {}) {
   assert(Math.abs(returningCard.x - (held.x - 12)) < 0.001, 'Dragging back takes a bounded step toward the preferred position');
   const [released] = placeLabels(imusSnapshot, imus.id, new Map([[imus.id, returningCard.anchor]]));
   assert.equal(released.anchor, returningCard.anchor, 'Releasing after a partial return keeps the new anchor');
+  const { clampLabelCenter } = h.load('labels');
+  // Draw successive camera positions against the same viewport dimensions and card layout.
+  const leftEdge = relocated.width / 2 + 8;
+  for (const [offset, expected] of [[2, 2], [1, 1], [0, 0], [-1, 0], [-2, 0]]) {
+    const [frameX, frameY] = clampLabelCenter([leftEdge + offset, 150 - offset], panned, relocated.width, relocated.height);
+    assert.equal(frameX, leftEdge + expected, 'Constrain the card at the edge on each camera update');
+    assert.equal(frameY, 150 - offset, 'Track the camera immediately along the edge');
+  }
   for (const [before, after] of [
     [[relocated.width / 2 - 1, 150], [relocated.width / 2 + 8, 150]],
     [[panned.width - relocated.width / 2 + 1, 150], [panned.width - relocated.width / 2 - 8, 150]],
