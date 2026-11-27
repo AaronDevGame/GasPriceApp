@@ -202,7 +202,6 @@ export default function FuelPricesScreen() {
         <MobileHeader style={styles.mobileHeader} />
         <FuelNewsHeadline items={news.items} />
         <View style={styles.content} onLayout={event => setContentY(event.nativeEvent.layout.y)}>
-          {news.error && <View><ThemedText type="small" themeColor="textSecondary">News could not be updated.</ThemedText><DashboardAction title="Retry news" onPress={() => void news.reload()} disabled={news.loading} /></View>}
           {!authenticated && !authLoading && <ThemedText accessibilityRole="alert">{authError ?? 'You are signed out. Reconnect to load fuel prices.'}</ThemedText>}
           {!authenticated && !authLoading && <DashboardAction title="Reconnect" onPress={() => void restore()} />}
           {(authLoading || (authenticated && loading && !refreshing)) && <View style={styles.loading}><ActivityIndicator /><ThemedText>Loading DOE prices…</ThemedText></View>}
