@@ -49,7 +49,7 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
           const nextCards = new Map<string, LabelCard>();
           labels.forEach((label, priority) => {
             const selected = label.id === selectedId;
-            const appearance = JSON.stringify([selected, label.center, label.accessibilityLabel, label.name,
+            const appearance = JSON.stringify([selected, label.center, label.accessibilityLabel, label.name, label.edgeName,
               label.priceRows, label.skeletonWidths, label.coverage, label.width, label.height, label.fontSize]);
             const previous = this.cards.get(label.id);
             const positioner = previous?.positioner ?? document.createElement('div');
@@ -191,6 +191,7 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
               button.style.padding = edge ? `${edgeMarker.padding}px` : '4px';
               button.style.fontSize = `${edge ? edgeMarker.fontSize : label.fontSize}px`;
               button.style.lineHeight = edge ? `${edgeMarker.lineHeight}px` : '16px';
+              name.textContent = edge ? label.edgeName : label.name;
               name.style.fontSize = edge ? `${edgeMarker.nameFontSize}px` : '';
               if (label.skeletonWidths.length) button.style.gap = edge ? '4px' : '9px';
               regular.style.display = edge ? 'none' : 'contents';

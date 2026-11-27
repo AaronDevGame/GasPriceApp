@@ -212,7 +212,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
             <View style={[styles.edgeTail, { borderLeftColor: colors.border }]} />
           </View>}
           <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, edge && styles.edgeName,
-            muted && styles.unavailableText]}>{label.name}</Text>
+            muted && styles.unavailableText]}>{edge ? label.edgeName : label.name}</Text>
           {pending ? label.skeletonWidths.map(width => (
             <View key={width} style={[styles.skeletonRow, edge && styles.edgeSkeletonRow]}><View style={[styles.skeletonBar, { width: `${width}%` }]} /></View>
           )) : <>

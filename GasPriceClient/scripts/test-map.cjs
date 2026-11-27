@@ -519,6 +519,8 @@ function lifecycle(h, initial = {}) {
   const edgeViewport = { ...clipped, bounds: [longitude - 0.06, latitude - 0.015,
     imus.bbox[0] + (imus.bbox[2] - imus.bbox[0]) * 0.1, latitude + 0.015] };
   const [edgeCard] = mapLabels({ ...imusSnapshot, viewport: edgeViewport }, imus.id);
+  assert.equal(edgeCard.name, 'City of Imus');
+  assert.equal(edgeCard.edgeName, 'Imus');
   const edgePosition = webLabelPosition(edgeCard, edgeViewport, point => geometry.project(point, edgeViewport), [], 0, 1);
   assert.equal(edgePosition.width, edgeMarker.diameter, 'Use a compact circle at the right edge');
   assert.equal(edgePosition.height, edgeMarker.diameter);
@@ -543,6 +545,9 @@ function lifecycle(h, initial = {}) {
   const [west, south, east, north] = batangas.bbox;
   const batangasCard = { ...edgeCard, bounds: batangas.bbox, labelPoint: batangas.labelPoint, geometry: batangasFeature.geometry };
   const batangasFrame = right => ({ ...clipped, bounds: [west - (east - west), south, right, north] });
+  const [batangasLabel] = mapLabels({ ...imusSnapshot, viewport: batangasFrame(east) }, batangas.id);
+  assert.equal(batangasLabel.name, 'Batangas City');
+  assert.equal(batangasLabel.edgeName, 'Batangas');
   for (const [right, circle] of [
     [batangas.labelPoint[0], false], // About 66% of the city.
     [west + (east - west) * 0.25, true], // About 17% of the city, despite 25% of its bounding box.

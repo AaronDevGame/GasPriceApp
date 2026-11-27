@@ -43,7 +43,7 @@ export function priceLabel(price: ReturnType<typeof areaPrices>) {
 const fuelNames = { gasoline: 'RON 91', diesel: 'Diesel' };
 const mapFuels = ['gasoline', 'diesel'] as const;
 export type MapLabel = {
-  id: string; name: string; priceRows: { fuel: typeof mapFuels[number]; text: string; edgeText: string }[];
+  id: string; name: string; edgeName: string; priceRows: { fuel: typeof mapFuels[number]; text: string; edgeText: string }[];
   skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
   center: Point; labelPoint: Point; bounds: Bounds; width: number; height: number; fontSize: number;
   geometry?: PolygonGeometry;
@@ -189,6 +189,9 @@ export function mapLabels(snapshot: MapSnapshot, selected: string | null): MapLa
     Number(b.pending) - Number(a.pending) || a.area.id.localeCompare(b.area.id));
   return sorted.map(({ area, price, pending }) => {
     const name = area.name;
+    const city = area.members[0];
+    const edgeName = area.id === city.id && city.level === 'City'
+      ? name.replace(/\bCity\s+of\s+/i, '').replace(/\s+City$/i, '') : name;
     const fontSize = 11;
     const isSelected = area.id === selected;
     const prices = mapFuels.flatMap(fuel => {
@@ -213,7 +216,7 @@ export function mapLabels(snapshot: MapSnapshot, selected: string | null): MapLa
     const contentWidth = Math.max(textWidth(name), ...coverageLines.map(textWidth),
       ...priceRows.map(({ text }) => mapLabelNozzle.size + mapLabelNozzle.gap + textWidth(text)));
     const width = Math.min(viewport.width - 16, Math.max(pending ? 154 : 130, contentWidth + 18));
-    return { id: area.id, priceRows, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
+    return { id: area.id, priceRows, skeletonWidths, coverage, accessibilityLabel, name, edgeName, height, fontSize,
       center: boundsCenter(area.bbox), labelPoint: area.labelPoint, bounds: area.bbox, width, geometry: boundaries.get(area.id) };
   });
 }
