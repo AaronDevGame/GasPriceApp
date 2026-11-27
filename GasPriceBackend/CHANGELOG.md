@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Default the Fuel Prices summary and DOE company list to the City of Manila when no location is selected.
+
 ## [1.16.0] - 2026-11-26
 
 ### Added

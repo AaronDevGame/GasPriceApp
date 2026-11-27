@@ -28,7 +28,8 @@ public static class DoePriceBrowseEndpoints
                 return ApiResults.BadRequest("Provide province with an optional city, once each.", instanceId);
             var city = request.Query["city"].ToString().Trim();
             var province = request.Query["province"].ToString().Trim();
-            if (request.Query.ContainsKey("province") &&
+            var hasSelection = request.Query.ContainsKey("province");
+            if (hasSelection &&
                 (city.Length > 100 || province.Length is < 1 or > 100))
                 return ApiResults.BadRequest("Province must be 1 to 100 characters; optional city at most 100.", instanceId);
 
@@ -45,23 +46,16 @@ public static class DoePriceBrowseEndpoints
             var locations = storedLocations
                 .Select(p => new DoePriceLocation(p.City, p.Province)).ToArray();
 
-            var selectedLocation = request.Query.ContainsKey("province")
-                ? new DoePriceLocation(city, province)
-                : locations.FirstOrDefault();
+            var location = hasSelection
+                ? new ResolvedFuelLocation(city, province, null)
+                : new ResolvedFuelLocation("Manila", "Metro Manila", null);
+            var rows = await importer.ReadAsync(db, location,
+                timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
+            if (rows.Count == 0 && hasSelection)
+                return ApiResults.NotFound("No recent DOE prices were found for that location.",
+                    instanceId, ApiRoutes.DoeFuelPricesBrowse);
 
-            DoeFuelPriceFeed? selected = null;
-            if (selectedLocation is not null)
-            {
-                var location = new ResolvedFuelLocation(selectedLocation.City,
-                    selectedLocation.Province, null);
-                var rows = await importer.ReadAsync(db, location,
-                    timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
-                if (rows.Count == 0 && request.Query.ContainsKey("province"))
-                    return ApiResults.NotFound("No recent DOE prices were found for that location.",
-                        instanceId, ApiRoutes.DoeFuelPricesBrowse);
-                selected = DoeFuelPriceEndpoints.ToFeed(
-                    location, rows);
-            }
+            var selected = rows.Count == 0 ? null : DoeFuelPriceEndpoints.ToFeed(location, rows);
             return ApiResults.Ok(new DoePriceBrowseFeed(locations, selected),
                 "doe_price_browse", instanceId);
         });

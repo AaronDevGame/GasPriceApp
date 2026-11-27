@@ -62,12 +62,10 @@ export default function FuelPricesScreen() {
   const fuel = useFuelPrices();
   const { comparison, setComparison } = useHeaderComparison();
   const news = useLatestNews({ refreshOnForeground: false });
-  const [mode, setMode] = useState<'map' | 'list'>('map');
   const map = useRef<FuelMapHandle>(null);
   const scroll = useRef<ScrollView>(null);
   const [contentY, setContentY] = useState(0);
   const [comparisonY, setComparisonY] = useState<number | null>(null);
-  const [handledComparison, setHandledComparison] = useState<typeof comparison>(null);
   const [mapRefreshing, setMapRefreshing] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
   const followLocal = useRef(true);
@@ -84,10 +82,6 @@ export default function FuelPricesScreen() {
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
   const authenticated = session?.state === 'authenticated';
-  if (comparison !== handledComparison) {
-    setHandledComparison(comparison);
-    if (comparison) setMode('list');
-  }
   const load = useCallback(async (location?: DoePriceLocation, refresh = false) => {
     const ticket = ++requestId.current;
     setLoading(true);
@@ -120,7 +114,7 @@ export default function FuelPricesScreen() {
     void load(location);
   }, [load]);
   useEffect(() => {
-    if (!focused || !comparison || comparisonY === null || mode !== 'list' || authLoading || (authenticated && loading)) return;
+    if (!focused || !comparison || comparisonY === null || authLoading || (authenticated && loading)) return;
     const frame = requestAnimationFrame(() => {
       const area = authenticated ? comparison.location : null;
       if (area && (!selected || !sameLocation(selected, area))) {
@@ -131,7 +125,7 @@ export default function FuelPricesScreen() {
       setComparison(null);
     });
     return () => cancelAnimationFrame(frame);
-  }, [authenticated, authLoading, choose, comparison, comparisonY, contentY, focused, loading, mode, selected, setComparison]);
+  }, [authenticated, authLoading, choose, comparison, comparisonY, contentY, focused, loading, selected, setComparison]);
   useEffect(() => {
     if (!authenticated) return;
     let active = true;
@@ -192,7 +186,7 @@ export default function FuelPricesScreen() {
   const browsedReport = feed?.selected;
   const locationReport = showLocal ? fuel.doePrices : null;
   const report = browsedReport?.prices.length ? browsedReport : locationReport?.prices.length ? locationReport : null;
-  const rows = mode === 'list' && report ? companyRows(report.prices, sortByPrice) : [];
+  const rows = report ? companyRows(report.prices, sortByPrice) : [];
   return <ThemedView style={styles.page}>
     <SafeAreaView style={styles.page}>
       <RefreshableScrollView ref={scroll} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled"
@@ -251,25 +245,19 @@ export default function FuelPricesScreen() {
               {report ? <DoePriceSummary report={report} /> : showLocal && <LocalPriceBoard item={showLocal} />}
               {!loading && selected && !report && <ThemedText themeColor="textSecondary">No DOE company report is available for {doeLocationLabel(selected)}. Choose another area or explore the map.</ThemedText>}
             </ThemedView>
-            <View style={styles.controls} onLayout={event => setComparisonY(event.nativeEvent.layout.y)}>
-              {(['map', 'list'] as const).map(value =>
-              <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: mode === value }}
-                onPress={() => setMode(value)} style={[styles.chip, { borderColor: mode === value ? '#76B4FF' : theme.backgroundSelected }]}>
-                <ThemedText type="smallBold">{value === 'map' ? 'Map' : 'Company list'}</ThemedText>
-              </Pressable>)}</View>
-            <View style={mode === 'list' ? styles.hidden : undefined}>
-              <FuelMap ref={map} location={historyVisible && fuel.localItem ? localLocation(fuel.localItem, null) ?? selected : selectedManually ? selected : null} userCoordinates={fuel.userCoordinates}
-                userLocation={fuel.localItem ? localLocation(fuel.localItem, null) : null}
-                onReturnToLocation={() => {
-                  if (!fuel.localItem) return;
-                  const local = localLocation(fuel.localItem, fuel.doePrices);
-                  if (local && (!selected || !sameLocation(local, selected))) choose(local);
-                  setHistoryVisible(true);
-                  followLocal.current = true;
-                }} locations={feed?.locations ?? []} onLocationChange={choose}
-                active={mode === 'map'} initialLocationPending={fuel.busy && !fuel.localItem} foregroundRefreshing={refreshing || mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
-            </View>
-            {mode === 'list' && report && <>
+            <FuelMap ref={map} location={historyVisible && fuel.localItem ? localLocation(fuel.localItem, null) ?? selected : selectedManually ? selected : null} userCoordinates={fuel.userCoordinates}
+              userLocation={fuel.localItem ? localLocation(fuel.localItem, null) : null}
+              onReturnToLocation={() => {
+                if (!fuel.localItem) return;
+                const local = localLocation(fuel.localItem, fuel.doePrices);
+                if (local && (!selected || !sameLocation(local, selected))) choose(local);
+                setHistoryVisible(true);
+                followLocal.current = true;
+              }} locations={feed?.locations ?? []} onLocationChange={choose}
+              initialLocationPending={fuel.busy && !fuel.localItem} foregroundRefreshing={refreshing || mapRefreshing} onForegroundRefreshChange={setMapRefreshing} />
+          </>
+          <View style={styles.comparison} onLayout={event => setComparisonY(event.nativeEvent.layout.y)}>
+            {report && <>
               <View style={styles.reportHeading}>
                 <ThemedText style={styles.sectionTitle}>{doeCoverageLabel(report)}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">DOE reported · ₱/L · {report.weekStart} to {report.weekEnd}</ThemedText>
@@ -299,9 +287,9 @@ export default function FuelPricesScreen() {
               </Pressable>}
               <ThemedText type="small" themeColor="textSecondary">DOE reports {report.scope === 'province' ? 'province' : 'city'}-level prices by oil company. Individual station locations and availability are not included.</ThemedText>
             </>}
-          </>
-          {mode === 'list' && showLocal && <RecentPriceUpdates area={showLocal.area.name} updates={fuel.updates} error={fuel.historyError} />}
-          {mode === 'list' && showLocal && <ThemedText type="small" themeColor="textSecondary">Location lookup uses Geoapify and OpenStreetMap contributors.</ThemedText>}
+            {showLocal && <RecentPriceUpdates area={showLocal.area.name} updates={fuel.updates} error={fuel.historyError} />}
+            {showLocal && <ThemedText type="small" themeColor="textSecondary">Location lookup uses Geoapify and OpenStreetMap contributors.</ThemedText>}
+          </View>
         </View>
         <AppFooter />
       </RefreshableScrollView>
@@ -310,7 +298,7 @@ export default function FuelPricesScreen() {
 }
 
 const styles = StyleSheet.create({
-  hidden: { display: 'none' }, locationHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  locationHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   page: { flex: 1 }, scroll: { flexGrow: 1, alignItems: 'center' },
   mobileHeader: { width: '100%', maxWidth: 1200, paddingHorizontal: scrollPadding, paddingTop: scrollPadding, paddingBottom: 10 },
   content: { width: '100%', maxWidth: 1200, gap: 16, padding: scrollPadding },
@@ -322,8 +310,7 @@ const styles = StyleSheet.create({
   cityList: { gap: 8 }, search: { borderWidth: 1, borderRadius: 10, padding: 12 },
   cityOption: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#77777733' },
   reportHeading: { gap: 4 }, sectionTitle: { fontSize: 22, lineHeight: 28, fontWeight: '700' },
-  controls: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
+  comparison: { gap: 16 },
   table: { borderRadius: 14, paddingHorizontal: 8 },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 12 },
   company: { flex: 1.15 }, amount: { flex: 1, textAlign: 'right', fontVariant: ['tabular-nums'] },

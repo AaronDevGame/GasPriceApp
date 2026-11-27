@@ -6,6 +6,7 @@
 - Show a GasUp copyright footer on Fuel Prices, Weekly Changes, and news pages.
 
 ### Changed
+- Show the DOE company list below the fuel map and remove the Map and Company list buttons.
 - Remove the details below the fuel map and make map credits available above it.
 - Give the desktop navigation header a neutral dark gray background to distinguish it from the blue news label and charcoal page body.
 - Combine area selection and local prices in one card, with inline city search and a location icon that supports retrying after permission is denied.
@@ -15,6 +16,7 @@
 
 ### Fixed
 - Remove the desktop scroll gutter so the news strip reaches the right edge and tab content aligns with the header.
+- Keep the news ticker label width consistent as stories rotate.
 - Keep desktop pages in place during background refreshes by hiding the top refresh indicator.
 - Fix a blank homepage on web when the fuel-news headline initializes its animation.
 - Show one fuel-price summary per selected area, with DOE-reported ranges when available and an estimate when no DOE report is available.

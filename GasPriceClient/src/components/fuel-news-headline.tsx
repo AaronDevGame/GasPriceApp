@@ -5,11 +5,12 @@ import { ThemedText } from '@/components/themed-text';
 import { newsStatusLabel, type NewsItem } from '@/news/api';
 
 export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
   const compact = width < 600;
   const desktop = Platform.OS === 'web' && width >= 900;
   // Match the desktop navigation's side padding and content width.
   const headerInset = desktop ? Math.max(28, (width - 1160) / 2) : 10;
+  const labelWidth = headerInset + 14 + Math.ceil(86 * Math.max(1, fontScale));
   const [index, setIndex] = useState(0);
   const [reading, setReading] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -43,7 +44,7 @@ export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
   const { status, title } = item.article;
   const headline = status === 'confirmed' ? title.replace(/^\s*confirmed\s*:\s*/i, '') || title : title;
   return <View style={[styles.strip, { paddingRight: headerInset }]}>
-    <View style={[styles.label, { paddingLeft: headerInset }]}>
+    <View style={[styles.label, { width: labelWidth, paddingLeft: headerInset }]}>
       <ThemedText type="smallBold" style={styles.labelText}>{newsStatusLabel(status)}</ThemedText>
     </View>
     <Link href={{ pathname: '/news-detail', params: { id: item.id } }} asChild>
