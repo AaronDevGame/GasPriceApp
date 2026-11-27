@@ -9,6 +9,7 @@ import { useAuth } from '@/auth/auth-provider';
 import { errorMessage } from '@/auth/http';
 import { ThemedText } from '@/components/themed-text';
 import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
+import { AppFooter } from '@/components/app-footer';
 import { ThemedView } from '@/components/themed-view';
 import { doeCoverageLabel, doeLocationLabel, getDoePriceBrowse, type DoeFuelPrice, type DoePriceBrowseFeed, type DoePriceLocation } from '@/fuel/api';
 import { useTheme } from '@/hooks/use-theme';
@@ -290,6 +291,7 @@ export default function FuelPricesScreen() {
             {showLocal && <ThemedText type="small" themeColor="textSecondary">Location lookup uses Geoapify and OpenStreetMap contributors.</ThemedText>}
           </View>
         </View>
+        <AppFooter />
       </RefreshableScrollView>
     </SafeAreaView>
   </ThemedView>;
@@ -297,7 +299,7 @@ export default function FuelPricesScreen() {
 
 const styles = StyleSheet.create({
   locationHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  page: { flex: 1 }, scroll: { alignItems: 'center' },
+  page: { flex: 1 }, scroll: { flexGrow: 1, alignItems: 'center' },
   mobileHeader: { width: '100%', maxWidth: 1200, paddingHorizontal: scrollPadding, paddingTop: scrollPadding, paddingBottom: 10 },
   content: { width: '100%', maxWidth: 1200, gap: 16, padding: scrollPadding },
   accent: { color: '#76B4FF' },

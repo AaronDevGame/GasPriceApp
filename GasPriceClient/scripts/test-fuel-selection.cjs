@@ -82,7 +82,7 @@ function harness(options = {}) {
     '@/hooks/use-foreground-refresh': { useForegroundRefresh: fn => { foreground = fn; } },
     '@/map/fuel-map': { __esModule: true, default: 'FuelMap' },
   };
-  for (const name of ['mobile-header', 'themed-text', 'refreshable-scroll-view', 'themed-view', 'local-price-board', 'fuel-price-summary', 'dashboard-action', 'fuel-news-headline', 'app-icon']) overrides['@/components/' + name] = components;
+  for (const name of ['mobile-header', 'themed-text', 'refreshable-scroll-view', 'themed-view', 'local-price-board', 'fuel-price-summary', 'dashboard-action', 'fuel-news-headline', 'app-icon', 'app-footer']) overrides['@/components/' + name] = components;
   const Screen = compile(options.snapshot ? 'map/fuel-map' : 'fuel/fuel-prices-screen', overrides).default;
   const render = () => { dirty = false; cursor = 0; tree = Screen(options.props); while (pendingEffects.length) pendingEffects.shift()(); };
   const settle = async () => { for (let i = 0; i < 30; i++) { if (dirty || !tree) render(); await Promise.resolve(); } assert(!dirty, 'Screen must settle'); };

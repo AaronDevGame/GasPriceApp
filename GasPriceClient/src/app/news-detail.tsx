@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Button, Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '@/auth/http';
+import { AppFooter } from '@/components/app-footer';
 import { FuelNewsCard } from '@/components/fuel-news-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -47,11 +48,13 @@ function FuelNewsArticle({ validId }: { validId: string | null }) {
           <ThemedText type="small" themeColor="textSecondary">Published {newsDate(source.publishedAtUtc)}</ThemedText>
         </View>)}
       </>}
-    </View></ScrollView>
+    </View>
+      <AppFooter />
+    </ScrollView>
   </SafeAreaView></ThemedView>;
 }
 const styles = StyleSheet.create({
-  page: { flex: 1 }, scroll: { padding: 20, alignItems: 'center' },
+  page: { flex: 1 }, scroll: { flexGrow: 1, padding: 20, alignItems: 'center' },
   content: { width: '100%', maxWidth: 900, gap: 20, paddingVertical: 16 },
   link: { color: '#76B4FF', fontWeight: '600', paddingVertical: 8 }, source: { gap: 4, alignItems: 'flex-start' },
 });

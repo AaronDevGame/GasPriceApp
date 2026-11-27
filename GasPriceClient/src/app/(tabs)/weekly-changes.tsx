@@ -8,6 +8,7 @@ import { errorMessage } from '@/auth/http';
 import { StationLogo, stationBrand } from '@/components/station-brand';
 import { ThemedText } from '@/components/themed-text';
 import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
+import { AppFooter } from '@/components/app-footer';
 import { ThemedView } from '@/components/themed-view';
 import { getFuelAdjustments, type FuelAdjustment, type FuelAdjustmentFeed } from '@/fuel/api';
 import { useTheme } from '@/hooks/use-theme';
@@ -218,13 +219,14 @@ export default function WeeklyChangesScreen() {
           </View>}
           <ThemedText type="small" themeColor="textSecondary">Based on DOE notices. These are changes per liter, not current pump prices.</ThemedText>
         </View>
+        <AppFooter />
       </RefreshableScrollView>
     </SafeAreaView>
   </ThemedView>;
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1 }, safe: { flex: 1 }, scroll: { padding: 20, alignItems: 'center' },
+  page: { flex: 1 }, safe: { flex: 1 }, scroll: { flexGrow: 1, padding: 20, alignItems: 'center' },
   content: { width: '100%', maxWidth: 1160, gap: 20, paddingVertical: 12 },
   header: { gap: 8, marginBottom: 12 }, accent: { color: '#76B4FF' },
   title: { fontSize: 28, lineHeight: 36, fontWeight: '600' }, loading: { flexDirection: 'row', gap: 12, alignItems: 'center' },
