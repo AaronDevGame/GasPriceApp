@@ -98,16 +98,16 @@ dotnet ef migrations add DescriptiveMigrationName --project GasPriceBackend/Back
 
 ## Git workflow and handoff
 
-- Whenever a task adds a feature or changes repository files, always include both a suggested branch name and a suggested commit message in the final handoff.
-- When a task changes more than one scope (`frontend`, `backend`, or `repo`), provide a separate suggested branch name and Conventional Commit-style message for each affected scope so the user can commit and push them separately.
-- Identify the files or directories included in each suggested branch. Group supporting changes with the scope they serve; reserve `repo` for shared repository changes. Suggest only scopes that actually changed, and note any dependencies between the separate changes.
+- For tasks that change repository files, create a task branch before editing or continue on the task branch already in use for that work. After reviewing the diff and running the required checks, commit the task's changes locally. Follow any user instructions to leave the work uncommitted or use a specific branch.
+- When a task changes more than one scope (`frontend`, `backend`, or `repo`), use a separate branch and commit for each affected scope. Group supporting changes with the scope they serve and reserve `repo` for shared repository changes. Use independent branches when possible and report any dependencies.
+- Review the working tree and index before branching or committing. Preserve unrelated edits and staged changes, and include only the task's changes in each commit.
 - Branch names must use a scope, a meaningful change type, and a short lowercase kebab-case description: `<scope>/<type>/<short-description>`.
 - Use `backend` for `GasPriceBackend/` changes, `frontend` for `GasPriceClient/` or `GasPriceUnity/` changes, and `repo` for shared, root-level, or cross-cutting changes.
 - Use change types such as `feature`, `fix`, `add`, `refactor`, `docs`, `test`, or `chore` as appropriate. For example: `backend/chore/update-dependencies` or `frontend/feature/add-login-screen`.
 - Never prefix a branch name with `codex/`.
 - Use Conventional Commit-style messages such as `feat: add player profile endpoint`, `fix: reject invalid player tokens`, or `docs: document local setup`.
 - Keep commit-message summaries imperative, specific, and concise.
-- Suggesting a branch name and commit message does not authorize creating a branch or making a commit. Only perform those Git operations when the user explicitly requests them.
+- Push, open a pull request, or merge only when the user requests that action.
 
 ## Completion checklist
 
@@ -118,4 +118,4 @@ Before handing off a change:
 3. Run `dotnet build GasPriceApp.sln`.
 4. Run focused endpoint or migration checks when relevant.
 5. Summarize changed behavior, verification performed, and any remaining risk.
-6. Provide a separate suggested branch name and commit message for each affected scope, identifying the included files or directories and any dependencies.
+6. Report the branch name, commit hash and message, included files or directories, and any dependencies for each affected scope. If a required check or commit could not complete, report its status and the blocker.
