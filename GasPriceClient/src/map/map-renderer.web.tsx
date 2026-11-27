@@ -24,6 +24,7 @@ type LabelCard = {
   label: MapLabel;
   positioner: HTMLDivElement;
   button: HTMLButtonElement;
+  name: HTMLSpanElement;
   tail: HTMLSpanElement;
   regular: HTMLSpanElement;
   compact: HTMLSpanElement;
@@ -89,7 +90,8 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
                 card.append(bar);
               }
             } else {
-              for (const { fuel, text, minimum } of label.priceRows) {
+              if (hasPrices) compact.style.width = `${2 * edgeMarker.columnWidth}px`;
+              for (const { fuel, text, edgeText } of label.priceRows) {
                 const row = document.createElement('span');
                 row.style.cssText = `display:flex;align-items:center;gap:${mapLabelNozzle.gap}px;`;
                 const nozzle = document.createElement('img');
@@ -98,12 +100,16 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
                 nozzle.width = mapLabelNozzle.size;
                 nozzle.height = mapLabelNozzle.size;
                 nozzle.style.objectFit = 'contain';
-                row.append(nozzle);
-                const shortRow = row.cloneNode(true);
-                row.append(text);
-                shortRow.appendChild(document.createTextNode(minimum));
+                row.append(nozzle, text);
                 regular.append(row);
-                compact.append(shortRow);
+                const column = document.createElement('span');
+                column.style.cssText = `display:flex;flex:none;flex-direction:column;align-items:center;width:${edgeMarker.columnWidth}px;`;
+                if (fuel === 'diesel') column.style.marginLeft = 'auto';
+                const compactNozzle = nozzle.cloneNode() as HTMLImageElement;
+                compactNozzle.width = edgeMarker.nozzleSize;
+                compactNozzle.height = edgeMarker.nozzleSize;
+                column.append(compactNozzle, edgeText);
+                compact.append(column);
               }
               if (label.coverage) {
                 const status = document.createElement(hasPrices ? 'span' : 'em');
@@ -123,7 +129,7 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
             triangle.style.cssText = `position:absolute;left:${diameter / 2 - tailOverlap}px;top:${-tailHalfWidth}px;border-top:${tailHalfWidth}px solid transparent;border-bottom:${tailHalfWidth}px solid transparent;border-left:${tailLength}px solid ${colors.border};`;
             tail.append(triangle);
             positioner.replaceChildren(tail, card);
-            nextCards.set(label.id, { label, positioner, button: card, tail, regular, compact, edge: false, appearance, priority, offset });
+            nextCards.set(label.id, { label, positioner, button: card, name, tail, regular, compact, edge: false, appearance, priority, offset });
           });
           for (const [id, card] of this.cards) {
             if (!nextCards.has(id)) card.positioner.remove();
@@ -170,19 +176,20 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
               positioner.style.zIndex = String(position.zIndex);
               positioner.style.transform = `translate(${position.x + left}px, ${position.y + top}px)`;
               const edge = position.tailAngle !== undefined;
-              const { button, tail, regular, compact } = card;
+              const { button, name, tail, regular, compact } = card;
               if (edge) tail.style.transform = `rotate(${position.tailAngle}rad)`;
               if (card.edge === edge) continue;
               card.edge = edge;
               button.style.width = `${position.width}px`;
               button.style.height = `${position.height}px`;
               button.style.borderRadius = edge ? '50%' : '7px';
-              button.style.padding = edge ? '7px' : '4px';
+              button.style.padding = edge ? `${edgeMarker.padding}px` : '4px';
               button.style.fontSize = `${edge ? edgeMarker.fontSize : label.fontSize}px`;
-              button.style.lineHeight = edge ? '13px' : '16px';
+              button.style.lineHeight = edge ? `${edgeMarker.lineHeight}px` : '16px';
+              name.style.fontSize = edge ? `${edgeMarker.nameFontSize}px` : '';
               if (label.skeletonWidths.length) button.style.gap = edge ? '4px' : '9px';
               regular.style.display = edge ? 'none' : 'contents';
-              compact.style.display = edge ? 'contents' : 'none';
+              compact.style.display = edge ? 'flex' : 'none';
               tail.style.display = edge ? 'block' : 'none';
             }
           }

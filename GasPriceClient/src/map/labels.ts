@@ -10,7 +10,10 @@ export const mapLabelColors = {
   textShadow: '#071322',
 };
 export const mapLabelNozzle = { size: 14, gap: 4 };
-export const edgeMarker = { diameter: 76, tailLength: 12, tailHalfWidth: 7, tailOverlap: 3, fontSize: 10 };
+export const edgeMarker = {
+  diameter: 68, tailLength: 12, tailHalfWidth: 7, tailOverlap: 3,
+  fontSize: 9, nameFontSize: 8, lineHeight: 11, padding: 4, columnWidth: 26, nozzleSize: 11,
+};
 export const edgeMarkerStatus = 'No recent\nreport';
 
 export const rangeText = (value: PriceRange | null) => value
@@ -40,7 +43,7 @@ export function priceLabel(price: ReturnType<typeof areaPrices>) {
 const fuelNames = { gasoline: 'RON 91', diesel: 'Diesel' };
 const mapFuels = ['gasoline', 'diesel'] as const;
 export type MapLabel = {
-  id: string; name: string; priceRows: { fuel: typeof mapFuels[number]; text: string; minimum: string }[];
+  id: string; name: string; priceRows: { fuel: typeof mapFuels[number]; text: string; edgeText: string }[];
   skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
   center: Point; labelPoint: Point; bounds: Bounds; width: number; height: number; fontSize: number;
 };
@@ -185,12 +188,12 @@ export function mapLabels(snapshot: MapSnapshot, selected: string | null): MapLa
     const prices = mapFuels.flatMap(fuel => {
       const range = price[fuel];
       if (!range) return [];
-      const minimum = `₱${range.minPrice.toFixed(2)}`;
-      return [{ fuel, amount: isSelected ? rangeText(range) : minimum, minimum }];
+      const amount = isSelected ? rangeText(range) : `₱${range.minPrice.toFixed(2)}`;
+      return [{ fuel, amount, edgeText: `₱${Math.round(range.minPrice)}` }];
     });
     const compact = !isSelected && prices.length > 0;
-    const priceRows = prices.map(({ fuel, amount, minimum }) => ({
-      fuel, minimum, text: isSelected && prices.length === 1 ? `${fuelNames[fuel]} ${amount}` : amount,
+    const priceRows = prices.map(({ fuel, amount, edgeText }) => ({
+      fuel, edgeText, text: isSelected && prices.length === 1 ? `${fuelNames[fuel]} ${amount}` : amount,
     }));
     const skeletonWidths = pending ? (level === 'city' ? [74, 62, 46] : [74, 62, 46, 58]) : [];
     const coverage = pending || compact ? '' : [priceLabel(price), !prices.length ? '' : level === 'city' ? (price.complete ? '' : 'Incomplete') :

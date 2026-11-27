@@ -524,8 +524,12 @@ function lifecycle(h, initial = {}) {
   assert(Math.abs(edgePosition.tailAngle) < 0.001, 'Point directly right at the geographic anchor');
   assert.equal(edgePosition.x + edgeMarker.diameter / 2 + edgeMarker.tailLength - edgeMarker.tailOverlap,
     edgeViewport.width - 8, 'Keep the tail inside the right margin');
-  assert.deepEqual(Array.from(edgeCard.priceRows, row => row.minimum), displayRows(compact).map(([, text]) => text),
-    'A selected bubble can display both minimum prices in its compact layout');
+  const [roundedCard] = mapLabels({ ...imusSnapshot, viewport: edgeViewport, prices: new Map([[imus.id, {
+    ...imusPrices, gasoline: { minPrice: 60.50, maxPrice: 64.25 }, diesel: { minPrice: 81.49, maxPrice: 84 },
+  }]]) }, imus.id);
+  assert.deepEqual(Array.from(roundedCard.priceRows, ({ fuel, edgeText }) => [fuel, edgeText]),
+    [['gasoline', '₱61'], ['diesel', '₱81']], 'Edge prices round to whole pesos in gasoline-to-diesel order');
+  assert.match(roundedCard.priceRows[0].text, /₱60\.50–₱64\.25/, 'The full card still shows the exact price range');
   const centeredViewport = { ...clipped, bounds: [longitude - 0.02, latitude - 0.015, longitude + 0.02, latitude + 0.015] };
   const preferredPosition = geometry.project(imus.labelPoint, centeredViewport);
   const returned = webLabelPosition(edgeCard, centeredViewport, point => geometry.project(point, centeredViewport), [], 0, 1);

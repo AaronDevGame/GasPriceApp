@@ -196,7 +196,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         const colors = highlighted ? mapLabelColors.selected : pending ? mapLabelColors.skeleton : mapLabelColors.neutral;
         const muted = !highlighted && !hasPrices && !pending;
         const priceStyle = [styles.price, edge
-          ? { fontSize: edgeMarker.fontSize, lineHeight: 13 }
+          ? { fontSize: edgeMarker.fontSize, lineHeight: edgeMarker.lineHeight }
           : { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }];
         const coverage = edge ? (hasPrices ? '' : edgeMarkerStatus) : label.coverage;
         return <Pressable key={label.id} accessibilityRole="button" accessibilityLabel={label.accessibilityLabel}
@@ -211,16 +211,19 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
           {edge && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { transform: [{ rotate: `${edge.tailAngle}rad` }] }]}>
             <View style={[styles.edgeTail, { borderLeftColor: colors.border }]} />
           </View>}
-          <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, muted && styles.unavailableText]}>{label.name}</Text>
+          <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, edge && styles.edgeName,
+            muted && styles.unavailableText]}>{label.name}</Text>
           {pending ? label.skeletonWidths.map(width => (
             <View key={width} style={[styles.skeletonRow, edge && styles.edgeSkeletonRow]}><View style={[styles.skeletonBar, { width: `${width}%` }]} /></View>
           )) : <>
-            {label.priceRows.map(({ fuel, text, minimum }) => (
-              <View key={fuel} style={styles.priceRow}>
-                <Image source={fuelNozzles[fuel]} style={styles.nozzle} contentFit="contain" accessible={false} />
-                <Text allowFontScaling={false} style={priceStyle}>{edge ? minimum : text}</Text>
-              </View>
-            ))}
+            {hasPrices && <View style={edge ? styles.edgePrices : styles.priceRows}>
+              {label.priceRows.map(({ fuel, text, edgeText }) => (
+                <View key={fuel} style={edge ? [styles.edgeColumn, fuel === 'diesel' && styles.edgeDiesel] : styles.priceRow}>
+                  <Image source={fuelNozzles[fuel]} style={edge ? styles.edgeNozzle : styles.nozzle} contentFit="contain" accessible={false} />
+                  <Text allowFontScaling={false} style={priceStyle}>{edge ? edgeText : text}</Text>
+                </View>
+              ))}
+            </View>}
             {!!coverage && <Text allowFontScaling={false} style={[styles.price, styles.coverage, edge && styles.edgeCoverage,
               muted && styles.unavailableText, !hasPrices && styles.noReport]}>{coverage}</Text>}
           </>}
@@ -236,7 +239,8 @@ const styles = StyleSheet.create({
   fill: { flex: 1 }, unavailable: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   notice: { color: '#E8EDF5', textAlign: 'center' }, warning: { position: 'absolute', top: 10, left: 12, right: 12, padding: 10, backgroundColor: '#243142' },
   label: { height: 46, paddingVertical: 5, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  edgeLabel: { borderRadius: edgeMarker.diameter / 2, paddingHorizontal: 7 },
+  edgeLabel: { borderRadius: edgeMarker.diameter / 2, paddingHorizontal: edgeMarker.padding },
+  edgeName: { fontSize: edgeMarker.nameFontSize },
   edgeTail: {
     position: 'absolute', width: 0, height: 0, left: edgeMarker.diameter - edgeMarker.tailOverlap - 1,
     top: edgeMarker.diameter / 2 - edgeMarker.tailHalfWidth - 1, borderLeftWidth: edgeMarker.tailLength,
@@ -249,9 +253,14 @@ const styles = StyleSheet.create({
   unavailableText: { color: mapLabelColors.unavailableText },
   noReport: { fontStyle: 'italic' },
   coverage: { fontSize: 10, textAlign: 'center' },
-  edgeCoverage: { lineHeight: 13 },
+  edgeCoverage: { fontSize: edgeMarker.fontSize, lineHeight: edgeMarker.lineHeight },
   retry: { padding: 10, marginTop: 6, borderRadius: 8, backgroundColor: '#354B64' },
+  priceRows: { alignItems: 'center' },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: mapLabelNozzle.gap },
+  edgePrices: { flexDirection: 'row', width: 2 * edgeMarker.columnWidth },
+  edgeColumn: { width: edgeMarker.columnWidth, alignItems: 'center' },
+  edgeDiesel: { marginLeft: 'auto' },
+  edgeNozzle: { width: edgeMarker.nozzleSize, height: edgeMarker.nozzleSize },
   nozzle: { width: mapLabelNozzle.size, height: mapLabelNozzle.size },
   price: { fontSize: 11, lineHeight: 17, color: '#FFFFFF', fontWeight: '600', fontVariant: ['tabular-nums'],
     textShadowColor: mapLabelColors.textShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
