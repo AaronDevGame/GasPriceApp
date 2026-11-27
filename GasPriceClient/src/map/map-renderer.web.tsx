@@ -7,7 +7,8 @@ import { fuelNozzles } from '@/fuel/nozzles';
 import { boundsCenter, cameraBounds, fitZoom, FUEL_CARD_PAN_DURATION_MS, MAX_ZOOM, polygons } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
-import { edgeMarker, edgeMarkerStatus, type LabelRectangle, type MapLabel, mapLabelColors, mapLabelNozzle, mapLabels, webLabelPosition } from './labels';
+import { edgeMarker, edgeMarkerStatus, type LabelRectangle, type MapLabel, mapLabelColors, mapLabelNozzle, mapLabelShimmer, mapLabels, webLabelPosition } from './labels';
+import classes from './map-renderer.module.css';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
@@ -90,7 +91,11 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
               for (const width of label.skeletonWidths) {
                 const bar = document.createElement('span');
                 bar.setAttribute('aria-hidden', 'true');
-                bar.style.cssText = `flex:none;width:${width}%;height:7px;border-radius:4px;background:${mapLabelColors.skeleton.bar};`;
+                bar.className = classes.skeletonBar;
+                bar.style.width = `${width}%`;
+                bar.style.backgroundColor = mapLabelColors.skeleton.bar;
+                bar.style.setProperty('--shimmer-gradient', mapLabelShimmer.gradient);
+                bar.style.setProperty('--shimmer-duration', `${mapLabelShimmer.durationMs}ms`);
                 card.append(bar);
               }
             } else {

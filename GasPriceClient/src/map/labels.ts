@@ -9,6 +9,10 @@ export const mapLabelColors = {
   skeleton: { background: 'rgba(17, 31, 48, 0.92)', border: '#7997B5', bar: '#58718C' },
   textShadow: '#071322',
 };
+export const mapLabelShimmer = {
+  durationMs: 1400,
+  gradient: 'linear-gradient(105deg, transparent 20%, #AFD4EF 50%, transparent 80%)',
+};
 export const mapLabelNozzle = { size: 14, gap: 4 };
 export const edgeMarker = {
   diameter: 68, tailLength: 12, tailHalfWidth: 7, tailOverlap: 3,

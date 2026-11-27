@@ -1,0 +1,22 @@
+.skeletonBar {
+  position: relative;
+  flex: none;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeletonBar::after {
+    position: absolute;
+    inset: 0;
+    background: var(--shimmer-gradient);
+    animation: sweep var(--shimmer-duration) linear infinite;
+    content: '';
+  }
+}
+
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}

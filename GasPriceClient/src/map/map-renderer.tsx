@@ -3,12 +3,13 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { fuelNozzles } from '@/fuel/nozzles';
 
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, FUEL_CARD_PAN_DURATION_MS, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
-import { clampLabelCenter, edgeLabelPosition, edgeMarker, edgeMarkerStatus, mapLabelColors, mapLabelNozzle, placeLabels } from './labels';
+import { clampLabelCenter, edgeLabelPosition, edgeMarker, edgeMarkerStatus, mapLabelColors, mapLabelNozzle, mapLabelShimmer, placeLabels } from './labels';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const coordinate = ([longitude, latitude]: Point) => ({ latitude, longitude });
@@ -165,6 +166,18 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
   }), [shapes, visibleBounds, selected, onSelect]);
   // Keep geographic anchors moving between viewport updates from the controller.
   const labels = useMemo(() => placeLabels(snapshot, selected), [snapshot, selected]);
+  const reduceMotion = useReducedMotion();
+  const shimmerOffset = useSharedValue(-100);
+  const showShimmer = active !== false && !reduceMotion && labels.some(label => label.skeletonWidths.length > 0);
+  const shimmerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: `${shimmerOffset.get()}%` as const }],
+  }));
+  useEffect(() => {
+    if (!showShimmer) return;
+    shimmerOffset.set(-100);
+    shimmerOffset.set(withRepeat(withTiming(100, { duration: mapLabelShimmer.durationMs, easing: Easing.linear }), -1));
+    return () => cancelAnimation(shimmerOffset);
+  }, [showShimmer, shimmerOffset]);
   const liveViewport = liveBounds && snapshot.viewport ? { ...snapshot.viewport, ...size, bounds: liveBounds } : null;
   const labelViewport = liveViewport ?? snapshot.viewport;
   return <View style={styles.fill} onLayout={event => {
@@ -214,7 +227,11 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
           <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, edge && styles.edgeName,
             muted && styles.unavailableText]}>{edge ? label.edgeName : label.name}</Text>
           {pending ? label.skeletonWidths.map(width => (
-            <View key={width} style={[styles.skeletonRow, edge && styles.edgeSkeletonRow]}><View style={[styles.skeletonBar, { width: `${width}%` }]} /></View>
+            <View key={width} style={[styles.skeletonRow, edge && styles.edgeSkeletonRow]}>
+              <View style={[styles.skeletonBar, { width: `${width}%` }]}>
+                {showShimmer && <Animated.View style={[styles.skeletonHighlight, shimmerStyle]} />}
+              </View>
+            </View>
           )) : <>
             {hasPrices && <View style={edge ? styles.edgePrices : styles.priceRows}>
               {label.priceRows.map(({ fuel, text, edgeText }) => (
@@ -249,7 +266,8 @@ const styles = StyleSheet.create({
   },
   skeletonRow: { height: 16, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   edgeSkeletonRow: { height: 10 },
-  skeletonBar: { height: 7, borderRadius: 4, backgroundColor: mapLabelColors.skeleton.bar },
+  skeletonBar: { height: 7, borderRadius: 4, overflow: 'hidden', backgroundColor: mapLabelColors.skeleton.bar },
+  skeletonHighlight: { ...StyleSheet.absoluteFill, experimental_backgroundImage: mapLabelShimmer.gradient },
   unavailableText: { color: mapLabelColors.unavailableText },
   noReport: { fontStyle: 'italic' },
   coverage: { fontSize: 10, textAlign: 'center' },
