@@ -25,12 +25,15 @@ type LabelCard = {
   positioner: HTMLDivElement;
   appearance: string;
   priority: number;
+  offset?: Point;
 };
 function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void) {
       class Labels extends google.maps.OverlayView {
         private root = document.createElement('div');
         private cards = new Map<string, LabelCard>();
         private frame: number | undefined;
+        private zoom: number | undefined;
+        private selectedId: string | null = null;
         onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.floatPane.appendChild(this.root); }
         setLabels(labels: MapLabel[], selectedId: string | null) {
           const nextCards = new Map<string, LabelCard>();
@@ -44,7 +47,9 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
               positioner.style.cssText = 'position:absolute;left:0;top:0;visibility:hidden;';
               this.root.appendChild(positioner);
             }
-            nextCards.set(label.id, { label, positioner, appearance, priority });
+            const keepOffset = previous && this.selectedId === selectedId &&
+              previous.label.width === label.width && previous.label.height === label.height;
+            nextCards.set(label.id, { label, positioner, appearance, priority, offset: keepOffset ? previous.offset : undefined });
             if (previous?.appearance === appearance) return;
             const card = document.createElement('button');
             card.type = 'button';
@@ -95,6 +100,7 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
             if (!nextCards.has(id)) card.positioner.remove();
           }
           this.cards = nextCards;
+          this.selectedId = selectedId;
           this.draw();
         }
         scheduleDraw() {
@@ -123,8 +129,12 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
             return point && [point.x, point.y];
           };
           const placed: LabelRectangle[] = [];
-          for (const { label, positioner, priority } of this.cards.values()) {
-            const position = webLabelPosition(label, viewport, projectPoint, placed, priority, this.cards.size);
+          const zoom = map.getZoom();
+          for (const card of this.cards.values()) {
+            const { label, positioner, priority, offset } = card;
+            const position = webLabelPosition(label, viewport, projectPoint, placed, priority, this.cards.size,
+              zoom === this.zoom ? offset : undefined);
+            card.offset = position?.offset;
             positioner.style.visibility = position ? 'visible' : 'hidden';
             if (position) {
               if (!position.edgePushed) placed.push(position);
@@ -132,6 +142,7 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
               positioner.style.transform = `translate(${position.x + left}px, ${position.y + top}px)`;
             }
           }
+          this.zoom = zoom;
         }
         onRemove() {
           if (this.frame !== undefined) cancelAnimationFrame(this.frame);

@@ -527,11 +527,11 @@ function lifecycle(h, initial = {}) {
   assert.equal(returned.y, preferredPosition[1]);
   const higherPriority = { ...edgeCard, width: 130, height: 60, labelPoint: [100, 150], bounds: [65, 160, 135, 140] };
   const lowerPriority = { ...edgeCard, width: 130, height: 60, labelPoint: [260, 150], bounds: [255, 155, 265, 145] };
-  for (const offset of [0, -52, -60, -20]) {
+  for (const offset of [0, -27, -52, -60, -20]) {
     const projectFrame = ([x, y]) => [x + offset, y];
     const first = webLabelPosition(higherPriority, panned, projectFrame, [], 0, 2);
     const second = webLabelPosition(lowerPriority, panned, projectFrame, first.edgePushed ? [] : [first], 1, 2);
-    const atEdge = 100 + offset < 73;
+    const atEdge = 100 + offset <= 73;
     assert.equal(first.x, Math.max(73, 100 + offset), 'The edge card stays at its clamped position');
     assert.equal(second.x, 260 + offset, 'The foreground card keeps its preferred position during overlap');
     assert.equal(first.edgePushed, atEdge, 'Only cards pushed inward by the map edge can overlap');
@@ -544,6 +544,17 @@ function lifecycle(h, initial = {}) {
   const roomToShift = { ...lowerPriority, bounds: [255, 155, 310, 145] };
   const shifted = webLabelPosition(roomToShift, panned, point => point, [foregroundPosition], 1, 2);
   assert(shifted.x >= foregroundPosition.x + 138 && !shifted.edgePushed, 'A regular card can move aside and stay in front');
+  const nearRight = { ...higherPriority, labelPoint: [398, 150], bounds: [390, 160, 410, 140] };
+  const neighbor = { ...lowerPriority, labelPoint: [286, 150], bounds: [232, 155, 318, 145] };
+  const rightPosition = webLabelPosition(nearRight, panned, point => point, [], 0, 2);
+  const neighborPosition = webLabelPosition(neighbor, panned, point => point, [rightPosition], 1, 2);
+  assert(neighborPosition.offset, 'Before the edge, the neighboring card shifts to avoid the overlap');
+  const slideRight = ([x, y]) => [x + 12, y];
+  const rightAtEdge = webLabelPosition(nearRight, panned, slideRight, [], 0, 2);
+  const neighborAtEdge = webLabelPosition(neighbor, panned, slideRight, [], 1, 2, neighborPosition.offset);
+  assert(rightAtEdge.edgePushed && neighborAtEdge.zIndex > rightAtEdge.zIndex);
+  assert.equal(neighborAtEdge.x, neighborPosition.x + 12, 'The neighbor follows the map without snapping when the other card reaches the edge');
+  assert.equal(neighborAtEdge.y, neighborPosition.y);
   const secondEdge = webLabelPosition(higherPriority, panned, ([x, y]) => [x - 60, y], [], 1, 2);
   const firstEdge = webLabelPosition(higherPriority, panned, ([x, y]) => [x - 60, y], [], 0, 2);
   assert(firstEdge.edgePushed && secondEdge.edgePushed && firstEdge.zIndex > secondEdge.zIndex,

@@ -53,6 +53,15 @@ export function clampLabelCenter([x, y]: Point, viewport: LabelViewport,
     Math.max(cardInset + height / 2, Math.min(y, viewport.height - cardBottomInset - height / 2)),
   ];
 }
+function touchesCardMargin([x, y]: Point, viewport: LabelViewport, width: number, height: number) {
+  return x <= cardInset + width / 2 || x >= viewport.width - cardInset - width / 2 ||
+    y <= cardInset + height / 2 || y >= viewport.height - cardBottomInset - height / 2;
+}
+
+function overlapsLabel(x: number, y: number, width: number, height: number, placed: readonly LabelRectangle[]) {
+  return placed.some(other =>
+    Math.abs(other.x - x) < (other.width + width) / 2 + 8 && Math.abs(other.y - y) < (other.height + height) / 2 + 8);
+}
 // Search the part of the city's bounding box where a full label can fit on screen.
 function* candidates([x, y]: Point, nw: Point, se: Point, viewport: LabelViewport,
   width: number, height: number): Generator<Point> {
@@ -86,17 +95,32 @@ function projectLabel(label: MapLabel, viewport: LabelViewport, projectPoint: (p
 }
 
 export function webLabelPosition(label: MapLabel, viewport: LabelViewport, projectPoint: (point: Point) => Point | null,
-  placed: readonly LabelRectangle[], priority: number, cardCount: number) {
+  placed: readonly LabelRectangle[], priority: number, cardCount: number, previousOffset?: Point):
+  (LabelRectangle & { zIndex: number; edgePushed: boolean; offset?: Point }) | null {
   const projected = projectLabel(label, viewport, projectPoint);
   if (!projected) return null;
   const { preferred } = projected;
   const { width, height } = label;
   const [x, y] = clampLabelCenter(preferred, viewport, width, height);
-  const edgePushed = x !== preferred[0] || y !== preferred[1];
   const zIndex = cardCount - priority;
-  if (edgePushed) return { x, y, width, height, zIndex, edgePushed };
-  const position = findLabelPosition(label, viewport, projected, placed);
-  return position && { ...position, zIndex: zIndex + cardCount, edgePushed };
+  if (touchesCardMargin([x, y], viewport, width, height)) {
+    return { x, y, width, height, zIndex, edgePushed: true };
+  }
+  let position: LabelRectangle | null = null;
+  if (previousOffset) {
+    const priorX = preferred[0] + previousOffset[0];
+    const priorY = preferred[1] + previousOffset[1];
+    if (!touchesCardMargin([priorX, priorY], viewport, width, height) &&
+      !overlapsLabel(priorX, priorY, width, height, placed)) {
+      position = { x: priorX, y: priorY, width, height };
+    }
+  }
+  position ??= findLabelPosition(label, viewport, projected, placed);
+  if (!position) return null;
+  const edgePushed = touchesCardMargin([position.x, position.y], viewport, width, height);
+  const offset: Point = [position.x - preferred[0], position.y - preferred[1]];
+  return { ...position, zIndex: edgePushed ? zIndex : zIndex + cardCount, edgePushed,
+    offset: !edgePushed && (offset[0] || offset[1]) ? offset : undefined };
 }
 
 function findLabelPosition(label: MapLabel, viewport: LabelViewport, projected: NonNullable<ReturnType<typeof projectLabel>>,
@@ -104,8 +128,7 @@ function findLabelPosition(label: MapLabel, viewport: LabelViewport, projected: 
   const { width, height } = label;
   const { preferred, nw, se } = projected;
   for (const [x, y] of candidates(preferred, nw, se, viewport, width, height)) {
-    if (!placed.some(other =>
-      Math.abs(other.x - x) < (other.width + width) / 2 + 8 && Math.abs(other.y - y) < (other.height + height) / 2 + 8)) {
+    if (!overlapsLabel(x, y, width, height, placed)) {
       return { x, y, width, height };
     }
   }
