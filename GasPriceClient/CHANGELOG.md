@@ -6,6 +6,7 @@
 - Show a GasUp copyright footer on Fuel Prices, Weekly Changes, and news pages.
 
 ### Changed
+- Simplify the local DOE price card with a single footer for the report dates and per-liter unit, and remove the extra note and report link.
 - Show the DOE company list below the fuel map and remove the Map and Company list buttons.
 - Remove the details below the fuel map and make map credits available above it.
 - Give the desktop navigation header a neutral dark gray background to distinguish it from the blue news label and charcoal page body.

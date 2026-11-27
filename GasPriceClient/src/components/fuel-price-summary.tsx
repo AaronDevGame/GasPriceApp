@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { formatPrice, type Prices, type PricePoint, type DoeFuelPriceFeed } from '@/fuel/api';
@@ -9,7 +9,7 @@ function asOf(value: string) {
     year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Manila',
   });
 }
-function PriceGrid({ prices }: { prices: Prices }) {
+function PriceGrid({ prices, showUnit = true }: { prices: Prices; showUnit?: boolean }) {
   const [width, setWidth] = useState(0);
   const compact = width < 360;
   const amountSize = width < 280 ? 16 : compact ? 20 : 24;
@@ -21,7 +21,7 @@ function PriceGrid({ prices }: { prices: Prices }) {
       return <View key={key} style={styles.price}>
         <ThemedText type="small" themeColor="textSecondary" style={[compact && styles.priceCaptionCompact, width < 280 && styles.priceLabelNarrow]}>{['Diesel', 'Gasoline 91', 'Gasoline 95'][index]}</ThemedText>
         <ThemedText style={[styles.amount, { fontSize, lineHeight: fontSize + 8 }]}>{stackedRange ? formatted.replace('–', '–\n') : formatted}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary" style={compact && styles.priceCaptionCompact}>per liter</ThemedText>
+        {showUnit && <ThemedText type="small" themeColor="textSecondary" style={compact && styles.priceCaptionCompact}>per liter</ThemedText>}
       </View>;
     })}
   </View>;
@@ -36,12 +36,10 @@ export function DoePriceSummary({ report }: { report: DoeFuelPriceFeed }) {
       currency: 'PHP', unit: 'liter' };
   };
   return <>
-    <ThemedText type="small" themeColor="textSecondary">DOE-reported {provinceWide ? 'province' : 'city'}-level company ranges · {report.weekStart} to {report.weekEnd}</ThemedText>
-    <PriceGrid prices={{ diesel: range('DIESEL'), gasoline91: range('RON 91'), gasoline95: range('RON 95') }} />
-    <ThemedText type="small" themeColor="textSecondary">Reported company ranges, not individual station prices.</ThemedText>
-    {!!report.prices.length && <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(report.prices[0].sourceUrl)} style={styles.toggle}>
-      <ThemedText type="smallBold" themeColor="textSecondary">View DOE report ↗</ThemedText>
-    </Pressable>}
+    <PriceGrid prices={{ diesel: range('DIESEL'), gasoline91: range('RON 91'), gasoline95: range('RON 95') }} showUnit={false} />
+    <ThemedText type="small" themeColor="textSecondary">
+      DOE-reported {provinceWide ? 'province' : 'city'}-level company ranges per liter · {report.weekStart} to {report.weekEnd}
+    </ThemedText>
   </>;
 }
 export function RecentPriceUpdates({ area, updates, error }: { area: string; updates: PricePoint[]; error: boolean }) {
