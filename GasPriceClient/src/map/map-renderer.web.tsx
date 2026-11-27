@@ -1,10 +1,10 @@
 import { Asset } from 'expo-asset';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { fuelNozzles } from '@/fuel/nozzles';
 
-import { boundsCenter, cameraBounds, fitZoom, MAX_ZOOM, polygons } from './geometry';
+import { boundsCenter, cameraBounds, fitZoom, FUEL_CARD_PAN_DURATION_MS, MAX_ZOOM, polygons } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
 import { type MapLabel, mapLabelColors, mapLabelNozzle, mapLabels, webLabelPosition } from './labels';
@@ -143,6 +143,11 @@ export default function MapRenderer(props: MapRendererProps) {
   const host = useRef<HTMLDivElement | null>(null);
   const latest = useRef(props);
   const map = useRef<google.maps.Map | null>(null);
+  const cardPanFrame = useRef<number | null>(null);
+  const cancelCardPan = useCallback(() => {
+    if (cardPanFrame.current !== null) cancelAnimationFrame(cardPanFrame.current);
+    cardPanFrame.current = null;
+  }, []);
   const focusedBounds = useRef<Bounds | null>(null);
   const focusedZoom = useRef<MapRendererProps['zoomFocus']>(null);
   const focusedLocation = useRef<MapRendererProps['locationFocus']>(null);
@@ -185,8 +190,26 @@ export default function MapRenderer(props: MapRendererProps) {
       });
       map.current = instance; focusedBounds.current = null; focusedLocation.current = null; focusedZoom.current = null;
       const labels = createLabels(instance, label => {
+        cancelCardPan();
         const [lng, lat] = label.center;
-        instance.setCenter({ lng, lat });
+        const origin = instance.getCenter()?.toJSON();
+        if (!origin) {
+          instance.setCenter({ lng, lat });
+        } else if (origin.lng !== lng || origin.lat !== lat) {
+          const start = performance.now();
+          const pan = (now: number) => {
+            const progress = Math.min(1, (now - start) / FUEL_CARD_PAN_DURATION_MS);
+            if (progress === 1) {
+              cardPanFrame.current = null;
+              instance.setCenter({ lng, lat });
+              return;
+            }
+            const eased = 1 - (1 - progress) ** 3;
+            instance.setCenter({ lng: origin.lng + (lng - origin.lng) * eased, lat: origin.lat + (lat - origin.lat) * eased });
+            cardPanFrame.current = requestAnimationFrame(pan);
+          };
+          cardPanFrame.current = requestAnimationFrame(pan);
+        }
         latest.current.onSelect(label.id);
       });
       labels.setMap(instance); overlay.current = labels;
@@ -202,9 +225,12 @@ export default function MapRenderer(props: MapRendererProps) {
         latest.current.onMove(readViewport());
       }));
       listeners.push(instance.addListener('idle', () => {
+        if (cardPanFrame.current !== null) return;
         const viewport = readViewport();
         if (viewport) latest.current.onIdle(viewport);
       }));
+      listeners.push(instance.addListener('dragstart', cancelCardPan));
+      listeners.push(instance.addListener('zoom_changed', cancelCardPan));
       const updateSize = () => {
         const width = host.current?.clientWidth, height = host.current?.clientHeight;
         if (!width || !height) return;
@@ -220,32 +246,36 @@ export default function MapRenderer(props: MapRendererProps) {
       resize = new ResizeObserver(updateSize); resize.observe(host.current); updateSize();
     }).catch(() => { if (active) setError(true); });
     return () => {
+      cancelCardPan();
       active = false; resize?.disconnect(); listeners.forEach(listener => listener.remove());
       overlay.current?.setMap(null); overlay.current = null;
       map.current = null;
       if (callbacks.gm_authFailure === authFailure) callbacks.gm_authFailure = previousAuthFailure;
     };
-  }, [key, version, retry]);
+  }, [key, version, retry, cancelCardPan]);
   useEffect(() => {
     if (!ready || !map.current || props.active === false || !props.focusBounds || !host.current?.clientWidth || focusedBounds.current === props.focusBounds) return;
+    cancelCardPan();
     map.current.fitBounds(literalBounds(props.focusBounds), 36);
     focusedBounds.current = props.focusBounds;
-  }, [ready, props.focusBounds, props.active]);
+  }, [ready, props.focusBounds, props.active, cancelCardPan]);
   useEffect(() => {
     const point = props.locationFocus;
     if (!ready || !map.current || props.active === false || !point || !host.current?.clientWidth || focusedLocation.current === point) return;
+    cancelCardPan();
     const [lng, lat] = point.areaBounds ? boundsCenter(point.areaBounds) : [point.longitude, point.latitude];
     map.current.setCenter({ lat, lng });
     map.current.setZoom(12);
     focusedLocation.current = point;
-  }, [ready, props.locationFocus, props.active]);
+  }, [ready, props.locationFocus, props.active, cancelCardPan]);
   useEffect(() => {
     const focus = props.zoomFocus;
     if (!ready || !map.current || props.active === false || !focus || !host.current?.clientWidth || focusedZoom.current === focus) return;
+    cancelCardPan();
     if (focus.center) map.current.setCenter({ lng: focus.center[0], lat: focus.center[1] });
     map.current.setZoom(focus.zoom);
     focusedZoom.current = focus;
-  }, [ready, props.zoomFocus, props.active]);
+  }, [ready, props.zoomFocus, props.active, cancelCardPan]);
   useEffect(() => {
     if (!ready || !map.current) return;
     shapes.current = props.snapshot.features.map(feature => {

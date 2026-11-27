@@ -6,6 +6,7 @@ export const MAX_ZOOM = 18;
 export const OVERVIEW_PADDING = 20;
 export const OVERVIEW_ZOOM_OFFSET = 0.4;
 export const LABEL_HEIGHT = 62;
+export const FUEL_CARD_PAN_DURATION_MS = 550;
 export const intersects = (a: Bounds, b: Bounds) => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 const inBox = ([x, y]: Point, b: Bounds) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
 export const polygons = (geometry: PolygonGeometry): Point[][][] => geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;

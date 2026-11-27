@@ -6,7 +6,7 @@ import MapView, { Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-map
 
 import { fuelNozzles } from '@/fuel/nozzles';
 
-import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, polygons, project } from './geometry';
+import { boundsCenter, cameraBounds, cameraCenter, fitZoom, FUEL_CARD_PAN_DURATION_MS, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { mapLabelColors, mapLabelNozzle, placeLabels } from './labels';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
@@ -191,7 +191,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         return <Pressable key={label.id} accessibilityRole="button" accessibilityLabel={label.accessibilityLabel}
           accessibilityState={{ busy: pending, selected: highlighted }}
           onPress={() => {
-            map.current?.setCamera({ center: coordinate(label.center) });
+            map.current?.animateCamera({ center: coordinate(label.center) }, { duration: FUEL_CARD_PAN_DURATION_MS });
             onSelect(label.id);
           }}
           style={[styles.label, { position: 'absolute', left, top, zIndex: labels.length - priority,
