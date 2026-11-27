@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-11-27
+
 ### Added
 - Include Gasoline 95 ranges in map price responses when the selected city report contains that grade.
 
