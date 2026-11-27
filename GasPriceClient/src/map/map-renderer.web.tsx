@@ -7,7 +7,7 @@ import { fuelNozzles } from '@/fuel/nozzles';
 import { boundsCenter, cameraBounds, fitZoom, FUEL_CARD_PAN_DURATION_MS, MAX_ZOOM, polygons } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
-import { type MapLabel, mapLabelColors, mapLabelNozzle, mapLabels, webLabelPosition } from './labels';
+import { type LabelRectangle, type MapLabel, mapLabelColors, mapLabelNozzle, mapLabels, webLabelPosition } from './labels';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
@@ -122,10 +122,12 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
             const point = projection.fromLatLngToContainerPixel({ lng, lat });
             return point && [point.x, point.y];
           };
+          const placed: LabelRectangle[] = [];
           for (const { label, positioner, priority } of this.cards.values()) {
-            const position = webLabelPosition(label, viewport, projectPoint, priority, this.cards.size);
+            const position = webLabelPosition(label, viewport, projectPoint, placed, priority, this.cards.size);
             positioner.style.visibility = position ? 'visible' : 'hidden';
             if (position) {
+              if (!position.edgePushed) placed.push(position);
               positioner.style.zIndex = String(position.zIndex);
               positioner.style.transform = `translate(${position.x + left}px, ${position.y + top}px)`;
             }

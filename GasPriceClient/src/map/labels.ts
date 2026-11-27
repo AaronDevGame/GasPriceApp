@@ -42,7 +42,7 @@ export type MapLabel = {
   skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
   center: Point; labelPoint: Point; bounds: Bounds; width: number; height: number; fontSize: number;
 };
-type LabelRectangle = { x: number; y: number; width: number; height: number };
+export type LabelRectangle = { x: number; y: number; width: number; height: number };
 type LabelViewport = Pick<Viewport, 'width' | 'height'>;
 const cardInset = 8;
 const cardBottomInset = 36;
@@ -86,20 +86,21 @@ function projectLabel(label: MapLabel, viewport: LabelViewport, projectPoint: (p
 }
 
 export function webLabelPosition(label: MapLabel, viewport: LabelViewport, projectPoint: (point: Point) => Point | null,
-  priority: number, cardCount: number) {
+  placed: readonly LabelRectangle[], priority: number, cardCount: number) {
   const projected = projectLabel(label, viewport, projectPoint);
   if (!projected) return null;
   const { preferred } = projected;
-  const [x, y] = clampLabelCenter(preferred, viewport, label.width, label.height);
-  // Every card that fits at its preferred point should cover any edge-pushed card.
-  const zIndex = cardCount - priority + (x === preferred[0] && y === preferred[1] ? cardCount : 0);
-  return { x, y, zIndex };
+  const { width, height } = label;
+  const [x, y] = clampLabelCenter(preferred, viewport, width, height);
+  const edgePushed = x !== preferred[0] || y !== preferred[1];
+  const zIndex = cardCount - priority;
+  if (edgePushed) return { x, y, width, height, zIndex, edgePushed };
+  const position = findLabelPosition(label, viewport, projected, placed);
+  return position && { ...position, zIndex: zIndex + cardCount, edgePushed };
 }
 
-function findLabelPosition(label: MapLabel, viewport: LabelViewport, projectPoint: (point: Point) => Point,
+function findLabelPosition(label: MapLabel, viewport: LabelViewport, projected: NonNullable<ReturnType<typeof projectLabel>>,
   placed: readonly LabelRectangle[]): LabelRectangle | null {
-  const projected = projectLabel(label, viewport, projectPoint);
-  if (!projected) return null;
   const { width, height } = label;
   const { preferred, nw, se } = projected;
   for (const [x, y] of candidates(preferred, nw, se, viewport, width, height)) {
@@ -160,7 +161,8 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null) {
   if (!viewport) return placed;
   const projectPoint = (point: Point) => project(point, viewport);
   for (const label of mapLabels(snapshot, selected)) {
-    const position = findLabelPosition(label, viewport, projectPoint, placed);
+    const projected = projectLabel(label, viewport, projectPoint);
+    const position = projected && findLabelPosition(label, viewport, projected, placed);
     if (position) placed.push({ ...label, ...position, anchor: pointAtPixel([position.x, position.y], viewport) });
   }
   return placed;
