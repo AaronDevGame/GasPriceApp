@@ -6,7 +6,6 @@ import { newsDate, newsStatusLabel, type NewsItem } from '@/news/api';
 
 export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
   const { width, fontScale } = useWindowDimensions();
-  const compact = width < 600;
   const desktop = Platform.OS === 'web' && width >= 900;
   // Match the desktop navigation's side padding and content width.
   const headerInset = desktop ? Math.max(28, (width - 1160) / 2) : 10;
@@ -52,9 +51,9 @@ export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
       <Pressable accessibilityRole="link" accessibilityLabel={`${headline}. Published ${publicationDate}`} style={styles.link}
         onHoverIn={() => setReading(true)} onHoverOut={() => setReading(false)}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
-        <Animated.View style={{ transform: [{ translateX: slide }] }}>
-          <ThemedText numberOfLines={compact ? 2 : 1} type="smallBold" style={styles.headline}>{headline}</ThemedText>
-          <ThemedText type="small" style={styles.date}>{publicationDate}</ThemedText>
+        <Animated.View style={[styles.headlineRow, { transform: [{ translateX: slide }] }]}>
+          <ThemedText numberOfLines={1} type="smallBold" style={styles.headline}>{headline}</ThemedText>
+          <ThemedText numberOfLines={1} type="small" style={styles.date}>{publicationDate}</ThemedText>
         </Animated.View>
       </Pressable>
     </Link>
@@ -68,8 +67,9 @@ export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
 }
 
 const styles = StyleSheet.create({
-  headline: { color: '#F2F6FC' },
-  date: { color: '#B9C9DD' },
+  headlineRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
+  headline: { color: '#F2F6FC', flexShrink: 1, minWidth: 0 },
+  date: { color: '#8B8B8B', fontSize: 11 },
   strip: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'stretch', minHeight: 44, backgroundColor: '#182332' },
   label: { backgroundColor: '#203650', justifyContent: 'center', paddingRight: 14 },
   labelText: { color: '#9BC7FF', fontSize: 11, letterSpacing: 1 },
