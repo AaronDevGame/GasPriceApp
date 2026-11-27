@@ -51,37 +51,37 @@ export type LabelRectangle = { x: number; y: number; width: number; height: numb
 type LabelViewport = Pick<Viewport, 'width' | 'height'>;
 type EdgeLabelPosition = LabelRectangle & { tailAngle: number };
 const cardInset = 8;
-const cardBottomInset = 36;
+const edgeMarkerInset = 4;
 export function clampLabelCenter([x, y]: Point, viewport: LabelViewport,
-  width: number, height: number): Point {
+  width: number, height: number, inset = cardInset): Point {
   return [
-    Math.max(cardInset + width / 2, Math.min(x, viewport.width - cardInset - width / 2)),
-    Math.max(cardInset + height / 2, Math.min(y, viewport.height - cardBottomInset - height / 2)),
+    Math.max(inset + width / 2, Math.min(x, viewport.width - inset - width / 2)),
+    Math.max(inset + height / 2, Math.min(y, viewport.height - inset - height / 2)),
   ];
 }
 function touchesCardMargin([x, y]: Point, viewport: LabelViewport, width: number, height: number) {
   return x <= cardInset + width / 2 || x >= viewport.width - cardInset - width / 2 ||
-    y <= cardInset + height / 2 || y >= viewport.height - cardBottomInset - height / 2;
+    y <= cardInset + height / 2 || y >= viewport.height - cardInset - height / 2;
 }
 
 export function edgeLabelPosition(preferred: Point, position: LabelRectangle, viewport: LabelViewport): EdgeLabelPosition | undefined {
   const { x, y, width, height } = position;
   const horizontal = x <= cardInset + width / 2 ? -1 : x >= viewport.width - cardInset - width / 2 ? 1 : 0;
-  const vertical = y <= cardInset + height / 2 ? -1 : y >= viewport.height - cardBottomInset - height / 2 ? 1 : 0;
+  const vertical = y <= cardInset + height / 2 ? -1 : y >= viewport.height - cardInset - height / 2 ? 1 : 0;
   if (!horizontal && !vertical) return;
   const { diameter, tailLength, tailOverlap } = edgeMarker;
   const footprint = diameter + 2 * (tailLength - tailOverlap);
-  if (viewport.width < footprint + 2 * cardInset || viewport.height < footprint + cardInset + cardBottomInset) return;
+  if (viewport.width < footprint + 2 * edgeMarkerInset || viewport.height < footprint + 2 * edgeMarkerInset) return;
 
   // Pin to the touched margin, leaving room for the tail even when the anchor still fits on screen.
   const [px, py] = preferred;
   const markerX = horizontal < 0 ? Math.min(cardInset + width / 2, px) + 1
     : horizontal > 0 ? Math.max(viewport.width - cardInset - width / 2, px) - 1 : x;
   const markerY = vertical < 0 ? Math.min(cardInset + height / 2, py) + 1
-    : vertical > 0 ? Math.max(viewport.height - cardBottomInset - height / 2, py) - 1 : y;
-  let [cx, cy] = clampLabelCenter([markerX, markerY], viewport, footprint, footprint);
+    : vertical > 0 ? Math.max(viewport.height - cardInset - height / 2, py) - 1 : y;
+  let [cx, cy] = clampLabelCenter([markerX, markerY], viewport, footprint, footprint, edgeMarkerInset);
   if (cx === px && cy === py) {
-    [cx, cy] = clampLabelCenter([cx - horizontal, cy - vertical], viewport, footprint, footprint);
+    [cx, cy] = clampLabelCenter([cx - horizontal, cy - vertical], viewport, footprint, footprint, edgeMarkerInset);
   }
   const tailAngle = Math.atan2(py - cy, px - cx);
   return { x: cx, y: cy, width: diameter, height: diameter, tailAngle };
@@ -95,7 +95,7 @@ function overlapsLabel(x: number, y: number, width: number, height: number, plac
 function* candidates([x, y]: Point, nw: Point, se: Point, viewport: LabelViewport,
   width: number, height: number): Generator<Point> {
   const left = Math.max(cardInset + width / 2, nw[0]), right = Math.min(viewport.width - cardInset - width / 2, se[0]);
-  const top = Math.max(cardInset + height / 2, nw[1]), bottom = Math.min(viewport.height - cardBottomInset - height / 2, se[1]);
+  const top = Math.max(cardInset + height / 2, nw[1]), bottom = Math.min(viewport.height - cardInset - height / 2, se[1]);
   if (left > right || top > bottom) {
     yield clampLabelCenter([(nw[0] + se[0]) / 2, (nw[1] + se[1]) / 2], viewport, width, height);
     return;
@@ -115,7 +115,7 @@ function* candidates([x, y]: Point, nw: Point, se: Point, viewport: LabelViewpor
 }
 function projectLabel(label: MapLabel, viewport: LabelViewport, projectPoint: (point: Point) => Point | null) {
   const { width, height, bounds, labelPoint } = label;
-  if (viewport.width < width + 2 * cardInset || viewport.height < height + cardInset + cardBottomInset) return null;
+  if (viewport.width < width + 2 * cardInset || viewport.height < height + 2 * cardInset) return null;
   const nw = projectPoint([bounds[0], bounds[3]]);
   const se = projectPoint([bounds[2], bounds[1]]);
   if (!nw || !se || nw[0] > viewport.width || se[0] < 0 || nw[1] > viewport.height || se[1] < 0) return null;

@@ -523,7 +523,7 @@ function lifecycle(h, initial = {}) {
   assert.equal(edgePosition.height, edgeMarker.diameter);
   assert(Math.abs(edgePosition.tailAngle) < 0.001, 'Point directly right at the geographic anchor');
   assert.equal(edgePosition.x + edgeMarker.diameter / 2 + edgeMarker.tailLength - edgeMarker.tailOverlap,
-    edgeViewport.width - 8, 'Keep the tail inside the right margin');
+    edgeViewport.width - 4, 'Keep the tail 4 px inside the right margin');
   const [roundedCard] = mapLabels({ ...imusSnapshot, viewport: edgeViewport, prices: new Map([[imus.id, {
     ...imusPrices, gasoline: { minPrice: 60.50, maxPrice: 64.25 }, diesel: { minPrice: 81.49, maxPrice: 84 },
   }]]) }, imus.id);
@@ -576,6 +576,7 @@ function lifecycle(h, initial = {}) {
   assert(firstEdge.edgePushed && secondEdge.edgePushed && firstEdge.zIndex > secondEdge.zIndex,
     'Edge cards can overlap in their existing priority order');
   for (const [anchor, bounds, direction] of [
+    [[-20, 240], [-30, 270, 20, 200], [-1, 0]],
     [[240, -20], [200, 20, 270, -30], [0, -1]],
     [[240, 530], [200, 550, 270, 470], [0, 1]],
     [[-30, -20], [-45, 20, 30, -30], [-1, -1]],
@@ -586,6 +587,14 @@ function lifecycle(h, initial = {}) {
     assert(Math.abs(Math.cos(marker.tailAngle) - dx / Math.hypot(dx, dy)) < 0.001 &&
       Math.abs(Math.sin(marker.tailAngle) - dy / Math.hypot(dx, dy)) < 0.001,
     'Rotate the tail toward the off-screen anchor, including at a corner');
+    const tailRadius = edgeMarker.diameter / 2 + edgeMarker.tailLength - edgeMarker.tailOverlap;
+    const tipX = marker.x + tailRadius * Math.cos(marker.tailAngle);
+    const tipY = marker.y + tailRadius * Math.sin(marker.tailAngle);
+    const margin = Math.min(tipX, tipY, panned.width - tipX, panned.height - tipY);
+    assert(margin >= 4 - 0.001, 'Keep the rotated tip within the map inset');
+    if (!direction[0] || !direction[1]) {
+      assert(Math.abs(margin - 4) < 0.001, 'Use the same 4 px tip gap on straight edges');
+    }
   }
   // Draw successive camera positions against the same viewport dimensions and card layout.
   const leftEdge = relocated.width / 2 + 8;
@@ -598,7 +607,7 @@ function lifecycle(h, initial = {}) {
     [[relocated.width / 2 - 1, 150], [relocated.width / 2 + 8, 150]],
     [[panned.width - relocated.width / 2 + 1, 150], [panned.width - relocated.width / 2 - 8, 150]],
     [[200, relocated.height / 2 - 1], [200, relocated.height / 2 + 8]],
-    [[200, panned.height - relocated.height / 2 + 1], [200, panned.height - relocated.height / 2 - 36]],
+    [[200, panned.height - relocated.height / 2 + 1], [200, panned.height - relocated.height / 2 - 8]],
   ]) {
     const [edgeX, edgeY] = clampLabelCenter(before, panned, relocated.width, relocated.height);
     assert(Math.abs(edgeX - after[0]) < 0.001 && Math.abs(edgeY - after[1]) < 0.001,
