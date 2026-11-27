@@ -42,7 +42,7 @@ export type MapLabel = {
   skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
   center: Point; labelPoint: Point; bounds: Bounds; width: number; height: number; fontSize: number;
 };
-export type LabelRectangle = { x: number; y: number; width: number; height: number };
+type LabelRectangle = { x: number; y: number; width: number; height: number };
 type LabelViewport = Pick<Viewport, 'width' | 'height'>;
 const cardInset = 8;
 const cardBottomInset = 36;
@@ -55,12 +55,9 @@ export function clampLabelCenter([x, y]: Point, viewport: LabelViewport,
 }
 // Search the part of the city's bounding box where a full label can fit on screen.
 function* candidates([x, y]: Point, nw: Point, se: Point, viewport: LabelViewport,
-  width: number, height: number, liveEdges: boolean): Generator<Point> {
+  width: number, height: number): Generator<Point> {
   const left = Math.max(cardInset + width / 2, nw[0]), right = Math.min(viewport.width - cardInset - width / 2, se[0]);
   const top = Math.max(cardInset + height / 2, nw[1]), bottom = Math.min(viewport.height - cardBottomInset - height / 2, se[1]);
-  if (viewport.width < width + 2 * cardInset || viewport.height < height + cardInset + cardBottomInset) return;
-  if (nw[0] > viewport.width || se[0] < 0 || nw[1] > viewport.height || se[1] < 0) return;
-  if (liveEdges) yield clampLabelCenter([x, y], viewport, width, height);
   if (left > right || top > bottom) {
     yield clampLabelCenter([(nw[0] + se[0]) / 2, (nw[1] + se[1]) / 2], viewport, width, height);
     return;
@@ -78,14 +75,34 @@ function* candidates([x, y]: Point, nw: Point, se: Point, viewport: LabelViewpor
   const distance = ([px, py]: Point) => (px - preferred[0]) ** 2 + (py - preferred[1]) ** 2;
   yield* grid.sort((a, b) => distance(a) - distance(b));
 }
-export function findLabelPosition(label: MapLabel, viewport: LabelViewport, projectPoint: (point: Point) => Point | null,
-  placed: readonly LabelRectangle[], { liveEdges = false } = {}): LabelRectangle | null {
+function projectLabel(label: MapLabel, viewport: LabelViewport, projectPoint: (point: Point) => Point | null) {
   const { width, height, bounds, labelPoint } = label;
+  if (viewport.width < width + 2 * cardInset || viewport.height < height + cardInset + cardBottomInset) return null;
   const nw = projectPoint([bounds[0], bounds[3]]);
   const se = projectPoint([bounds[2], bounds[1]]);
+  if (!nw || !se || nw[0] > viewport.width || se[0] < 0 || nw[1] > viewport.height || se[1] < 0) return null;
   const preferred = projectPoint(labelPoint);
-  if (!nw || !se || !preferred) return null;
-  for (const [x, y] of candidates(preferred, nw, se, viewport, width, height, liveEdges)) {
+  return preferred && { preferred, nw, se };
+}
+
+export function webLabelPosition(label: MapLabel, viewport: LabelViewport, projectPoint: (point: Point) => Point | null,
+  priority: number, cardCount: number) {
+  const projected = projectLabel(label, viewport, projectPoint);
+  if (!projected) return null;
+  const { preferred } = projected;
+  const [x, y] = clampLabelCenter(preferred, viewport, label.width, label.height);
+  // Every card that fits at its preferred point should cover any edge-pushed card.
+  const zIndex = cardCount - priority + (x === preferred[0] && y === preferred[1] ? cardCount : 0);
+  return { x, y, zIndex };
+}
+
+function findLabelPosition(label: MapLabel, viewport: LabelViewport, projectPoint: (point: Point) => Point,
+  placed: readonly LabelRectangle[]): LabelRectangle | null {
+  const projected = projectLabel(label, viewport, projectPoint);
+  if (!projected) return null;
+  const { width, height } = label;
+  const { preferred, nw, se } = projected;
+  for (const [x, y] of candidates(preferred, nw, se, viewport, width, height)) {
     if (!placed.some(other =>
       Math.abs(other.x - x) < (other.width + width) / 2 + 8 && Math.abs(other.y - y) < (other.height + height) / 2 + 8)) {
       return { x, y, width, height };

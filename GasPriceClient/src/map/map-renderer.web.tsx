@@ -7,7 +7,7 @@ import { fuelNozzles } from '@/fuel/nozzles';
 import { boundsCenter, cameraBounds, fitZoom, MAX_ZOOM, polygons } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
-import { findLabelPosition, type LabelRectangle, type MapLabel, mapLabelColors, mapLabelNozzle, mapLabels } from './labels';
+import { type MapLabel, mapLabelColors, mapLabelNozzle, mapLabels, webLabelPosition } from './labels';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
@@ -24,6 +24,7 @@ type LabelCard = {
   label: MapLabel;
   positioner: HTMLDivElement;
   appearance: string;
+  priority: number;
 };
 function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void) {
       class Labels extends google.maps.OverlayView {
@@ -43,8 +44,7 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
               positioner.style.cssText = 'position:absolute;left:0;top:0;visibility:hidden;';
               this.root.appendChild(positioner);
             }
-            positioner.style.zIndex = String(labels.length - priority);
-            nextCards.set(label.id, { label, positioner, appearance });
+            nextCards.set(label.id, { label, positioner, appearance, priority });
             if (previous?.appearance === appearance) return;
             const card = document.createElement('button');
             card.type = 'button';
@@ -122,13 +122,11 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
             const point = projection.fromLatLngToContainerPixel({ lng, lat });
             return point && [point.x, point.y];
           };
-          // Cards stay in priority order even while hidden by a collision.
-          const placed: LabelRectangle[] = [];
-          for (const { label, positioner } of this.cards.values()) {
-            const position = findLabelPosition(label, viewport, projectPoint, placed, { liveEdges: true });
+          for (const { label, positioner, priority } of this.cards.values()) {
+            const position = webLabelPosition(label, viewport, projectPoint, priority, this.cards.size);
             positioner.style.visibility = position ? 'visible' : 'hidden';
             if (position) {
-              placed.push(position);
+              positioner.style.zIndex = String(position.zIndex);
               positioner.style.transform = `translate(${position.x + left}px, ${position.y + top}px)`;
             }
           }
