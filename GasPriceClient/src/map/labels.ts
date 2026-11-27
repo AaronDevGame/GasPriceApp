@@ -71,7 +71,8 @@ function* candidates(city: MapArea, viewport: Viewport, width: number, height: n
   const distance = ([px, py]: Point) => (px - preferred[0]) ** 2 + (py - preferred[1]) ** 2;
   yield* grid.sort((a, b) => distance(a) - distance(b));
 }
-export function placeLabels(snapshot: MapSnapshot, selected: string | null, previousAnchors?: ReadonlyMap<string, Point>): MapLabel[] {
+export function placeLabels(snapshot: MapSnapshot, selected: string | null, previousAnchors?: ReadonlyMap<string, Point>,
+  dragOffset?: Point): MapLabel[] {
   const viewport = snapshot.viewport;
   if (!viewport) return [];
   const placed: MapLabel[] = [];
@@ -112,6 +113,15 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, prev
       keepPreviousAnchor = insetX === x && insetY === y;
       previousPosition = [insetX, insetY];
       positions.unshift(previousPosition);
+      if (dragOffset) {
+        const [preferredX, preferredY] = positions[1];
+        // Return only along axes where the map is moving back toward the displaced card.
+        const dx = preferredX - insetX;
+        const dy = preferredY - insetY;
+        const stepX = dx * dragOffset[0] < 0 ? Math.sign(dx) * Math.min(Math.abs(dx), Math.abs(dragOffset[0]), 12) : 0;
+        const stepY = dy * dragOffset[1] < 0 ? Math.sign(dy) * Math.min(Math.abs(dy), Math.abs(dragOffset[1]), 12) : 0;
+        if (stepX || stepY) positions.unshift([insetX + stepX, insetY + stepY]);
+      }
     }
     const position = positions.find(([x, y]) => !placed.some(other =>
       Math.abs(other.x - x) < (other.width + width) / 2 + 8 && Math.abs(other.y - y) < (other.height + height) / 2 + 8));

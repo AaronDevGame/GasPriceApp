@@ -506,6 +506,15 @@ function lifecycle(h, initial = {}) {
   assert.equal(updatedDuringPan.anchor, pendingDuringPan.anchor, 'Keep the visible anchor as prices arrive during a drag');
   assert.deepEqual(updatedDuringPan.priceLines, relocated.priceLines);
   assert.equal(updatedDuringPan.skeletonWidths.length, 0);
+  const displacedAnchor = geometry.pointAtPixel([relocated.x + 40, relocated.y + 1], clipped);
+  const [held] = placeLabels(imusSnapshot, imus.id, new Map([[imus.id, displacedAnchor]]));
+  assert.equal(held.anchor, displacedAnchor, 'Settling keeps a displaced card in place');
+  const [draggedAway] = placeLabels(imusSnapshot, imus.id, new Map([[imus.id, held.anchor]]), [-30, 0]);
+  assert.equal(draggedAway.anchor, held.anchor, 'Dragging farther out does not pull the card back');
+  const [returningCard] = placeLabels(imusSnapshot, imus.id, new Map([[imus.id, held.anchor]]), [30, 0]);
+  assert(Math.abs(returningCard.x - (held.x - 12)) < 0.001, 'Dragging back takes a bounded step toward the preferred position');
+  const [released] = placeLabels(imusSnapshot, imus.id, new Map([[imus.id, returningCard.anchor]]));
+  assert.equal(released.anchor, returningCard.anchor, 'Releasing after a partial return keeps the new anchor');
   for (const [before, after] of [
     [[relocated.width / 2 - 1, 150], [relocated.width / 2 + 8, 150]],
     [[panned.width - relocated.width / 2 + 1, 150], [panned.width - relocated.width / 2 - 8, 150]],

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { boundsCenter, cameraBounds, fitZoom, MAX_ZOOM, polygons } from './geometry';
+import { boundsCenter, cameraBounds, fitZoom, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
 import { type MapLabel, mapLabelColors, placeLabels } from './labels';
@@ -132,6 +132,7 @@ export default function MapRenderer(props: MapRendererProps) {
   const overlay = useRef<LabelOverlay | null>(null);
   const isPanning = useRef(false);
   const labelAnchors = useRef(new Map<string, Point>());
+  const labelViewport = useRef<Viewport | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -183,6 +184,7 @@ export default function MapRenderer(props: MapRendererProps) {
       };
       listeners.push(instance.addListener('bounds_changed', () => latest.current.onMove(readViewport())));
       listeners.push(instance.addListener('dragstart', () => { isPanning.current = true; }));
+      listeners.push(instance.addListener('dragend', () => { isPanning.current = false; }));
       listeners.push(instance.addListener('idle', () => {
         isPanning.current = false;
         const viewport = readViewport();
@@ -207,6 +209,7 @@ export default function MapRenderer(props: MapRendererProps) {
       overlay.current?.setMap(null); overlay.current = null;
       isPanning.current = false;
       labelAnchors.current.clear();
+      labelViewport.current = null;
       map.current = null;
       if (callbacks.gm_authFailure === authFailure) callbacks.gm_authFailure = previousAuthFailure;
     };
@@ -263,8 +266,15 @@ export default function MapRenderer(props: MapRendererProps) {
   }, [ready, props.snapshot.features, areaIds, props.selected]);
   useEffect(() => {
     if (!overlay.current || !ready) return;
-    const labels = placeLabels(props.snapshot, props.selected, isPanning.current ? labelAnchors.current : undefined);
+    const viewport = props.snapshot.viewport;
+    const previous = labelViewport.current;
+    const sameScale = viewport && previous && viewport.zoom === previous.zoom &&
+      viewport.width === previous.width && viewport.height === previous.height;
+    const dragOffset = sameScale && isPanning.current && viewport !== previous
+      ? project([previous.bounds[0], previous.bounds[3]], viewport) : undefined;
+    const labels = placeLabels(props.snapshot, props.selected, sameScale ? labelAnchors.current : undefined, dragOffset);
     labelAnchors.current = new Map(labels.map(label => [label.id, label.anchor]));
+    labelViewport.current = viewport;
     overlay.current.setLabels(labels, props.selected);
   }, [ready, props.snapshot, props.selected]);
   return <View style={styles.fill}>
