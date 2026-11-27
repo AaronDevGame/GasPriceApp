@@ -178,6 +178,9 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
       }}>
       <ThemedText type="smallBold">Center on Metro Manila</ThemedText>
     </Pressable>}
+    <Pressable accessibilityRole="link" onPress={() => void Linking.openURL('https://www.openstreetmap.org/copyright')}>
+      <ThemedText style={styles.attribution}>Fuel stations © OpenStreetMap contributors · ODbL</ThemedText>
+    </Pressable>
     {showMapCredits && <Pressable accessibilityRole="button" accessibilityState={{ expanded: showCredits }}
       onPress={() => setShowCredits(value => !value)}>
       <ThemedText type="small" themeColor="textSecondary">Map credits {showCredits ? '↑' : '↓'}</ThemedText>

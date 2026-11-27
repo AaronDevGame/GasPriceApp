@@ -1,12 +1,13 @@
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import MapView, { Marker, Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { fuelNozzles } from '@/fuel/nozzles';
 
+import { stationDirections, stationMarkers } from './stations';
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, FUEL_CARD_PAN_DURATION_MS, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { clampLabelCenter, edgeLabelPosition, edgeMarker, mapLabelColors, mapLabelNozzle, mapLabelShimmer, placeLabels } from './labels';
@@ -156,6 +157,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
     }));
   }), [snapshot.features, ids]);
   // Native Maps needs one overlay per separate island. Mount only the visible parts.
+  const stations = useMemo(() => stationMarkers(snapshot.viewport), [snapshot.viewport]);
   const visibleBounds = snapshot.viewport?.bounds;
   const polygonOverlays = useMemo(() => shapes.filter(shape => visibleBounds && intersects(shape.bbox, visibleBounds)).map(shape => {
     const highlighted = shape.areaId === selected;
@@ -190,6 +192,20 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       toolbarEnabled={false} showsPointsOfInterests={false} showsBuildings={false}
       onMapReady={() => setReady(true)} onRegionChange={start} onRegionChangeComplete={() => void settle()}>
       {polygonOverlays}
+      {stations.map(station => <Marker key={station.id}
+        coordinate={{ latitude: station.lat, longitude: station.lng }}
+        title={station.count > 1 ? station.count + ' fuel stations' : station.name}
+        description={station.count > 1 ? 'Zoom in to see stations' : 'Get directions'}
+        pinColor="#00796b"
+        onCalloutPress={() => {
+          if (station.count === 1) void Linking.openURL(stationDirections(station));
+          else map.current?.animateCamera({ center: { latitude: station.lat, longitude: station.lng },
+            zoom: Math.min(15, (snapshot.viewport?.zoom ?? 10) + 2) });
+        }}>
+        {station.count > 1 && <View style={styles.stationCluster}>
+          <Text style={styles.stationCount}>{station.count}</Text>
+        </View>}
+      </Marker>)}
     </MapView>
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {labels.map((label, priority) => {
@@ -252,6 +268,9 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
   </View>;
 }
 const styles = StyleSheet.create({
+  stationCluster: { borderRadius: 18, backgroundColor: '#00796b', borderWidth: 1, borderColor: 'white',
+    minWidth: 32, height: 32, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
+  stationCount: { color: 'white', fontSize: 12, fontWeight: '700' },
   fill: { flex: 1 }, unavailable: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   notice: { color: '#E8EDF5', textAlign: 'center' }, warning: { position: 'absolute', top: 10, left: 12, right: 12, padding: 10, backgroundColor: '#243142' },
   label: { height: 46, paddingVertical: 5, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },

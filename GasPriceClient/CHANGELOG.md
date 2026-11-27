@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Show mapped Philippine fuel stations with station directions and zoom-dependent clusters.
+
 ### Changed
 - Make circular map markers smaller and show only the area name when prices are unavailable.
 
