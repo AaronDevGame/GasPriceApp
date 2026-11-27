@@ -11,6 +11,7 @@
 
 ### Fixed
 - Keep fuel station pins steady while moving the map.
+- Keep station cluster counts and positions fixed as clusters reach the edge of the map.
 
 ## [1.4.0] - 2026-11-28
 

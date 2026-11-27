@@ -772,6 +772,18 @@ function lifecycle(h, initial = {}) {
   console.log('PASS rectangle intersections, holes, camera zoom, exact price text and label collision/zoom policies');
 })().catch(error => { console.error(error); process.exitCode = 1; });
 
+const { stationMarkers } = harness().load('stations');
+const stationView = { bounds: imus.bbox, zoom: 12, width: 1000, height: 700 };
+const cluster = stationMarkers(stationView).find(marker => marker.count >= 3);
+assert(cluster, 'Imus has a station cluster at city zoom');
+const { lat, lng } = cluster;
+const edgeView = { ...stationView, bounds: [lng, lat - 0.000001, lng + 0.000001, lat + 0.000001] };
+const atEdge = stationMarkers(edgeView).find(marker => marker.id === cluster.id);
+assert.deepEqual(atEdge, cluster, 'A cluster keeps its position and count when its members move offscreen');
+const beyondEdge = { ...edgeView, bounds: [lng + 0.000001, lat - 0.000001, lng + 0.000002, lat + 0.000001] };
+assert(!stationMarkers(beyondEdge).some(marker => marker.id === cluster.id), 'A cluster can move offscreen');
+console.log('PASS station cluster counts and coordinates stay stable at the map edge');
+
 // App config uses native keys only in the native plugin, never in public extra metadata.
 const envNames = ['GOOGLE_MAPS_ANDROID_API_KEY', 'GOOGLE_MAPS_IOS_API_KEY', 'ANDROID_APPLICATION_ID', 'IOS_BUNDLE_IDENTIFIER'];
 const savedEnvironment = Object.fromEntries(envNames.map(name => [name, process.env[name]]));

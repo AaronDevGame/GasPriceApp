@@ -4,22 +4,32 @@ import type { Viewport } from './types';
 type Station = { id: string; name: string; lat: number; lng: number };
 type Group = Station & { count: number };
 
-export function stationMarkers(view: Viewport | null): Group[] {
-  if (!view) return [];
-  const [west, south, east, north] = view.bounds;
+let cachedClusters: { zoom: number; groups: Group[] } | undefined;
+const stationPins: Group[] = data.map(station => ({ ...station, count: 1 }));
+
+function clustersAtZoom(zoom: number): Group[] {
+  if (cachedClusters?.zoom === zoom) return cachedClusters.groups;
   const groups = new Map<string, Group>();
-  const cell = 360 * 64 / (256 * 2 ** Math.floor(view.zoom));
-  for (const station of data as Station[]) {
-    if (station.lng < west || station.lng > east || station.lat < south || station.lat > north) continue;
-    const id = view.zoom >= 15 ? station.id : Math.floor(station.lng / cell) + '/' + Math.floor(station.lat / cell);
+  const cell = 360 * 64 / (256 * 2 ** zoom);
+  for (const station of stationPins) {
+    const id = Math.floor(station.lng / cell) + '/' + Math.floor(station.lat / cell);
     const group = groups.get(id);
     if (group) {
       group.count++;
       group.lat += (station.lat - group.lat) / group.count;
       group.lng += (station.lng - group.lng) / group.count;
-    } else groups.set(id, { ...station, id, count: 1 });
+    } else groups.set(id, { ...station, id });
   }
-  return [...groups.values()];
+  const clusters = [...groups.values()];
+  cachedClusters = { zoom, groups: clusters };
+  return clusters;
+}
+
+export function stationMarkers(view: Viewport | null): Group[] {
+  if (!view) return [];
+  const [west, south, east, north] = view.bounds;
+  const markers = view.zoom >= 15 ? stationPins : clustersAtZoom(Math.floor(view.zoom));
+  return markers.filter(({ lng, lat }) => lng >= west && lng <= east && lat >= south && lat <= north);
 }
 
 export function stationDirections(station: Station) {
