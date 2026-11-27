@@ -9,6 +9,9 @@
 - Show gray fuel station pins only in Cities view, with stacked pins for clusters of three or more.
 - Make circular map markers smaller and show only the area name when prices are unavailable.
 
+### Fixed
+- Keep fuel station pins steady while moving the map.
+
 ## [1.4.0] - 2026-11-28
 
 ### Added

@@ -238,6 +238,7 @@ export default function MapRenderer(props: MapRendererProps) {
     if (!key || !host.current) return;
     let active = true;
     let resize: ResizeObserver | undefined;
+    let disposeStations: (() => void) | undefined;
     const listeners: google.maps.MapsEventListener[] = [];
     const callbacks = window as unknown as { gm_authFailure?: () => void };
     const previousAuthFailure = callbacks.gm_authFailure;
@@ -291,6 +292,76 @@ export default function MapRenderer(props: MapRendererProps) {
         return { bounds: geographicBounds(visible), zoom: instance.getZoom() ?? 12,
           width: host.current.clientWidth, height: host.current.clientHeight };
       };
+      const info = new google.maps.InfoWindow({ disableAutoPan: true });
+      const markers = new Map<string, { marker: google.maps.Marker; station: ReturnType<typeof stationMarkers>[number] }>();
+      let openStationId: string | undefined;
+      // Let Maps move the existing markers with the camera. Reconcile once the viewport settles.
+      const updateStations = (viewport: Viewport) => {
+        const wanted = mapLevel(index, viewport) === 'city' ? stationMarkers(viewport) : [];
+        const remaining = new Set(markers.keys());
+        for (const station of wanted) {
+          remaining.delete(station.id);
+          const existing = markers.get(station.id);
+          if (existing && existing.station.count === station.count && existing.station.lat === station.lat &&
+              existing.station.lng === station.lng && existing.station.name === station.name) continue;
+          const options: google.maps.MarkerOptions = {
+            position: { lat: station.lat, lng: station.lng },
+            title: station.count > 1 ? station.count + ' fuel stations' : station.name,
+            icon: {
+              url: Asset.fromModule(stationPinImage(station.count)).uri,
+              scaledSize: new google.maps.Size(stationPinSize.width, stationPinSize.height),
+              anchor: new google.maps.Point(stationPinAnchor.x, stationPinAnchor.y),
+              labelOrigin: new google.maps.Point(stationPinLabel.x, stationPinLabel.y),
+            },
+            label: station.count > 1
+              ? { text: String(station.count), color: '#fff', fontSize: '10px', fontWeight: '700' }
+              : null,
+          };
+          if (existing) {
+            existing.station = station;
+            existing.marker.setOptions(options);
+            continue;
+          }
+          const marker = new google.maps.Marker({ ...options, map: instance });
+          const entry = { marker, station };
+          markers.set(station.id, entry);
+          marker.addListener('click', () => {
+            const current = entry.station;
+            if (current.count > 1) {
+              info.close();
+              instance.setCenter({ lat: current.lat, lng: current.lng });
+              instance.setZoom(Math.min(15, (instance.getZoom() ?? 10) + 2));
+              return;
+            }
+            const link = document.createElement('a');
+            link.href = stationDirections(current);
+            link.textContent = current.name + ' · Get directions';
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            info.setContent(link);
+            info.open({ map: instance, anchor: marker, shouldFocus: false });
+            openStationId = current.id;
+          });
+        }
+        for (const id of remaining) {
+          if (openStationId === id) {
+            info.close();
+            openStationId = undefined;
+          }
+          const { marker } = markers.get(id)!;
+          google.maps.event.clearInstanceListeners(marker);
+          marker.setMap(null);
+          markers.delete(id);
+        }
+      };
+      disposeStations = () => {
+        info.close();
+        for (const { marker } of markers.values()) {
+          google.maps.event.clearInstanceListeners(marker);
+          marker.setMap(null);
+        }
+        markers.clear();
+      };
       listeners.push(instance.addListener('bounds_changed', () => {
         labels.scheduleDraw();
         latest.current.onMove(readViewport());
@@ -298,7 +369,10 @@ export default function MapRenderer(props: MapRendererProps) {
       listeners.push(instance.addListener('idle', () => {
         if (cardPanFrame.current !== null) return;
         const viewport = readViewport();
-        if (viewport) latest.current.onIdle(viewport);
+        if (viewport) {
+          updateStations(viewport);
+          latest.current.onIdle(viewport);
+        }
       }));
       listeners.push(instance.addListener('dragstart', cancelCardPan));
       listeners.push(instance.addListener('zoom_changed', cancelCardPan));
@@ -319,53 +393,12 @@ export default function MapRenderer(props: MapRendererProps) {
     return () => {
       cancelCardPan();
       active = false; resize?.disconnect(); listeners.forEach(listener => listener.remove());
+      disposeStations?.();
       overlay.current?.setMap(null); overlay.current = null;
       map.current = null;
       if (callbacks.gm_authFailure === authFailure) callbacks.gm_authFailure = previousAuthFailure;
     };
   }, [key, version, retry, cancelCardPan]);
-  useEffect(() => {
-    const instance = map.current;
-    if (!ready || !instance || level !== 'city') return;
-    const info = new google.maps.InfoWindow({ disableAutoPan: true });
-    const markers = stationMarkers(props.snapshot.viewport).map(station => {
-      const marker = new google.maps.Marker({
-        map: instance, position: { lat: station.lat, lng: station.lng },
-        title: station.count > 1 ? station.count + ' fuel stations' : station.name,
-        icon: {
-          url: Asset.fromModule(stationPinImage(station.count)).uri,
-          scaledSize: new google.maps.Size(stationPinSize.width, stationPinSize.height),
-          anchor: new google.maps.Point(stationPinAnchor.x, stationPinAnchor.y),
-          labelOrigin: new google.maps.Point(stationPinLabel.x, stationPinLabel.y),
-        },
-        label: station.count > 1
-          ? { text: String(station.count), color: '#fff', fontSize: '10px', fontWeight: '700' }
-          : undefined,
-      });
-      marker.addListener('click', () => {
-        if (station.count > 1) {
-          instance.setCenter(marker.getPosition()!);
-          instance.setZoom(Math.min(15, (instance.getZoom() ?? 10) + 2));
-          return;
-        }
-        const link = document.createElement('a');
-        link.href = stationDirections(station);
-        link.textContent = station.name + ' · Get directions';
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        info.setContent(link);
-        info.open({ map: instance, anchor: marker, shouldFocus: false });
-      });
-      return marker;
-    });
-    return () => {
-      info.close();
-      for (const marker of markers) {
-        google.maps.event.clearInstanceListeners(marker);
-        marker.setMap(null);
-      }
-    };
-  }, [ready, level, props.snapshot.viewport]);
   useEffect(() => {
     if (!ready || !map.current || props.active === false || !props.focusBounds || !host.current?.clientWidth || focusedBounds.current === props.focusBounds) return;
     cancelCardPan();

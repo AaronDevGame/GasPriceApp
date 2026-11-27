@@ -38,6 +38,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
   const map = useRef<MapView | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [ready, setReady] = useState(false);
+  const [stationViewport, setStationViewport] = useState<Viewport | null>(null);
   const [liveBounds, setLiveBounds] = useState<Bounds | null>(null);
   const pendingBounds = useRef<Bounds | null>(null);
   const labelFrame = useRef<number | null>(null);
@@ -95,8 +96,10 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       }
       cancelLabelFrame();
       setFailure(false);
-      onIdle({ bounds: [visible.southWest.longitude, visible.southWest.latitude, visible.northEast.longitude, visible.northEast.latitude],
-        zoom, ...size });
+      const viewport: Viewport = { bounds: [visible.southWest.longitude, visible.southWest.latitude, visible.northEast.longitude, visible.northEast.latitude],
+        zoom, ...size };
+      setStationViewport(viewport);
+      onIdle(viewport);
       setLiveBounds(null);
     } catch { setFailure(true); }
   }, [bounds, minZoom, size, onIdle, cancelLabelFrame]);
@@ -157,7 +160,26 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       outer: rings[0].map(coordinate), holes: rings.slice(1).map(ring => ring.map(coordinate)),
     }));
   }), [snapshot.features, ids]);
-  const stations = useMemo(() => level === 'city' ? stationMarkers(snapshot.viewport) : [], [level, snapshot.viewport]);
+  const stations = useMemo(() => stationViewport && mapLevel(index, stationViewport) === 'city'
+    ? stationMarkers(stationViewport) : [], [index, stationViewport]);
+  const onStationPress = useCallback((station: ReturnType<typeof stationMarkers>[number]) => {
+    if (station.count === 1) void Linking.openURL(stationDirections(station));
+    else map.current?.animateCamera({ center: { latitude: station.lat, longitude: station.lng },
+      zoom: Math.min(15, (stationViewport?.zoom ?? 10) + 2) });
+  }, [stationViewport?.zoom]);
+  const stationOverlays = useMemo(() => stations.map(station => <Marker key={station.id}
+      coordinate={{ latitude: station.lat, longitude: station.lng }}
+      title={station.count > 1 ? station.count + ' fuel stations' : station.name}
+      description={station.count > 1 ? 'Zoom in to see stations' : 'Get directions'}
+      anchor={{ x: stationPinAnchor.x / stationPinSize.width, y: stationPinAnchor.y / stationPinSize.height }}
+      onCalloutPress={() => onStationPress(station)}>
+      <View style={stationPinSize}>
+        <Image source={stationPinImage(station.count)} style={stationPinSize} />
+        {station.count > 1 && <View style={styles.stationLabel}>
+          <Text allowFontScaling={false} style={styles.stationCount}>{station.count}</Text>
+        </View>}
+      </View>
+    </Marker>), [stations, onStationPress]);
   // Native Maps needs one overlay per separate island. Mount only the visible parts.
   const visibleBounds = snapshot.viewport?.bounds;
   const polygonOverlays = useMemo(() => shapes.filter(shape => visibleBounds && intersects(shape.bbox, visibleBounds)).map(shape => {
@@ -193,23 +215,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       toolbarEnabled={false} showsPointsOfInterests={false} showsBuildings={false}
       onMapReady={() => setReady(true)} onRegionChange={start} onRegionChangeComplete={() => void settle()}>
       {polygonOverlays}
-      {stations.map(station => <Marker key={station.id}
-        coordinate={{ latitude: station.lat, longitude: station.lng }}
-        title={station.count > 1 ? station.count + ' fuel stations' : station.name}
-        description={station.count > 1 ? 'Zoom in to see stations' : 'Get directions'}
-        anchor={{ x: stationPinAnchor.x / stationPinSize.width, y: stationPinAnchor.y / stationPinSize.height }}
-        onCalloutPress={() => {
-          if (station.count === 1) void Linking.openURL(stationDirections(station));
-          else map.current?.animateCamera({ center: { latitude: station.lat, longitude: station.lng },
-            zoom: Math.min(15, (snapshot.viewport?.zoom ?? 10) + 2) });
-        }}>
-        <View style={stationPinSize}>
-          <Image source={stationPinImage(station.count)} style={stationPinSize} />
-          {station.count > 1 && <View style={styles.stationLabel}>
-            <Text allowFontScaling={false} style={styles.stationCount}>{station.count}</Text>
-          </View>}
-        </View>
-      </Marker>)}
+      {stationOverlays}
     </MapView>
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {labels.map((label, priority) => {
