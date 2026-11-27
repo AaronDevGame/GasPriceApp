@@ -42,17 +42,19 @@ export type MapLabel = {
   id: string; name: string; priceLines: string[]; skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
   price: ReturnType<typeof areaPrices>; center: Point; anchor: Point; x: number; y: number; width: number; height: number; fontSize: number;
 };
+const cardInset = 8;
+const cardBottomInset = 36;
 // Search the part of the city's bounding box where a full label can fit on screen.
 function* candidates(city: MapArea, viewport: Viewport, width: number, height: number): Generator<Point> {
   const nw = project([city.bbox[0], city.bbox[3]], viewport);
   const se = project([city.bbox[2], city.bbox[1]], viewport);
-  const left = Math.max(8 + width / 2, nw[0]), right = Math.min(viewport.width - 8 - width / 2, se[0]);
-  const top = Math.max(8 + height / 2, nw[1]), bottom = Math.min(viewport.height - 36 - height / 2, se[1]);
-  if (viewport.width < width + 16 || viewport.height < height + 44) return;
+  const left = Math.max(cardInset + width / 2, nw[0]), right = Math.min(viewport.width - cardInset - width / 2, se[0]);
+  const top = Math.max(cardInset + height / 2, nw[1]), bottom = Math.min(viewport.height - cardBottomInset - height / 2, se[1]);
+  if (viewport.width < width + 2 * cardInset || viewport.height < height + cardInset + cardBottomInset) return;
   if (nw[0] > viewport.width || se[0] < 0 || nw[1] > viewport.height || se[1] < 0) return;
   if (left > right || top > bottom) {
-    yield [Math.max(8 + width / 2, Math.min(viewport.width - 8 - width / 2, (nw[0] + se[0]) / 2)),
-      Math.max(8 + height / 2, Math.min(viewport.height - 36 - height / 2, (nw[1] + se[1]) / 2))];
+    yield [Math.max(cardInset + width / 2, Math.min(viewport.width - cardInset - width / 2, (nw[0] + se[0]) / 2)),
+      Math.max(cardInset + height / 2, Math.min(viewport.height - cardBottomInset - height / 2, (nw[1] + se[1]) / 2))];
     return;
   }
   const [x, y] = project(city.labelPoint, viewport);
@@ -101,10 +103,15 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, prev
     const width = Math.min(viewport.width - 16, Math.max(pending ? 154 : 130, longestLine * fontSize * 0.64 + 18));
     const positions = [...candidates(area, viewport, width, height)];
     const previousAnchor = previousAnchors?.get(area.id);
-    const previousPosition = previousAnchor && project(previousAnchor, viewport);
+    let previousPosition = previousAnchor && project(previousAnchor, viewport);
+    let keepPreviousAnchor = false;
     if (positions.length && previousPosition) {
       const [x, y] = previousPosition;
-      if (x >= 0 && x <= viewport.width && y >= 0 && y <= viewport.height) positions.unshift(previousPosition);
+      const insetX = Math.max(cardInset + width / 2, Math.min(x, viewport.width - cardInset - width / 2));
+      const insetY = Math.max(cardInset + height / 2, Math.min(y, viewport.height - cardBottomInset - height / 2));
+      keepPreviousAnchor = insetX === x && insetY === y;
+      previousPosition = [insetX, insetY];
+      positions.unshift(previousPosition);
     }
     const position = positions.find(([x, y]) => !placed.some(other =>
       Math.abs(other.x - x) < (other.width + width) / 2 + 8 && Math.abs(other.y - y) < (other.height + height) / 2 + 8));
@@ -112,7 +119,8 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, prev
     if (position) {
       const [x, y] = position;
       placed.push({ id: area.id, price, priceLines, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
-        center: boundsCenter(area.bbox), anchor: previousAnchor && position === previousPosition ? previousAnchor : pointAtPixel(position, viewport), x, y, width });
+        center: boundsCenter(area.bbox), anchor: previousAnchor && keepPreviousAnchor && position === previousPosition
+          ? previousAnchor : pointAtPixel(position, viewport), x, y, width });
     }
   }
   return placed;

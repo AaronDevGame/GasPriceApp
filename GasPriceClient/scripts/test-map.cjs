@@ -496,7 +496,9 @@ function lifecycle(h, initial = {}) {
   assert.equal(withoutPrices.accessibilityLabel, `${withoutPrices.name}, No recent report`);
   assert.equal(withoutPrices.height, relocated.height - 32, 'Omitting both price rows shrinks the card');
   const imusPrices = imusSnapshot.prices.get(imus.id);
-  const [pendingDuringPan] = placeLabels({ ...imusSnapshot, prices: new Map(), pendingPriceIds: new Set([imus.id]) }, imus.id);
+  const interiorAnchor = geometry.pointAtPixel([200, 150], clipped);
+  const [pendingDuringPan] = placeLabels({ ...imusSnapshot, prices: new Map(), pendingPriceIds: new Set([imus.id]) },
+    imus.id, new Map([[imus.id, interiorAnchor]]));
   assert(pendingDuringPan.skeletonWidths.length > 0);
   const panned = { ...clipped, bounds: [120.926, 14.36, 120.971, 14.393] };
   const [updatedDuringPan] = placeLabels({ ...imusSnapshot, viewport: panned }, imus.id,
@@ -504,6 +506,17 @@ function lifecycle(h, initial = {}) {
   assert.equal(updatedDuringPan.anchor, pendingDuringPan.anchor, 'Keep the visible anchor as prices arrive during a drag');
   assert.deepEqual(updatedDuringPan.priceLines, relocated.priceLines);
   assert.equal(updatedDuringPan.skeletonWidths.length, 0);
+  for (const [before, after] of [
+    [[relocated.width / 2 - 1, 150], [relocated.width / 2 + 8, 150]],
+    [[panned.width - relocated.width / 2 + 1, 150], [panned.width - relocated.width / 2 - 8, 150]],
+    [[200, relocated.height / 2 - 1], [200, relocated.height / 2 + 8]],
+    [[200, panned.height - relocated.height / 2 + 1], [200, panned.height - relocated.height / 2 - 36]],
+  ]) {
+    const edgeAnchor = geometry.pointAtPixel(before, panned);
+    const [edgeCard] = placeLabels({ ...imusSnapshot, viewport: panned }, imus.id, new Map([[imus.id, edgeAnchor]]));
+    assert(Math.abs(edgeCard.x - after[0]) < 0.001 && Math.abs(edgeCard.y - after[1]) < 0.001,
+      'Move the card inward as soon as its outer edge clips, preserving its position along the edge');
+  }
   const [noReport] = placeLabels({ ...imusSnapshot, prices: new Map([[imus.id,
     { ...imusPrices, status: 'unavailable', gasoline: null, diesel: null }]]) }, imus.id);
   assert.equal(noReport.skeletonWidths.length, 0, 'A confirmed empty report has no skeleton');
