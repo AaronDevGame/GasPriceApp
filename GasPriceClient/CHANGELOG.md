@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Make circular map markers smaller and show only the area name when prices are unavailable.
+
 ## [1.4.0] - 2026-11-28
 
 ### Added

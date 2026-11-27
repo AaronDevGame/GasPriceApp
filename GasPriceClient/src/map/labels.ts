@@ -15,10 +15,9 @@ export const mapLabelShimmer = {
 };
 export const mapLabelNozzle = { size: 14, gap: 4 };
 export const edgeMarker = {
-  diameter: 68, tailLength: 12, tailHalfWidth: 7, tailOverlap: 3,
-  fontSize: 9, nameFontSize: 8, lineHeight: 11, padding: 4, columnWidth: 26, nozzleSize: 11,
+  diameter: 60, tailLength: 12, tailHalfWidth: 7, tailOverlap: 3,
+  fontSize: 9, nameFontSize: 8, lineHeight: 11, padding: 4, columnWidth: 24, nozzleSize: 11,
 };
-export const edgeMarkerStatus = 'No recent\nreport';
 
 export const rangeText = (value: PriceRange | null) => value
   ? `₱${value.minPrice.toFixed(2)}–₱${value.maxPrice.toFixed(2)}/L` : '—';

@@ -9,7 +9,7 @@ import { fuelNozzles } from '@/fuel/nozzles';
 
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, FUEL_CARD_PAN_DURATION_MS, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
-import { clampLabelCenter, edgeLabelPosition, edgeMarker, edgeMarkerStatus, mapLabelColors, mapLabelNozzle, mapLabelShimmer, placeLabels } from './labels';
+import { clampLabelCenter, edgeLabelPosition, edgeMarker, mapLabelColors, mapLabelNozzle, mapLabelShimmer, placeLabels } from './labels';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const coordinate = ([longitude, latitude]: Point) => ({ latitude, longitude });
@@ -211,7 +211,6 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         const priceStyle = [styles.price, edge
           ? { fontSize: edgeMarker.fontSize, lineHeight: edgeMarker.lineHeight }
           : { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }];
-        const coverage = edge ? (hasPrices ? '' : edgeMarkerStatus) : label.coverage;
         return <Pressable key={label.id} accessibilityRole="button" accessibilityLabel={label.accessibilityLabel}
           accessibilityState={{ busy: pending, selected: highlighted }}
           onPress={() => {
@@ -241,8 +240,8 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
                 </View>
               ))}
             </View>}
-            {!!coverage && <Text allowFontScaling={false} style={[styles.price, styles.coverage, edge && styles.edgeCoverage,
-              muted && styles.unavailableText, !hasPrices && styles.noReport]}>{coverage}</Text>}
+            {!edge && !!label.coverage && <Text allowFontScaling={false} style={[styles.price, styles.coverage,
+              muted && styles.unavailableText, !hasPrices && styles.noReport]}>{label.coverage}</Text>}
           </>}
         </Pressable>;
       })}
@@ -271,7 +270,6 @@ const styles = StyleSheet.create({
   unavailableText: { color: mapLabelColors.unavailableText },
   noReport: { fontStyle: 'italic' },
   coverage: { fontSize: 10, textAlign: 'center' },
-  edgeCoverage: { fontSize: edgeMarker.fontSize, lineHeight: edgeMarker.lineHeight },
   retry: { padding: 10, marginTop: 6, borderRadius: 8, backgroundColor: '#354B64' },
   priceRows: { alignItems: 'center' },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: mapLabelNozzle.gap },

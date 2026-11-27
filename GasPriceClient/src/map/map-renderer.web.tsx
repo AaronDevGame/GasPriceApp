@@ -7,7 +7,7 @@ import { fuelNozzles } from '@/fuel/nozzles';
 import { boundsCenter, cameraBounds, fitZoom, FUEL_CARD_PAN_DURATION_MS, MAX_ZOOM, polygons } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
-import { edgeMarker, edgeMarkerStatus, type LabelRectangle, type MapLabel, mapLabelColors, mapLabelNozzle, mapLabelShimmer, mapLabels, webLabelPosition } from './labels';
+import { edgeMarker, type LabelRectangle, type MapLabel, mapLabelColors, mapLabelNozzle, mapLabelShimmer, mapLabels, webLabelPosition } from './labels';
 import classes from './map-renderer.module.css';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
@@ -124,11 +124,6 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
                 const status = document.createElement(hasPrices ? 'span' : 'em');
                 status.textContent = label.coverage;
                 regular.append(status);
-                if (!hasPrices) {
-                  const shortStatus = document.createElement('em');
-                  shortStatus.textContent = edgeMarkerStatus;
-                  compact.append(shortStatus);
-                }
               }
             }
             const { diameter, tailLength, tailOverlap, tailHalfWidth } = edgeMarker;
