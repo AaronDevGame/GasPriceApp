@@ -1,6 +1,6 @@
 import { boundsCenter, pointAtPixel, project } from './geometry';
-import { areaPrices, mapLevel, visibleAreas, type MapArea } from './hierarchy';
-import type { CityPrices, MapSnapshot, Point, PriceRange, Viewport } from './types';
+import { areaPrices, mapLevel, visibleAreas } from './hierarchy';
+import type { Bounds, CityPrices, MapSnapshot, Point, PriceRange, Viewport } from './types';
 
 export const mapLabelColors = {
   selected: { background: '#116453', border: '#92F4C8' },
@@ -40,11 +40,13 @@ const mapFuels = ['gasoline', 'diesel'] as const;
 export type MapLabel = {
   id: string; name: string; priceRows: { fuel: typeof mapFuels[number]; text: string }[];
   skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
-  center: Point; anchor: Point; x: number; y: number; width: number; height: number; fontSize: number;
+  center: Point; labelPoint: Point; bounds: Bounds; width: number; height: number; fontSize: number;
 };
+export type LabelRectangle = { x: number; y: number; width: number; height: number };
+type LabelViewport = Pick<Viewport, 'width' | 'height'>;
 const cardInset = 8;
 const cardBottomInset = 36;
-export function clampLabelCenter([x, y]: Point, viewport: Pick<Viewport, 'width' | 'height'>,
+export function clampLabelCenter([x, y]: Point, viewport: LabelViewport,
   width: number, height: number): Point {
   return [
     Math.max(cardInset + width / 2, Math.min(x, viewport.width - cardInset - width / 2)),
@@ -52,18 +54,17 @@ export function clampLabelCenter([x, y]: Point, viewport: Pick<Viewport, 'width'
   ];
 }
 // Search the part of the city's bounding box where a full label can fit on screen.
-function* candidates(city: MapArea, viewport: Viewport, width: number, height: number): Generator<Point> {
-  const nw = project([city.bbox[0], city.bbox[3]], viewport);
-  const se = project([city.bbox[2], city.bbox[1]], viewport);
+function* candidates([x, y]: Point, nw: Point, se: Point, viewport: LabelViewport,
+  width: number, height: number, liveEdges: boolean): Generator<Point> {
   const left = Math.max(cardInset + width / 2, nw[0]), right = Math.min(viewport.width - cardInset - width / 2, se[0]);
   const top = Math.max(cardInset + height / 2, nw[1]), bottom = Math.min(viewport.height - cardBottomInset - height / 2, se[1]);
   if (viewport.width < width + 2 * cardInset || viewport.height < height + cardInset + cardBottomInset) return;
   if (nw[0] > viewport.width || se[0] < 0 || nw[1] > viewport.height || se[1] < 0) return;
+  if (liveEdges) yield clampLabelCenter([x, y], viewport, width, height);
   if (left > right || top > bottom) {
     yield clampLabelCenter([(nw[0] + se[0]) / 2, (nw[1] + se[1]) / 2], viewport, width, height);
     return;
   }
-  const [x, y] = project(city.labelPoint, viewport);
   const preferred: Point = [Math.max(left, Math.min(x, right)), Math.max(top, Math.min(y, bottom))];
   yield preferred;
 
@@ -77,10 +78,25 @@ function* candidates(city: MapArea, viewport: Viewport, width: number, height: n
   const distance = ([px, py]: Point) => (px - preferred[0]) ** 2 + (py - preferred[1]) ** 2;
   yield* grid.sort((a, b) => distance(a) - distance(b));
 }
-export function placeLabels(snapshot: MapSnapshot, selected: string | null, { liveEdges = false } = {}): MapLabel[] {
+export function findLabelPosition(label: MapLabel, viewport: LabelViewport, projectPoint: (point: Point) => Point | null,
+  placed: readonly LabelRectangle[], { liveEdges = false } = {}): LabelRectangle | null {
+  const { width, height, bounds, labelPoint } = label;
+  const nw = projectPoint([bounds[0], bounds[3]]);
+  const se = projectPoint([bounds[2], bounds[1]]);
+  const preferred = projectPoint(labelPoint);
+  if (!nw || !se || !preferred) return null;
+  for (const [x, y] of candidates(preferred, nw, se, viewport, width, height, liveEdges)) {
+    if (!placed.some(other =>
+      Math.abs(other.x - x) < (other.width + width) / 2 + 8 && Math.abs(other.y - y) < (other.height + height) / 2 + 8)) {
+      return { x, y, width, height };
+    }
+  }
+  return null;
+}
+
+export function mapLabels(snapshot: MapSnapshot, selected: string | null): MapLabel[] {
   const viewport = snapshot.viewport;
   if (!viewport) return [];
-  const placed: MapLabel[] = [];
   if (!snapshot.index) return [];
   const level = mapLevel(snapshot.index, viewport);
   const areas = visibleAreas(snapshot.index, viewport);
@@ -92,7 +108,7 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, { li
     Number(b.area.id === selected) - Number(a.area.id === selected) ||
     Number(!!(b.price.gasoline || b.price.diesel)) - Number(!!(a.price.gasoline || a.price.diesel)) ||
     Number(b.pending) - Number(a.pending) || a.area.id.localeCompare(b.area.id));
-  for (const { area, price, pending } of sorted) {
+  return sorted.map(({ area, price, pending }) => {
     const name = area.name;
     const fontSize = 11;
     const isSelected = area.id === selected;
@@ -116,21 +132,19 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, { li
     const contentWidth = Math.max(textWidth(name), ...coverageLines.map(textWidth),
       ...priceRows.map(({ text }) => mapLabelNozzle.size + mapLabelNozzle.gap + textWidth(text)));
     const width = Math.min(viewport.width - 16, Math.max(pending ? 154 : 130, contentWidth + 18));
-    const positions = [...candidates(area, viewport, width, height)];
-    // Test collisions against the displayed position, then let the web overlay
-    // apply the edge constraint to the same geographic anchor on each redraw.
-    const preferred = liveEdges && positions.length
-      ? clampLabelCenter(project(area.labelPoint, viewport), viewport, width, height)
-      : null;
-    if (preferred) positions.unshift(preferred);
-    const position = positions.find(([x, y]) => !placed.some(other =>
-      Math.abs(other.x - x) < (other.width + width) / 2 + 8 && Math.abs(other.y - y) < (other.height + height) / 2 + 8));
-    // Selected areas go first. Never force a colliding card into the remaining space.
-    if (position) {
-      const [x, y] = position;
-      placed.push({ id: area.id, priceRows, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
-        center: boundsCenter(area.bbox), anchor: position === preferred ? area.labelPoint : pointAtPixel(position, viewport), x, y, width });
-    }
+    return { id: area.id, priceRows, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
+      center: boundsCenter(area.bbox), labelPoint: area.labelPoint, bounds: area.bbox, width };
+  });
+}
+
+export function placeLabels(snapshot: MapSnapshot, selected: string | null) {
+  const placed: (MapLabel & LabelRectangle & { anchor: Point })[] = [];
+  const viewport = snapshot.viewport;
+  if (!viewport) return placed;
+  const projectPoint = (point: Point) => project(point, viewport);
+  for (const label of mapLabels(snapshot, selected)) {
+    const position = findLabelPosition(label, viewport, projectPoint, placed);
+    if (position) placed.push({ ...label, ...position, anchor: pointAtPixel([position.x, position.y], viewport) });
   }
   return placed;
 }

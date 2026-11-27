@@ -7,8 +7,8 @@ import { fuelNozzles } from '@/fuel/nozzles';
 import { boundsCenter, cameraBounds, fitZoom, MAX_ZOOM, polygons } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
-import { clampLabelCenter, type MapLabel, mapLabelColors, mapLabelNozzle, placeLabels } from './labels';
-import type { Bounds, MapRendererProps, Viewport } from './types';
+import { findLabelPosition, type LabelRectangle, type MapLabel, mapLabelColors, mapLabelNozzle, mapLabels } from './labels';
+import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
 const nozzleUris = {
@@ -21,11 +21,9 @@ type LabelOverlay = google.maps.OverlayView & {
 };
 type AreaPolygon = { shape: google.maps.Polygon; areaId: string; hasOutline: boolean };
 type LabelCard = {
-  anchor: google.maps.LatLng;
+  label: MapLabel;
   positioner: HTMLDivElement;
   appearance: string;
-  width: number;
-  height: number;
 };
 function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void) {
       class Labels extends google.maps.OverlayView {
@@ -39,7 +37,6 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
             const selected = label.id === selectedId;
             const appearance = JSON.stringify([selected, label.center, label.accessibilityLabel, label.name,
               label.priceRows, label.skeletonWidths, label.coverage, label.width, label.height, label.fontSize]);
-            const anchor = new google.maps.LatLng(label.anchor[1], label.anchor[0]);
             const previous = this.cards.get(label.id);
             const positioner = previous?.positioner ?? document.createElement('div');
             if (!previous) {
@@ -47,7 +44,7 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
               this.root.appendChild(positioner);
             }
             positioner.style.zIndex = String(labels.length - priority);
-            nextCards.set(label.id, { anchor, positioner, appearance, width: label.width, height: label.height });
+            nextCards.set(label.id, { label, positioner, appearance });
             if (previous?.appearance === appearance) return;
             const card = document.createElement('button');
             card.type = 'button';
@@ -107,25 +104,32 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
           });
         }
         draw() {
+          if (this.frame !== undefined) {
+            cancelAnimationFrame(this.frame);
+            this.frame = undefined;
+          }
           const projection = this.getProjection();
           if (!projection) return;
           const center = map.getCenter();
           const paneCenter = center && projection.fromLatLngToDivPixel(center);
           const containerCenter = center && projection.fromLatLngToContainerPixel(center);
+          if (!paneCenter || !containerCenter) return;
           const host = map.getDiv();
           const viewport = { width: host.clientWidth, height: host.clientHeight };
-          // Convert the live viewport edges to pane coordinates. Price and collision layout
-          // can keep its existing cadence while the edge constraint follows the camera.
-          const left = paneCenter && containerCenter ? paneCenter.x - containerCenter.x : 0;
-          const top = paneCenter && containerCenter ? paneCenter.y - containerCenter.y : 0;
-          for (const { anchor, positioner, width, height } of this.cards.values()) {
-            const point = projection.fromLatLngToDivPixel(anchor);
-            positioner.style.visibility = point ? 'visible' : 'hidden';
-            if (point) {
-              const [x, y] = paneCenter && containerCenter && viewport.width && viewport.height
-                ? clampLabelCenter([point.x - left, point.y - top], viewport, width, height)
-                : [point.x - left, point.y - top];
-              positioner.style.transform = `translate(${x + left}px, ${y + top}px)`;
+          const left = paneCenter.x - containerCenter.x;
+          const top = paneCenter.y - containerCenter.y;
+          const projectPoint = ([lng, lat]: Point): Point | null => {
+            const point = projection.fromLatLngToContainerPixel({ lng, lat });
+            return point && [point.x, point.y];
+          };
+          // Cards stay in priority order even while hidden by a collision.
+          const placed: LabelRectangle[] = [];
+          for (const { label, positioner } of this.cards.values()) {
+            const position = findLabelPosition(label, viewport, projectPoint, placed, { liveEdges: true });
+            positioner.style.visibility = position ? 'visible' : 'hidden';
+            if (position) {
+              placed.push(position);
+              positioner.style.transform = `translate(${position.x + left}px, ${position.y + top}px)`;
             }
           }
         }
@@ -276,7 +280,7 @@ export default function MapRenderer(props: MapRendererProps) {
   }, [ready, props.snapshot.features, areaIds, props.selected]);
   useEffect(() => {
     if (!overlay.current || !ready) return;
-    overlay.current.setLabels(placeLabels(props.snapshot, props.selected, { liveEdges: true }), props.selected);
+    overlay.current.setLabels(mapLabels(props.snapshot, props.selected), props.selected);
   }, [ready, props.snapshot, props.selected]);
   return <View style={styles.fill}>
     <div ref={host} data-pull-refresh-ignore aria-label="Philippine fuel price map by geographic level" style={{ height: '100%', width: '100%' }} />

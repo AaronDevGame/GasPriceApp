@@ -507,31 +507,35 @@ function lifecycle(h, initial = {}) {
   assert.equal(withoutPrices.coverage, 'No recent report');
   assert.equal(withoutPrices.accessibilityLabel, `${withoutPrices.name}, No recent report`);
   assert.equal(withoutPrices.height, relocated.height - 32, 'Omitting both price rows shrinks the card');
+  const { clampLabelCenter, findLabelPosition, mapLabels } = h.load('labels');
   const webLayout = { liveEdges: true };
-  const [pendingDuringPan] = placeLabels({ ...imusSnapshot, prices: new Map(), pendingPriceIds: new Set([imus.id]) },
-    imus.id, webLayout);
+  const [pendingDuringPan] = mapLabels({ ...imusSnapshot, prices: new Map(), pendingPriceIds: new Set([imus.id]) }, imus.id);
   assert(pendingDuringPan.skeletonWidths.length > 0);
   const panned = { ...clipped, bounds: [120.926, 14.36, 120.971, 14.393] };
-  const [updatedDuringPan] = placeLabels({ ...imusSnapshot, viewport: panned }, imus.id, webLayout);
-  assert.equal(updatedDuringPan.anchor, pendingDuringPan.anchor, 'Keep the preferred anchor as prices arrive during a drag');
+  const [updatedDuringPan] = mapLabels({ ...imusSnapshot, viewport: panned }, imus.id);
+  assert.equal(updatedDuringPan.labelPoint, pendingDuringPan.labelPoint, 'Keep the preferred anchor as prices arrive during a drag');
   assert.deepEqual(updatedDuringPan.priceRows, relocated.priceRows);
   assert.equal(updatedDuringPan.skeletonWidths.length, 0);
-  const { clampLabelCenter } = h.load('labels');
   const [longitude, latitude] = imus.labelPoint;
   const edgeViewport = { ...clipped, bounds: [longitude - 0.039, latitude - 0.015, longitude + 0.001, latitude + 0.015] };
-  const [edgeCard] = placeLabels({ ...imusSnapshot, viewport: edgeViewport }, imus.id, webLayout);
-  assert.equal(edgeCard.x, edgeViewport.width - 8 - edgeCard.width / 2, 'Keep the full web card inside the right edge');
-  assert.deepEqual(edgeCard.anchor, imus.labelPoint, 'Edge placement preserves the original label point');
+  const [edgeCard] = mapLabels({ ...imusSnapshot, viewport: edgeViewport }, imus.id);
+  const edgePosition = findLabelPosition(edgeCard, edgeViewport, point => geometry.project(point, edgeViewport), [], webLayout);
+  assert.equal(edgePosition.x, edgeViewport.width - 8 - edgeCard.width / 2, 'Keep the full web card inside the right edge');
   const centeredViewport = { ...clipped, bounds: [longitude - 0.02, latitude - 0.015, longitude + 0.02, latitude + 0.015] };
   const preferredPosition = geometry.project(imus.labelPoint, centeredViewport);
-  const [returnX, returnY] = clampLabelCenter(geometry.project(edgeCard.anchor, centeredViewport), centeredViewport,
-    edgeCard.width, edgeCard.height);
-  assert.equal(returnX, preferredPosition[0], 'The overlay returns to the preferred position even before the next layout update');
-  assert.equal(returnY, preferredPosition[1]);
-  const [centeredCard] = placeLabels({ ...imusSnapshot, viewport: centeredViewport }, imus.id, webLayout);
-  assert.equal(centeredCard.anchor, edgeCard.anchor, 'The next layout update keeps the same anchor');
-  assert.equal(centeredCard.x, returnX);
-  assert.equal(centeredCard.y, returnY);
+  const returned = findLabelPosition(edgeCard, centeredViewport, point => geometry.project(point, centeredViewport), [], webLayout);
+  assert.equal(returned.x, preferredPosition[0], 'The overlay returns to the preferred position even before the next price snapshot');
+  assert.equal(returned.y, preferredPosition[1]);
+  const higherPriority = { ...edgeCard, width: 130, height: 60, labelPoint: [100, 150], bounds: [65, 160, 135, 140] };
+  const lowerPriority = { ...edgeCard, width: 130, height: 60, labelPoint: [260, 150], bounds: [255, 155, 265, 145] };
+  // Keep the same card data across frames, as happens between price snapshots.
+  for (const [offset, expectedX] of [[0, 260], [-52, 212], [-60, null], [-20, 240]]) {
+    const projectFrame = ([x, y]) => [x + offset, y];
+    const first = findLabelPosition(higherPriority, panned, projectFrame, [], webLayout);
+    const second = findLabelPosition(lowerPriority, panned, projectFrame, [first], webLayout);
+    assert.equal(first.x, Math.max(73, 100 + offset), 'The higher-priority card keeps its preferred or edge position');
+    assert.equal(second?.x ?? null, expectedX, 'Resolve collisions and make room again on the current frame');
+  }
   // Draw successive camera positions against the same viewport dimensions and card layout.
   const leftEdge = relocated.width / 2 + 8;
   for (const [offset, expected] of [[2, 2], [1, 1], [0, 0], [-1, 0], [-2, 0]]) {
