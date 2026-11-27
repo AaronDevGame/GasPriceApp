@@ -69,7 +69,7 @@ function* candidates(city: MapArea, viewport: Viewport, width: number, height: n
   const distance = ([px, py]: Point) => (px - preferred[0]) ** 2 + (py - preferred[1]) ** 2;
   yield* grid.sort((a, b) => distance(a) - distance(b));
 }
-export function placeLabels(snapshot: MapSnapshot, selected: string | null): MapLabel[] {
+export function placeLabels(snapshot: MapSnapshot, selected: string | null, previousAnchors?: ReadonlyMap<string, Point>): MapLabel[] {
   const viewport = snapshot.viewport;
   if (!viewport) return [];
   const placed: MapLabel[] = [];
@@ -100,13 +100,19 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null): Map
     const longestLine = Math.max(...lines.map(line => line.length));
     const width = Math.min(viewport.width - 16, Math.max(pending ? 154 : 130, longestLine * fontSize * 0.64 + 18));
     const positions = [...candidates(area, viewport, width, height)];
+    const previousAnchor = previousAnchors?.get(area.id);
+    const previousPosition = previousAnchor && project(previousAnchor, viewport);
+    if (positions.length && previousPosition) {
+      const [x, y] = previousPosition;
+      if (x >= 0 && x <= viewport.width && y >= 0 && y <= viewport.height) positions.unshift(previousPosition);
+    }
     const position = positions.find(([x, y]) => !placed.some(other =>
       Math.abs(other.x - x) < (other.width + width) / 2 + 8 && Math.abs(other.y - y) < (other.height + height) / 2 + 8));
     // Selected areas go first. Never force a colliding card into the remaining space.
     if (position) {
       const [x, y] = position;
       placed.push({ id: area.id, price, priceLines, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
-        center: boundsCenter(area.bbox), anchor: pointAtPixel(position, viewport), x, y, width });
+        center: boundsCenter(area.bbox), anchor: previousAnchor && position === previousPosition ? previousAnchor : pointAtPixel(position, viewport), x, y, width });
     }
   }
   return placed;

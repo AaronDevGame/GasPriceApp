@@ -496,6 +496,14 @@ function lifecycle(h, initial = {}) {
   assert.equal(withoutPrices.accessibilityLabel, `${withoutPrices.name}, No recent report`);
   assert.equal(withoutPrices.height, relocated.height - 32, 'Omitting both price rows shrinks the card');
   const imusPrices = imusSnapshot.prices.get(imus.id);
+  const [pendingDuringPan] = placeLabels({ ...imusSnapshot, prices: new Map(), pendingPriceIds: new Set([imus.id]) }, imus.id);
+  assert(pendingDuringPan.skeletonWidths.length > 0);
+  const panned = { ...clipped, bounds: [120.926, 14.36, 120.971, 14.393] };
+  const [updatedDuringPan] = placeLabels({ ...imusSnapshot, viewport: panned }, imus.id,
+    new Map([[imus.id, pendingDuringPan.anchor]]));
+  assert.equal(updatedDuringPan.anchor, pendingDuringPan.anchor, 'Keep the visible anchor as prices arrive during a drag');
+  assert.deepEqual(updatedDuringPan.priceLines, relocated.priceLines);
+  assert.equal(updatedDuringPan.skeletonWidths.length, 0);
   const [noReport] = placeLabels({ ...imusSnapshot, prices: new Map([[imus.id,
     { ...imusPrices, status: 'unavailable', gasoline: null, diesel: null }]]) }, imus.id);
   assert.equal(noReport.skeletonWidths.length, 0, 'A confirmed empty report has no skeleton');

@@ -5,23 +5,36 @@ import { boundsCenter, cameraBounds, fitZoom, MAX_ZOOM, polygons } from './geome
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
 import { type MapLabel, mapLabelColors, placeLabels } from './labels';
-import type { Bounds, MapRendererProps, Viewport } from './types';
+import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
 type LabelOverlay = google.maps.OverlayView & { setLabels(labels: MapLabel[], selected: string | null): void };
 type AreaPolygon = { shape: google.maps.Polygon; areaId: string; hasOutline: boolean };
+type LabelCard = { anchor: google.maps.LatLng; element: HTMLButtonElement; appearance: string };
 function createLabels(onSelect: (label: MapLabel) => void) {
       class Labels extends google.maps.OverlayView {
         private root = document.createElement('div');
-        private cards: { anchor: google.maps.LatLng; element: HTMLButtonElement }[] = [];
+        private cards = new Map<string, LabelCard>();
         onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.floatPane.appendChild(this.root); }
         setLabels(labels: MapLabel[], selectedId: string | null) {
-          this.cards = labels.map((label, priority) => {
+          const nextCards = new Map<string, LabelCard>();
+          labels.forEach((label, priority) => {
+            const selected = label.id === selectedId;
+            const dashed = label.price.estimated || label.price.outdated;
+            const appearance = JSON.stringify([selected, dashed, label.center, label.accessibilityLabel, label.name,
+              label.priceLines, label.skeletonWidths, label.coverage, label.width, label.height, label.fontSize]);
+            const anchor = new google.maps.LatLng(label.anchor[1], label.anchor[0]);
+            const previous = this.cards.get(label.id);
+            if (previous?.appearance === appearance) {
+              previous.anchor = anchor;
+              previous.element.style.zIndex = String(labels.length - priority);
+              nextCards.set(label.id, previous);
+              return;
+            }
             const card = document.createElement('button');
             card.type = 'button';
             google.maps.OverlayView.preventMapHitsFrom(card);
             card.addEventListener('click', () => onSelect(label));
-            const selected = label.id === selectedId;
             const hasPrices = label.priceLines.length > 0;
             const pending = label.skeletonWidths.length > 0;
             const colors = selected && (hasPrices || pending) ? mapLabelColors.selected : pending ? mapLabelColors.skeleton :
@@ -53,17 +66,21 @@ function createLabels(onSelect: (label: MapLabel) => void) {
               status.textContent = label.coverage;
               card.append('\n', status);
             }
-            if (label.price.estimated || label.price.outdated) card.style.borderStyle = 'dashed';
-            return { anchor: new google.maps.LatLng(label.anchor[1], label.anchor[0]), element: card };
+            if (dashed) card.style.borderStyle = 'dashed';
+            nextCards.set(label.id, { anchor, element: card, appearance });
+            this.root.appendChild(card);
           });
-          this.root.replaceChildren(...this.cards.map(card => card.element));
+          for (const [id, card] of this.cards) {
+            if (nextCards.get(id) !== card) card.element.remove();
+          }
+          this.cards = nextCards;
           this.draw();
         }
         draw() {
           const projection = this.getProjection();
           if (!projection) return;
           // Google Maps calls draw as the camera moves. Reuse the cards and update only their positions.
-          for (const { anchor, element } of this.cards) {
+          for (const { anchor, element } of this.cards.values()) {
             const point = projection.fromLatLngToDivPixel(anchor);
             element.style.visibility = point ? 'visible' : 'hidden';
             if (point) {
@@ -85,6 +102,7 @@ export default function MapRenderer(props: MapRendererProps) {
   const shapes = useRef<AreaPolygon[]>([]);
   const overlay = useRef<LabelOverlay | null>(null);
   const isPanning = useRef(false);
+  const labelAnchors = useRef(new Map<string, Point>());
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -159,6 +177,7 @@ export default function MapRenderer(props: MapRendererProps) {
       active = false; resize?.disconnect(); listeners.forEach(listener => listener.remove());
       overlay.current?.setMap(null); overlay.current = null;
       isPanning.current = false;
+      labelAnchors.current.clear();
       map.current = null;
       if (callbacks.gm_authFailure === authFailure) callbacks.gm_authFailure = previousAuthFailure;
     };
@@ -214,9 +233,10 @@ export default function MapRenderer(props: MapRendererProps) {
     }
   }, [ready, props.snapshot.features, areaIds, props.selected]);
   useEffect(() => {
-    // Let the overlay project the existing anchors through the drag and its momentum.
-    if (!overlay.current || !ready || isPanning.current) return;
-    overlay.current.setLabels(placeLabels(props.snapshot, props.selected), props.selected);
+    if (!overlay.current || !ready) return;
+    const labels = placeLabels(props.snapshot, props.selected, isPanning.current ? labelAnchors.current : undefined);
+    labelAnchors.current = new Map(labels.map(label => [label.id, label.anchor]));
+    overlay.current.setLabels(labels, props.selected);
   }, [ready, props.snapshot, props.selected]);
   return <View style={styles.fill}>
     <div ref={host} data-pull-refresh-ignore aria-label="Philippine fuel price map by geographic level" style={{ height: '100%', width: '100%' }} />

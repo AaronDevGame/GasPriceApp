@@ -75,7 +75,7 @@ Map cards identify original ranges as **DOE reported**, calculated ranges as **E
 
 Each card shows the area name and the available gasoline **RON 91** and ordinary **DIESEL** ranges. If only one fuel has a range, the card names that fuel. If neither has a range, the card is compact and gray and reads *No recent report*. Above City view, cards and selected-area details also show the number of cities and municipalities reporting out of the area's total. Area ranges combine the minimum and maximum of unexpired city reports for each grade.
 
-Cards use the current geographic level, independently of detailed geometry. They try alternate positions within the visible area bounds, prioritizing the selected area and then available prices. Cards with prices use a translucent fill until selected, when they use a solid deep green fill. On web, cards keep their anchors through a drag and its momentum, and the layout updates when the map settles. On mobile, card visibility updates as moving viewports are sampled and after movement stops.
+Cards use the current geographic level, independently of detailed geometry. They try alternate positions within the visible area bounds, prioritizing the selected area and then available prices. Cards with prices use a translucent fill until selected, when they use a solid deep green fill. Cards and prices update as moving viewports are sampled and after movement stops. On web, existing cards prefer their previous anchors during a drag and its momentum while the anchors remain visible and clear of higher-priority cards.
 
 ## Verification and remaining device checks
 
