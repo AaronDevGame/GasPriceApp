@@ -2,11 +2,14 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-27
+
 ### Added
 - Show a GasUp copyright footer on Fuel Prices, Weekly Changes, and news pages.
 
 ### Changed
 - Load fuel prices while the user pans or zooms the map on web and mobile.
+- Reuse cached map prices in the selected city’s local summary, including Gasoline 95 when available.
 - Move the DOE report details beside the company-price sort control, wrap them below it on narrow screens, and remove the report link and note from the table footer.
 - Simplify the local DOE price card with a single footer for the report dates and per-liter unit, and remove the extra note and report link.
 - Show the DOE company list below the fuel map and remove the Map and Company list buttons.
