@@ -10,7 +10,12 @@ import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
 type LabelOverlay = google.maps.OverlayView & { setLabels(labels: MapLabel[], selected: string | null): void };
 type AreaPolygon = { shape: google.maps.Polygon; areaId: string; hasOutline: boolean };
-type LabelCard = { anchor: google.maps.LatLng; element: HTMLButtonElement; appearance: string };
+type LabelCard = {
+  anchor: google.maps.LatLng;
+  positioner: HTMLDivElement;
+  appearance: string;
+  glide?: Animation;
+};
 function createLabels(onSelect: (label: MapLabel) => void) {
       class Labels extends google.maps.OverlayView {
         private root = document.createElement('div');
@@ -18,6 +23,8 @@ function createLabels(onSelect: (label: MapLabel) => void) {
         onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.floatPane.appendChild(this.root); }
         setLabels(labels: MapLabel[], selectedId: string | null) {
           const nextCards = new Map<string, LabelCard>();
+          const projection = this.getProjection();
+          const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
           labels.forEach((label, priority) => {
             const selected = label.id === selectedId;
             const dashed = label.price.estimated || label.price.outdated;
@@ -25,12 +32,29 @@ function createLabels(onSelect: (label: MapLabel) => void) {
               label.priceLines, label.skeletonWidths, label.coverage, label.width, label.height, label.fontSize]);
             const anchor = new google.maps.LatLng(label.anchor[1], label.anchor[0]);
             const previous = this.cards.get(label.id);
-            if (previous?.appearance === appearance) {
-              previous.anchor = anchor;
-              previous.element.style.zIndex = String(labels.length - priority);
-              nextCards.set(label.id, previous);
-              return;
+            const positioner = previous?.positioner ?? document.createElement('div');
+            if (!previous) {
+              positioner.style.cssText = 'position:absolute;left:0;top:0;visibility:hidden;';
+              this.root.appendChild(positioner);
             }
+            positioner.style.zIndex = String(labels.length - priority);
+            let glide = previous?.glide;
+            if (reduceMotion) glide?.cancel();
+            if (previous && !reduceMotion && !previous.anchor.equals(anchor)) {
+              const from = projection?.fromLatLngToDivPixel(previous.anchor);
+              const to = projection?.fromLatLngToDivPixel(anchor);
+              if (from && to) {
+                // Add only the layout displacement. The camera transform still updates immediately.
+                const [x, y] = getComputedStyle(positioner).translate.split(' ').map(parseFloat);
+                glide?.cancel();
+                glide = positioner.animate([
+                  { translate: `${from.x - to.x + (x || 0)}px ${from.y - to.y + (y || 0)}px` },
+                  { translate: '0px 0px' },
+                ], { duration: 150, easing: 'ease-out' });
+              }
+            }
+            nextCards.set(label.id, { anchor, positioner, appearance, glide });
+            if (previous?.appearance === appearance) return;
             const card = document.createElement('button');
             card.type = 'button';
             google.maps.OverlayView.preventMapHitsFrom(card);
@@ -41,7 +65,7 @@ function createLabels(onSelect: (label: MapLabel) => void) {
               hasPrices ? mapLabelColors.unselected : mapLabelColors.unavailable;
             const border = selected ? mapLabelColors.selected.border : colors.border;
             card.setAttribute('aria-label', label.accessibilityLabel);
-            card.style.cssText = `appearance:none;box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;left:0;top:0;z-index:${labels.length - priority};visibility:hidden;width:${label.width}px;height:${label.height}px;color:${hasPrices || pending ? 'white' : mapLabelColors.unavailable.text};border:2px solid ${border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:auto;cursor:pointer;user-select:none;font-variant-numeric:tabular-nums;`;
+            card.style.cssText = `appearance:none;box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;left:0;top:0;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:${hasPrices || pending ? 'white' : mapLabelColors.unavailable.text};border:2px solid ${border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:auto;cursor:pointer;user-select:none;font-variant-numeric:tabular-nums;`;
             card.style.backgroundColor = colors.background;
             if (hasPrices && !selected) {
               card.style.backgroundImage = mapLabelColors.unselected.gradient;
@@ -67,11 +91,13 @@ function createLabels(onSelect: (label: MapLabel) => void) {
               card.append('\n', status);
             }
             if (dashed) card.style.borderStyle = 'dashed';
-            nextCards.set(label.id, { anchor, element: card, appearance });
-            this.root.appendChild(card);
+            positioner.replaceChildren(card);
           });
           for (const [id, card] of this.cards) {
-            if (nextCards.get(id) !== card) card.element.remove();
+            if (!nextCards.has(id)) {
+              card.glide?.cancel();
+              card.positioner.remove();
+            }
           }
           this.cards = nextCards;
           this.draw();
@@ -80,15 +106,18 @@ function createLabels(onSelect: (label: MapLabel) => void) {
           const projection = this.getProjection();
           if (!projection) return;
           // Google Maps calls draw as the camera moves. Reuse the cards and update only their positions.
-          for (const { anchor, element } of this.cards.values()) {
+          for (const { anchor, positioner } of this.cards.values()) {
             const point = projection.fromLatLngToDivPixel(anchor);
-            element.style.visibility = point ? 'visible' : 'hidden';
+            positioner.style.visibility = point ? 'visible' : 'hidden';
             if (point) {
-              element.style.transform = `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)`;
+              positioner.style.transform = `translate(${point.x}px, ${point.y}px)`;
             }
           }
         }
-        onRemove() { this.root.remove(); }
+        onRemove() {
+          for (const { glide } of this.cards.values()) glide?.cancel();
+          this.root.remove();
+        }
       }
   return new Labels();
 }
