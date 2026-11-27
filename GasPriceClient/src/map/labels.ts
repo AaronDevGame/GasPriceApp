@@ -77,8 +77,7 @@ function* candidates(city: MapArea, viewport: Viewport, width: number, height: n
   const distance = ([px, py]: Point) => (px - preferred[0]) ** 2 + (py - preferred[1]) ** 2;
   yield* grid.sort((a, b) => distance(a) - distance(b));
 }
-export function placeLabels(snapshot: MapSnapshot, selected: string | null, previousAnchors?: ReadonlyMap<string, Point>,
-  dragOffset?: Point): MapLabel[] {
+export function placeLabels(snapshot: MapSnapshot, selected: string | null, { liveEdges = false } = {}): MapLabel[] {
   const viewport = snapshot.viewport;
   if (!viewport) return [];
   const placed: MapLabel[] = [];
@@ -118,33 +117,19 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, prev
       ...priceRows.map(({ text }) => mapLabelNozzle.size + mapLabelNozzle.gap + textWidth(text)));
     const width = Math.min(viewport.width - 16, Math.max(pending ? 154 : 130, contentWidth + 18));
     const positions = [...candidates(area, viewport, width, height)];
-    const previousAnchor = previousAnchors?.get(area.id);
-    let previousPosition = previousAnchor && project(previousAnchor, viewport);
-    let keepPreviousAnchor = false;
-    if (positions.length && previousPosition) {
-      const [x, y] = previousPosition;
-      const [insetX, insetY] = clampLabelCenter(previousPosition, viewport, width, height);
-      keepPreviousAnchor = insetX === x && insetY === y;
-      previousPosition = [insetX, insetY];
-      positions.unshift(previousPosition);
-      if (dragOffset) {
-        const [preferredX, preferredY] = positions[1];
-        // Return only along axes where the map is moving back toward the displaced card.
-        const dx = preferredX - insetX;
-        const dy = preferredY - insetY;
-        const stepX = dx * dragOffset[0] < 0 ? Math.sign(dx) * Math.min(Math.abs(dx), Math.abs(dragOffset[0]), 12) : 0;
-        const stepY = dy * dragOffset[1] < 0 ? Math.sign(dy) * Math.min(Math.abs(dy), Math.abs(dragOffset[1]), 12) : 0;
-        if (stepX || stepY) positions.unshift([insetX + stepX, insetY + stepY]);
-      }
-    }
+    // Test collisions against the displayed position, then let the web overlay
+    // apply the edge constraint to the same geographic anchor on each redraw.
+    const preferred = liveEdges && positions.length
+      ? clampLabelCenter(project(area.labelPoint, viewport), viewport, width, height)
+      : null;
+    if (preferred) positions.unshift(preferred);
     const position = positions.find(([x, y]) => !placed.some(other =>
       Math.abs(other.x - x) < (other.width + width) / 2 + 8 && Math.abs(other.y - y) < (other.height + height) / 2 + 8));
     // Selected areas go first. Never force a colliding card into the remaining space.
     if (position) {
       const [x, y] = position;
       placed.push({ id: area.id, priceRows, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
-        center: boundsCenter(area.bbox), anchor: previousAnchor && keepPreviousAnchor && position === previousPosition
-          ? previousAnchor : pointAtPixel(position, viewport), x, y, width });
+        center: boundsCenter(area.bbox), anchor: position === preferred ? area.labelPoint : pointAtPixel(position, viewport), x, y, width });
     }
   }
   return placed;

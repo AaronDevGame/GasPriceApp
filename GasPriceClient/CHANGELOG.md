@@ -11,7 +11,7 @@
 - Highlight the selected map card with a teal fill and a solid mint border, and show nozzle icons beside its fuel price ranges.
 
 ### Fixed
-- Update web fuel map cards during drags while keeping visible cards anchored where space allows. Keep cards inside the map margins as the camera redraws and move them back toward their preferred positions on a reverse drag. Preserve displaced positions when the map settles.
+- Update web fuel map cards during drags while keeping visible cards anchored where space allows. Keep cards inside the map margins as the camera redraws and restore their preferred positions as soon as they fit.
 
 ## [1.3.0] - 2026-11-27
 

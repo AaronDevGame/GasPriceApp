@@ -507,26 +507,31 @@ function lifecycle(h, initial = {}) {
   assert.equal(withoutPrices.coverage, 'No recent report');
   assert.equal(withoutPrices.accessibilityLabel, `${withoutPrices.name}, No recent report`);
   assert.equal(withoutPrices.height, relocated.height - 32, 'Omitting both price rows shrinks the card');
-  const interiorAnchor = geometry.pointAtPixel([200, 150], clipped);
+  const webLayout = { liveEdges: true };
   const [pendingDuringPan] = placeLabels({ ...imusSnapshot, prices: new Map(), pendingPriceIds: new Set([imus.id]) },
-    imus.id, new Map([[imus.id, interiorAnchor]]));
+    imus.id, webLayout);
   assert(pendingDuringPan.skeletonWidths.length > 0);
   const panned = { ...clipped, bounds: [120.926, 14.36, 120.971, 14.393] };
-  const [updatedDuringPan] = placeLabels({ ...imusSnapshot, viewport: panned }, imus.id,
-    new Map([[imus.id, pendingDuringPan.anchor]]));
-  assert.equal(updatedDuringPan.anchor, pendingDuringPan.anchor, 'Keep the visible anchor as prices arrive during a drag');
+  const [updatedDuringPan] = placeLabels({ ...imusSnapshot, viewport: panned }, imus.id, webLayout);
+  assert.equal(updatedDuringPan.anchor, pendingDuringPan.anchor, 'Keep the preferred anchor as prices arrive during a drag');
   assert.deepEqual(updatedDuringPan.priceRows, relocated.priceRows);
   assert.equal(updatedDuringPan.skeletonWidths.length, 0);
-  const displacedAnchor = geometry.pointAtPixel([relocated.x + 40, relocated.y + 1], clipped);
-  const [held] = placeLabels(imusSnapshot, imus.id, new Map([[imus.id, displacedAnchor]]));
-  assert.equal(held.anchor, displacedAnchor, 'Settling keeps a displaced card in place');
-  const [draggedAway] = placeLabels(imusSnapshot, imus.id, new Map([[imus.id, held.anchor]]), [-30, 0]);
-  assert.equal(draggedAway.anchor, held.anchor, 'Dragging farther out does not pull the card back');
-  const [returningCard] = placeLabels(imusSnapshot, imus.id, new Map([[imus.id, held.anchor]]), [30, 0]);
-  assert(Math.abs(returningCard.x - (held.x - 12)) < 0.001, 'Dragging back takes a bounded step toward the preferred position');
-  const [released] = placeLabels(imusSnapshot, imus.id, new Map([[imus.id, returningCard.anchor]]));
-  assert.equal(released.anchor, returningCard.anchor, 'Releasing after a partial return keeps the new anchor');
   const { clampLabelCenter } = h.load('labels');
+  const [longitude, latitude] = imus.labelPoint;
+  const edgeViewport = { ...clipped, bounds: [longitude - 0.039, latitude - 0.015, longitude + 0.001, latitude + 0.015] };
+  const [edgeCard] = placeLabels({ ...imusSnapshot, viewport: edgeViewport }, imus.id, webLayout);
+  assert.equal(edgeCard.x, edgeViewport.width - 8 - edgeCard.width / 2, 'Keep the full web card inside the right edge');
+  assert.deepEqual(edgeCard.anchor, imus.labelPoint, 'Edge placement preserves the original label point');
+  const centeredViewport = { ...clipped, bounds: [longitude - 0.02, latitude - 0.015, longitude + 0.02, latitude + 0.015] };
+  const preferredPosition = geometry.project(imus.labelPoint, centeredViewport);
+  const [returnX, returnY] = clampLabelCenter(geometry.project(edgeCard.anchor, centeredViewport), centeredViewport,
+    edgeCard.width, edgeCard.height);
+  assert.equal(returnX, preferredPosition[0], 'The overlay returns to the preferred position even before the next layout update');
+  assert.equal(returnY, preferredPosition[1]);
+  const [centeredCard] = placeLabels({ ...imusSnapshot, viewport: centeredViewport }, imus.id, webLayout);
+  assert.equal(centeredCard.anchor, edgeCard.anchor, 'The next layout update keeps the same anchor');
+  assert.equal(centeredCard.x, returnX);
+  assert.equal(centeredCard.y, returnY);
   // Draw successive camera positions against the same viewport dimensions and card layout.
   const leftEdge = relocated.width / 2 + 8;
   for (const [offset, expected] of [[2, 2], [1, 1], [0, 0], [-1, 0], [-2, 0]]) {
@@ -540,9 +545,8 @@ function lifecycle(h, initial = {}) {
     [[200, relocated.height / 2 - 1], [200, relocated.height / 2 + 8]],
     [[200, panned.height - relocated.height / 2 + 1], [200, panned.height - relocated.height / 2 - 36]],
   ]) {
-    const edgeAnchor = geometry.pointAtPixel(before, panned);
-    const [edgeCard] = placeLabels({ ...imusSnapshot, viewport: panned }, imus.id, new Map([[imus.id, edgeAnchor]]));
-    assert(Math.abs(edgeCard.x - after[0]) < 0.001 && Math.abs(edgeCard.y - after[1]) < 0.001,
+    const [edgeX, edgeY] = clampLabelCenter(before, panned, relocated.width, relocated.height);
+    assert(Math.abs(edgeX - after[0]) < 0.001 && Math.abs(edgeY - after[1]) < 0.001,
       'Move the card inward as soon as its outer edge clips, preserving its position along the edge');
   }
   const [noReport] = placeLabels({ ...imusSnapshot, prices: new Map([[imus.id,
