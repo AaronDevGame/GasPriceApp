@@ -11,6 +11,7 @@
 - Rename the app to GasUp in mobile and desktop headers, the installed app name, and the location permission prompt.
 
 ### Fixed
+- Remove the desktop scroll gutter so the news strip reaches the right edge and tab content aligns with the header.
 - Keep desktop pages in place during background refreshes by hiding the top refresh indicator.
 - Fix a blank homepage on web when the fuel-news headline initializes its animation.
 - Show one fuel-price summary per selected area, with DOE-reported ranges when available and an estimate when no DOE report is available.

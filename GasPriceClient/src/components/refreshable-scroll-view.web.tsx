@@ -44,7 +44,8 @@ export function RefreshableScrollView({ refreshing, onRefresh, refreshEnabled = 
     </div>}
     <div className={classes.content} data-pulling={pulling}
       style={{ transform: offset > 0 ? `translate3d(0, ${offset}px, 0)` : 'translate3d(0, 0, 0)' }}>
-      <ScrollView {...props} ref={scroll}>{children}</ScrollView>
+      <ScrollView {...props} ref={scroll}
+        showsVerticalScrollIndicator={desktop ? false : props.showsVerticalScrollIndicator}>{children}</ScrollView>
     </div>
   </div>;
 }
