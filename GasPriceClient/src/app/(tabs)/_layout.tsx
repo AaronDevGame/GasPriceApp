@@ -63,7 +63,7 @@ export default function TabLayout() {
   </View></HeaderPricesProvider>;
 }
 const styles = StyleSheet.create({
-  nav: { backgroundColor: '#151A21', borderBottomWidth: 1, borderColor: '#2B3441', alignItems: 'center', paddingHorizontal: 28 },
+  nav: { backgroundColor: '#193A54', borderBottomWidth: 1, borderColor: '#2B3441', alignItems: 'center', paddingHorizontal: 28 },
   navInner: { width: '100%', maxWidth: 1160, minHeight: 84, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', paddingVertical: 10 },
   links: { flexDirection: 'row', gap: 4 }, navLink: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 12, borderRadius: 10 },
   navLabel: { fontSize: 11, lineHeight: 16 },
