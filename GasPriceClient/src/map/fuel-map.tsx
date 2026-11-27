@@ -25,7 +25,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   userLocation?: DoePriceLocation | null;
   onReturnToLocation?(): void;
   locations?: DoePriceLocation[];
-  onLocationChange?(location: DoePriceLocation): void;
+  onLocationChange?(location: DoePriceLocation, cityId?: string): void;
   active?: boolean;
   initialLocationPending?: boolean;
   ref?: Ref<FuelMapHandle>;
@@ -135,9 +135,17 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
     setMapSelection({ id, targetId });
     if (!snapshot.index || !snapshot.viewport) return;
     const area = visibleAreas(snapshot.index, snapshot.viewport).find(value => value.id === id);
-    const next = area && locationForMapArea(area, locations);
-    if (next) onLocationChange?.(next);
-  }, [snapshot.index, snapshot.viewport, locations, onLocationChange, targetId]);
+    if (!area || !authenticated) return;
+    const city = !area.id.includes(':') ? area.members[0] : undefined;
+    const known = locationForMapArea(area, locations);
+    const prices = city && mapCache.price(city.id);
+    if (city && (known || (prices && prices.status !== 'unavailable'))) {
+      onLocationChange?.(known ?? { city: city.name.replace(/^(City|Municipality) of /i, ''),
+        province: city.regionId === '1300000000' ? 'Metro Manila' : city.groupName }, city.id);
+    } else if (area.id.startsWith('province:')) {
+      onLocationChange?.(known ?? { city: '', province: area.name, scope: 'province' });
+    }
+  }, [authenticated, snapshot.index, snapshot.viewport, locations, onLocationChange, targetId]);
   const level = snapshot.index && snapshot.viewport ? mapLevel(snapshot.index, snapshot.viewport) : metroBounds ? 'city' : 'country';
   const noPrices = authenticated && !snapshot.loading && !snapshot.error && snapshot.prices.size > 0 &&
     [...snapshot.prices.values()].every(price => price.status === 'unavailable');

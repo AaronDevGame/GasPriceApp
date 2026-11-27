@@ -182,7 +182,8 @@ export class MapDataCache {
           !requested.has(item.cityId) || item.scope !== 'city' || item.gasolineGrade !== 'RON 91' ||
           !['available', 'partial', 'unavailable'].includes(item.status) ||
           (!Number.isFinite(Date.parse(item.expiresAtUtc)) || Date.parse(item.expiresAtUtc) <= this.now()) || !validRange(item.gasoline) || !validRange(item.diesel) ||
-          (item.status === 'unavailable' && (item.gasoline !== null || item.diesel !== null)))) throw new Error('Invalid city prices');
+          !validRange(item.gasoline95 ?? null) || !validRange(item.reportedGasoline95 ?? null) ||
+          (item.status === 'unavailable' && (item.gasoline !== null || item.diesel !== null || item.gasoline95 != null)))) throw new Error('Invalid city prices');
   }
 }
 export const mapCache = new MapDataCache();

@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { formatPrice, type Prices, type PricePoint, type DoeFuelPriceFeed } from '@/fuel/api';
+import { cityPriceLabel } from '@/map/labels';
+import type { CityPrices } from '@/map/types';
 
 function asOf(value: string) {
   return new Date(value).toLocaleDateString('en-PH', {
@@ -40,6 +42,15 @@ export function DoePriceSummary({ report }: { report: DoeFuelPriceFeed }) {
     <ThemedText type="small" themeColor="textSecondary">
       DOE-reported {provinceWide ? 'province' : 'city'}-level company ranges per liter · {report.weekStart} to {report.weekEnd}
     </ThemedText>
+  </>;
+}
+
+export function MapPriceSummary({ prices }: { prices: CityPrices }) {
+  const unavailable = { minPrice: null, maxPrice: null, currency: 'PHP', unit: 'liter' };
+  return <>
+    <PriceGrid prices={{ diesel: prices.diesel ?? unavailable, gasoline91: prices.gasoline ?? unavailable,
+      gasoline95: prices.gasoline95 ?? unavailable }} showUnit={false} />
+    <ThemedText type="small" themeColor="textSecondary">{cityPriceLabel(prices)} · per liter</ThemedText>
   </>;
 }
 export function RecentPriceUpdates({ area, updates, error }: { area: string; updates: PricePoint[]; error: boolean }) {

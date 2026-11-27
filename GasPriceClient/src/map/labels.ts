@@ -1,6 +1,6 @@
 import { boundsCenter, pointAtPixel, project } from './geometry';
 import { areaPrices, mapLevel, visibleAreas, type MapArea } from './hierarchy';
-import type { MapSnapshot, Point, PriceRange, Viewport } from './types';
+import type { CityPrices, MapSnapshot, Point, PriceRange, Viewport } from './types';
 
 export const mapLabelColors = {
   unselected: {
@@ -27,14 +27,14 @@ export function adjustmentSummaries(adjustments: NonNullable<import('./types').C
   }
   return [...groups.values()].sort((a, b) => a.date.localeCompare(b.date) || a.fuel.localeCompare(b.fuel));
 }
+export function cityPriceLabel(report: CityPrices) {
+  if (report.priceKind === 'estimated') return `Estimated${report.asOf ? ` · ${reportDate(report.asOf)}` : ''}`;
+  const dates = report.weekStart && report.weekEnd ? `${reportDate(report.weekStart)}–${reportDate(report.weekEnd)}` : report.weekEnd ? reportDate(report.weekEnd) : '';
+  return `DOE reported${dates ? ` · ${dates}` : ''}${report.isOutdated ? ' · Outdated' : ''}`;
+}
 export function priceLabel(price: ReturnType<typeof areaPrices>) {
   if (!price.reported) return 'No recent report';
-  if (price.report) {
-    const report = price.report;
-    if (report.priceKind === 'estimated') return `Estimated${report.asOf ? ` · ${reportDate(report.asOf)}` : ''}`;
-    const dates = report.weekStart && report.weekEnd ? `${reportDate(report.weekStart)}–${reportDate(report.weekEnd)}` : report.weekEnd ? reportDate(report.weekEnd) : '';
-    return `DOE reported${dates ? ` · ${dates}` : ''}${report.isOutdated ? ' · Outdated' : ''}`;
-  }
+  if (price.report) return cityPriceLabel(price.report);
   return `${price.estimated ? 'Includes estimates' : 'DOE reported'}${price.outdated ? ' · Outdated reports' : ''}`;
 }
 export type MapLabel = {
