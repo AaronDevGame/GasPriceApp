@@ -4,7 +4,7 @@
 
 ### Changed
 - Remove the details below the fuel map and make map credits available above it.
-- Give the desktop navigation header a deep blue background to distinguish it from the charcoal page body.
+- Give the desktop navigation header a muted plum background to distinguish it from the blue news label and charcoal page body.
 - Combine area selection and local prices in one card, with inline city search and a location icon that supports retrying after permission is denied.
 - Show the desktop GasUp brand lockup on mobile and add space between the fuel adjustment cards and news ticker.
 - Rotate up to three recent headlines in a full-width strip directly below the Fuel Prices navigation header, with one story per topic and one price adjustment at a time. Align the FUEL NEWS, CONFIRMED, or FORECAST label beneath GasUp on desktop and extend its background to the left edge of the ticker. Place the headline beside the label, omit a repeated “Confirmed:” prefix on confirmed stories, and provide previous and next arrows.
