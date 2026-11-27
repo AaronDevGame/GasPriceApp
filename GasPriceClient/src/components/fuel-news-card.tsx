@@ -12,7 +12,7 @@ export function FuelNewsCard({ item, compact = false, detail = false }: { item: 
   return <ThemedView type="backgroundElement" style={styles.card}>
     <View style={styles.metadata}>
       <ThemedText type="smallBold" style={styles.badge}>{newsStatusLabel(a.status)}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">{newsDate(item.publishedAtUtc)}</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">Published {newsDate(item.publishedAtUtc)}</ThemedText>
     </View>
     {detail ? title : <Link href={{ pathname: '/news-detail', params: { id: item.id } }} accessibilityLabel={`Read ${a.title}`}>{title}</Link>}
     {item.supersededById ? <ThemedText type="small" themeColor="textSecondary">Superseded by a confirmed announcement.</ThemedText>

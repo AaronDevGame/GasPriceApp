@@ -2,7 +2,7 @@ import { Link } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { newsStatusLabel, type NewsItem } from '@/news/api';
+import { newsDate, newsStatusLabel, type NewsItem } from '@/news/api';
 
 export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
   const { width, fontScale } = useWindowDimensions();
@@ -42,17 +42,19 @@ export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
 
   if (!item) return null;
   const { status, title } = item.article;
+  const publicationDate = newsDate(item.publishedAtUtc);
   const headline = status === 'confirmed' ? title.replace(/^\s*confirmed\s*:\s*/i, '') || title : title;
   return <View style={[styles.strip, { paddingRight: headerInset }]}>
     <View style={[styles.label, { width: labelWidth, paddingLeft: headerInset }]}>
       <ThemedText type="smallBold" style={styles.labelText}>{newsStatusLabel(status)}</ThemedText>
     </View>
     <Link href={{ pathname: '/news-detail', params: { id: item.id } }} asChild>
-      <Pressable accessibilityRole="link" accessibilityLabel={headline} style={styles.link}
+      <Pressable accessibilityRole="link" accessibilityLabel={`${headline}. Published ${publicationDate}`} style={styles.link}
         onHoverIn={() => setReading(true)} onHoverOut={() => setReading(false)}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
         <Animated.View style={{ transform: [{ translateX: slide }] }}>
           <ThemedText numberOfLines={compact ? 2 : 1} type="smallBold" style={styles.headline}>{headline}</ThemedText>
+          <ThemedText type="small" style={styles.date}>{publicationDate}</ThemedText>
         </Animated.View>
       </Pressable>
     </Link>
@@ -67,6 +69,7 @@ export function FuelNewsHeadline({ items }: { items: NewsItem[] }) {
 
 const styles = StyleSheet.create({
   headline: { color: '#F2F6FC' },
+  date: { color: '#B9C9DD' },
   strip: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'stretch', minHeight: 44, backgroundColor: '#182332' },
   label: { backgroundColor: '#203650', justifyContent: 'center', paddingRight: 14 },
   labelText: { color: '#9BC7FF', fontSize: 11, letterSpacing: 1 },
