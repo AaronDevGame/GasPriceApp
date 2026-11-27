@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-28
+
 ### Added
 - Show shimmering skeletons in map price cards while waiting for fuel prices on web and mobile.
 - Show a smaller, muted publication date after each headline in the single-line fuel news ticker, and label the date on News cards and article pages.
