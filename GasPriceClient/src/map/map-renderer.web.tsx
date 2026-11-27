@@ -15,7 +15,10 @@ const nozzleUris = {
   gasoline: Asset.fromModule(fuelNozzles.gasoline).uri,
   diesel: Asset.fromModule(fuelNozzles.diesel).uri,
 };
-type LabelOverlay = google.maps.OverlayView & { setLabels(labels: MapLabel[], selected: string | null): void };
+type LabelOverlay = google.maps.OverlayView & {
+  setLabels(labels: MapLabel[], selected: string | null, animate: boolean): void;
+  stopGlides(): void;
+};
 type AreaPolygon = { shape: google.maps.Polygon; areaId: string; hasOutline: boolean };
 type LabelCard = {
   anchor: google.maps.LatLng;
@@ -28,10 +31,10 @@ function createLabels(onSelect: (label: MapLabel) => void) {
         private root = document.createElement('div');
         private cards = new Map<string, LabelCard>();
         onAdd() { this.root.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;'; this.getPanes()?.floatPane.appendChild(this.root); }
-        setLabels(labels: MapLabel[], selectedId: string | null) {
+        setLabels(labels: MapLabel[], selectedId: string | null, animate: boolean) {
           const nextCards = new Map<string, LabelCard>();
           const projection = this.getProjection();
-          const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          const shouldGlide = animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
           labels.forEach((label, priority) => {
             const selected = label.id === selectedId;
             const appearance = JSON.stringify([selected, label.center, label.accessibilityLabel, label.name,
@@ -45,8 +48,11 @@ function createLabels(onSelect: (label: MapLabel) => void) {
             }
             positioner.style.zIndex = String(labels.length - priority);
             let glide = previous?.glide;
-            if (reduceMotion) glide?.cancel();
-            if (previous && !reduceMotion && !previous.anchor.equals(anchor)) {
+            if (!shouldGlide) {
+              glide?.cancel();
+              glide = undefined;
+            }
+            if (previous && shouldGlide && !previous.anchor.equals(anchor)) {
               const from = projection?.fromLatLngToDivPixel(previous.anchor);
               const to = projection?.fromLatLngToDivPixel(anchor);
               if (from && to) {
@@ -127,8 +133,14 @@ function createLabels(onSelect: (label: MapLabel) => void) {
             }
           }
         }
+        stopGlides() {
+          for (const card of this.cards.values()) {
+            card.glide?.cancel();
+            card.glide = undefined;
+          }
+        }
         onRemove() {
-          for (const { glide } of this.cards.values()) glide?.cancel();
+          this.stopGlides();
           this.root.remove();
         }
       }
@@ -197,9 +209,13 @@ export default function MapRenderer(props: MapRendererProps) {
       };
       listeners.push(instance.addListener('bounds_changed', () => latest.current.onMove(readViewport())));
       listeners.push(instance.addListener('dragstart', () => { isPanning.current = true; }));
-      listeners.push(instance.addListener('dragend', () => { isPanning.current = false; }));
-      listeners.push(instance.addListener('idle', () => {
+      const stopDrag = () => {
         isPanning.current = false;
+        labels.stopGlides();
+      };
+      listeners.push(instance.addListener('dragend', stopDrag));
+      listeners.push(instance.addListener('idle', () => {
+        stopDrag();
         const viewport = readViewport();
         if (viewport) latest.current.onIdle(viewport);
       }));
@@ -288,7 +304,7 @@ export default function MapRenderer(props: MapRendererProps) {
     const labels = placeLabels(props.snapshot, props.selected, sameScale ? labelAnchors.current : undefined, dragOffset);
     labelAnchors.current = new Map(labels.map(label => [label.id, label.anchor]));
     labelViewport.current = viewport;
-    overlay.current.setLabels(labels, props.selected);
+    overlay.current.setLabels(labels, props.selected, isPanning.current);
   }, [ready, props.snapshot, props.selected]);
   return <View style={styles.fill}>
     <div ref={host} data-pull-refresh-ignore aria-label="Philippine fuel price map by geographic level" style={{ height: '100%', width: '100%' }} />

@@ -11,7 +11,7 @@
 - Highlight the selected map card with a teal fill and a solid mint border, and show nozzle icons beside its fuel price ranges.
 
 ### Fixed
-- Update web fuel map cards during drags while keeping visible cards anchored where space allows. Glide cards inward at the map margin and back toward their preferred positions on a reverse drag. Preserve displaced positions when the map settles.
+- Update web fuel map cards during drags while keeping visible cards anchored where space allows. Glide cards inward at the map margin and back toward their preferred positions on a reverse drag. Preserve displaced positions when the map settles and stop card glides immediately on release.
 
 ## [1.3.0] - 2026-11-27
 
