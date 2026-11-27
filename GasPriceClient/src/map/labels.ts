@@ -10,6 +10,7 @@ export const mapLabelColors = {
   },
   selected: { background: '#115442', border: '#69E0B3' },
   unavailable: { background: 'rgba(60, 68, 77, 0.87)', border: '#9AA5B1', text: '#E7EBF0' },
+  skeleton: { background: 'rgba(17, 31, 48, 0.92)', border: '#7997B5', bar: '#58718C' },
   textShadow: '#071322',
 };
 
@@ -38,7 +39,7 @@ export function priceLabel(price: ReturnType<typeof areaPrices>) {
   return `${price.estimated ? 'Includes estimates' : 'DOE reported'}${price.outdated ? ' · Outdated reports' : ''}`;
 }
 export type MapLabel = {
-  id: string; name: string; priceLines: string[]; coverage: string; accessibilityLabel: string;
+  id: string; name: string; priceLines: string[]; skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
   price: ReturnType<typeof areaPrices>; center: Point; anchor: Point; x: number; y: number; width: number; height: number; fontSize: number;
 };
 // Search the part of the city's bounding box where a full label can fit on screen.
@@ -75,29 +76,36 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null): Map
   if (!snapshot.index) return [];
   const level = mapLevel(snapshot.index, viewport);
   const areas = visibleAreas(snapshot.index, viewport);
-  const sorted = areas.map(area => ({ area, price: areaPrices(area, snapshot) })).sort((a, b) =>
+  const sorted = areas.map(area => {
+    const price = areaPrices(area, snapshot);
+    const pending = !price.gasoline && !price.diesel && area.members.some(city => snapshot.pendingPriceIds.has(city.id));
+    return { area, price, pending };
+  }).sort((a, b) =>
     Number(b.area.id === selected) - Number(a.area.id === selected) ||
-    Number(!!(b.price.gasoline || b.price.diesel)) - Number(!!(a.price.gasoline || a.price.diesel)) || a.area.id.localeCompare(b.area.id));
-  for (const { area, price } of sorted) {
+    Number(!!(b.price.gasoline || b.price.diesel)) - Number(!!(a.price.gasoline || a.price.diesel)) ||
+    Number(b.pending) - Number(a.pending) || a.area.id.localeCompare(b.area.id));
+  for (const { area, price, pending } of sorted) {
     const name = area.name;
     const fontSize = 11;
     const priceRows = [{ fuel: 'RON 91', range: price.gasoline }, { fuel: 'Diesel', range: price.diesel }]
       .flatMap(({ fuel, range }) => range ? [{ fuel, text: rangeText(range) }] : []);
     const priceLines = priceRows.map(({ fuel, text }) => priceRows.length === 1 ? `${fuel} ${text}` : text);
-    const coverage = [priceLabel(price), !priceLines.length ? '' : level === 'city' ? (price.complete ? '' : 'Incomplete') :
+    const skeletonWidths = pending ? (level === 'city' ? [74, 62, 46] : [74, 62, 46, 58]) : [];
+    const coverage = pending ? '' : [priceLabel(price), !priceLines.length ? '' : level === 'city' ? (price.complete ? '' : 'Incomplete') :
       `${price.reported}/${price.total} cities with prices${price.complete ? '' : ' · incomplete'}`].filter(Boolean).join('\n');
-    const accessibilityLabel = [name, ...priceRows.map(({ fuel, text }) => `${fuel} ${text}`), coverage].join(', ');
+    const accessibilityLabel = pending ? `${name}, loading fuel prices` :
+      [name, ...priceRows.map(({ fuel, text }) => `${fuel} ${text}`), coverage].join(', ');
     const lines = [name, ...priceLines, ...coverage.split('\n')];
-    const height = 14 + lines.length * 16;
+    const height = 14 + (pending ? 1 + skeletonWidths.length : lines.length) * 16;
     const longestLine = Math.max(...lines.map(line => line.length));
-    const width = Math.min(viewport.width - 16, Math.max(130, longestLine * fontSize * 0.64 + 18));
+    const width = Math.min(viewport.width - 16, Math.max(pending ? 154 : 130, longestLine * fontSize * 0.64 + 18));
     const positions = [...candidates(area, viewport, width, height)];
     const position = positions.find(([x, y]) => !placed.some(other =>
       Math.abs(other.x - x) < (other.width + width) / 2 + 8 && Math.abs(other.y - y) < (other.height + height) / 2 + 8));
     // Selected areas go first. Never force a colliding card into the remaining space.
     if (position) {
       const [x, y] = position;
-      placed.push({ id: area.id, price, priceLines, coverage, accessibilityLabel, name, height, fontSize,
+      placed.push({ id: area.id, price, priceLines, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
         center: boundsCenter(area.bbox), anchor: pointAtPixel(position, viewport), x, y, width });
     }
   }

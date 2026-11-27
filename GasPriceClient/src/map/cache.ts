@@ -90,6 +90,9 @@ export class MapDataCache {
     const cached = this.prices.get(this.key(id));
     return cached && Date.parse(cached.item.expiresAtUtc) > this.now() ? cached.item : undefined;
   }
+  canLoadPrice(id: string) {
+    return (this.failures.get(`price:${this.key(id)}`)?.error.retryAt ?? 0) <= this.now();
+  }
   cities(viewport: Viewport, exact = false): City[] {
     return this.index?.cities.filter(city => intersects(city.bbox, viewport.bounds) &&
       (!exact || !this.feature(city.id) || featureIntersects(this.feature(city.id)!, viewport.bounds))) ?? [];

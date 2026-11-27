@@ -2,10 +2,13 @@ import { MapDataCache, MapRequestFailure, mapCache, priceRequestInterval } from 
 import { areaBoundaries } from './area-boundaries';
 import { MAX_DETAIL_CITIES } from './geometry';
 import { mapLevel, visibleAreas } from './hierarchy';
-import type { MapSnapshot, Viewport } from './types';
+import type { CityPrices, MapSnapshot, Viewport } from './types';
+
+const movingViewportInterval = 100;
 
 export class MapController {
-  snapshot: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: false, detail: false, error: null };
+  snapshot: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), pendingPriceIds: new Set(),
+    viewport: null, loading: false, detail: false, error: null };
   private listeners = new Set<() => void>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private expiryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -13,6 +16,9 @@ export class MapController {
   private motionViewport: Viewport | undefined;
   private motionPriceFlight: Promise<void> | undefined;
   private motionUpdateAt = 0;
+  private motionPriceTimer: ReturnType<typeof setTimeout> | undefined;
+  private motionPricesAt = 0;
+  private lastMotionPriceViewport: Viewport | null = null;
   private retryAt = 0;
   private active = true;
   private moving = false;
@@ -33,7 +39,7 @@ export class MapController {
   setActive(value: boolean) {
     if (value === this.active || this.disposed) return false;
     this.active = value;
-    if (!value) { this.cancelViewportWork(); this.update({ loading: false }); }
+    if (!value) { this.cancelViewportWork(); this.update({ loading: false, pendingPriceIds: new Set() }); }
     else { this.moving = false; this.publish(); this.scheduleRefresh(); }
     return value;
   }
@@ -69,8 +75,11 @@ export class MapController {
     clearTimeout(this.timer); this.timer = undefined;
     clearTimeout(this.expiryTimer); this.expiryTimer = undefined;
     clearTimeout(this.motionTimer); this.motionTimer = undefined;
+    clearTimeout(this.motionPriceTimer); this.motionPriceTimer = undefined;
     this.motionViewport = undefined;
     this.motionUpdateAt = 0;
+    this.motionPricesAt = 0;
+    this.lastMotionPriceViewport = null;
   }
   move = (viewport?: Viewport) => {
     if (!this.active || this.disposed) return;
@@ -80,7 +89,7 @@ export class MapController {
     }
     if (!viewport || !this.snapshot.viewport) return;
     this.motionViewport = viewport;
-    if (this.motionTimer !== undefined || this.motionPriceFlight) return;
+    if (this.motionTimer !== undefined) return;
     const delay = this.motionUpdateAt - Date.now();
     if (delay > 0) this.motionTimer = setTimeout(this.updateMovingViewport, delay);
     else this.updateMovingViewport();
@@ -89,18 +98,35 @@ export class MapController {
     this.motionTimer = undefined;
     const viewport = this.motionViewport;
     this.motionViewport = undefined;
-    const index = this.cache.index;
-    if (!viewport || !index) return;
-    this.motionUpdateAt = Date.now() + priceRequestInterval;
+    if (!viewport || !this.cache.index) return;
+    this.motionUpdateAt = Date.now() + movingViewportInterval;
     this.publish(viewport);
-    if (this.authenticated) {
-      const members = visibleAreas(index, viewport).flatMap(area => area.members);
-      // The cache records backoff. The settled load reports any failure still relevant to the final view.
-      this.motionPriceFlight = this.cache.loadPrices(members).catch(() => {}).finally(() => {
-        this.motionPriceFlight = undefined;
-        if (this.motionViewport) this.move(this.motionViewport);
-      });
+    this.scheduleMovingPrices();
+  };
+  private scheduleMovingPrices = () => {
+    if (!this.isActive() || !this.moving || !this.authenticated || this.motionViewport ||
+        this.motionPriceFlight || this.motionPriceTimer !== undefined) return;
+    const { viewport, pendingPriceIds } = this.snapshot;
+    const index = this.cache.index;
+    if (!viewport || !index || viewport === this.lastMotionPriceViewport || !pendingPriceIds.size) return;
+    const delay = this.motionPricesAt - Date.now();
+    if (delay > 0) {
+      this.motionPriceTimer = setTimeout(() => {
+        this.motionPriceTimer = undefined;
+        this.scheduleMovingPrices();
+      }, delay);
+      return;
     }
+    this.lastMotionPriceViewport = viewport;
+    this.motionPricesAt = Date.now() + priceRequestInterval;
+    const members = visibleAreas(index, viewport).flatMap(area => area.members);
+    // Stop showing skeletons for cities in backoff. The settled load handles the error message.
+    this.motionPriceFlight = this.cache.loadPrices(members).catch(() => {
+      if (this.isActive()) this.publish();
+    }).finally(() => {
+      this.motionPriceFlight = undefined;
+      this.scheduleMovingPrices();
+    });
   };
   idle = (viewport: Viewport, immediate = false) => {
     if (this.disposed) return;
@@ -123,7 +149,8 @@ export class MapController {
   };
   private async load(generation: number, refresh = false) {
     if (!this.active || this.disposed || generation !== this.generation || !this.snapshot.viewport) return;
-    if (Date.now() < this.retryAt) { this.scheduleRefresh(); return; }
+    if (Date.now() < this.retryAt) { this.publish(); this.scheduleRefresh(); return; }
+    this.publish();
     this.update({ loading: true });
     try {
       await this.cache.loadIndex();
@@ -153,6 +180,7 @@ export class MapController {
     } catch (error) {
       if (generation === this.generation && this.active) {
         this.retryAt = this.failureDeadline(error);
+        this.publish();
         this.update({ loading: false, error: 'Map data could not load. Retry when connected.' });
       }
     } finally { if (generation === this.generation) this.scheduleRefresh(); }
@@ -204,9 +232,19 @@ export class MapController {
       ? areas.flatMap(area => outlines.get(area.id) ?? [])
       : (detail ? cities : selected?.members ?? []).flatMap(city => this.cache.feature(city.id) ?? []);
     const previous = this.snapshot.features;
+    const prices = new Map<string, CityPrices>();
+    const pendingPriceIds = new Set<string>();
+    if (this.authenticated) {
+      const canLoad = this.active && (this.moving || Date.now() >= this.retryAt);
+      for (const city of members) {
+        const price = this.cache.price(city.id);
+        if (price) prices.set(city.id, price);
+        else if (canLoad && this.cache.canLoadPrice(city.id)) pendingPriceIds.add(city.id);
+      }
+    }
     this.update({ index: this.cache.index, viewport, cities, detail,
       features: previous.length === features.length && previous.every((f, i) => f === features[i]) ? previous : features,
-      prices: new Map(this.authenticated ? members.flatMap(city => this.cache.price(city.id) ? [[city.id, this.cache.price(city.id)!] as const] : []) : []) });
+      prices, pendingPriceIds });
   }
   private update(patch: Partial<MapSnapshot>) {
     if (this.disposed) return;

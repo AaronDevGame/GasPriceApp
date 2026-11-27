@@ -181,21 +181,29 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         if (liveViewport && (left + label.width < 0 || left > size.width || top + label.height < 0 || top > size.height)) return null;
         const highlighted = label.id === selected;
         const hasPrices = label.priceLines.length > 0;
-        const labelStyle = hasPrices ? (highlighted ? styles.selectedLabel : styles.unselectedLabel) : styles.unavailableLabel;
-        const borderColor = highlighted ? mapLabelColors.selected.border : (hasPrices ? mapLabelColors.unselected.border : mapLabelColors.unavailable.border);
+        const pending = label.skeletonWidths.length > 0;
+        const labelStyle = highlighted && (hasPrices || pending) ? styles.selectedLabel : pending ? styles.skeletonLabel :
+          hasPrices ? styles.unselectedLabel : styles.unavailableLabel;
+        const borderColor = highlighted ? mapLabelColors.selected.border : pending ? mapLabelColors.skeleton.border :
+          hasPrices ? mapLabelColors.unselected.border : mapLabelColors.unavailable.border;
         const priceStyle = [styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }];
         return <Pressable key={label.id} accessibilityRole="button" accessibilityLabel={label.accessibilityLabel}
+          accessibilityState={{ busy: pending }}
           onPress={() => {
             map.current?.setCamera({ center: coordinate(label.center) });
             onSelect(label.id);
           }}
           style={[styles.label, labelStyle, { position: 'absolute', left, top, zIndex: labels.length - priority,
             width: label.width, height: label.height, borderColor, borderStyle: label.price.estimated || label.price.outdated ? 'dashed' : 'solid' }]}>
-          <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, !hasPrices && styles.unavailableText]}>{label.name}</Text>
-          {label.priceLines.map((line, i) => <Text key={i} allowFontScaling={false} style={priceStyle}>{line}</Text>)}
-          <Text allowFontScaling={false} style={[styles.price, styles.coverage, hasPrices
-            ? !highlighted && { color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB' }
-            : [styles.unavailableText, styles.noReport]]}>{label.coverage}</Text>
+          <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, !hasPrices && !pending && styles.unavailableText]}>{label.name}</Text>
+          {pending ? label.skeletonWidths.map(width => (
+            <View key={width} style={styles.skeletonRow}><View style={[styles.skeletonBar, { width: `${width}%` }]} /></View>
+          )) : <>
+            {label.priceLines.map((line, i) => <Text key={i} allowFontScaling={false} style={priceStyle}>{line}</Text>)}
+            <Text allowFontScaling={false} style={[styles.price, styles.coverage, hasPrices
+              ? !highlighted && { color: label.price.estimated || label.price.outdated ? '#FFD166' : '#B8C9DB' }
+              : [styles.unavailableText, styles.noReport]]}>{label.coverage}</Text>
+          </>}
         </Pressable>;
       })}
     </View>
@@ -212,6 +220,9 @@ const styles = StyleSheet.create({
   unselectedLabel: { backgroundColor: mapLabelColors.unselected.background,
     experimental_backgroundImage: mapLabelColors.unselected.gradient },
   unavailableLabel: { backgroundColor: mapLabelColors.unavailable.background },
+  skeletonLabel: { backgroundColor: mapLabelColors.skeleton.background },
+  skeletonRow: { height: 16, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
+  skeletonBar: { height: 7, borderRadius: 4, backgroundColor: mapLabelColors.skeleton.bar },
   unavailableText: { color: mapLabelColors.unavailable.text },
   noReport: { fontStyle: 'italic' },
   coverage: { fontSize: 10, textAlign: 'center' },

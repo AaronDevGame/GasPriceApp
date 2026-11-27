@@ -15,7 +15,8 @@ import { mapAreaForLocation, locationForMapArea } from '@/fuel/selection';
 import type { Coordinates, DoePriceLocation } from '@/fuel/api';
 import type { LocationFocus, MapSnapshot, Viewport, ZoomFocus } from './types';
 
-const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: true, detail: false, error: null };
+const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), pendingPriceIds: new Set(),
+  viewport: null, loading: true, detail: false, error: null };
 const showMapCredits = false;
 export type FuelMapHandle = { refresh(): Promise<void> };
 

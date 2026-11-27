@@ -23,19 +23,36 @@ function createLabels(onSelect: (label: MapLabel) => void) {
             card.addEventListener('click', () => onSelect(label));
             const selected = label.id === selectedId;
             const hasPrices = label.priceLines.length > 0;
-            const colors = hasPrices ? (selected ? mapLabelColors.selected : mapLabelColors.unselected) : mapLabelColors.unavailable;
+            const pending = label.skeletonWidths.length > 0;
+            const colors = selected && (hasPrices || pending) ? mapLabelColors.selected : pending ? mapLabelColors.skeleton :
+              hasPrices ? mapLabelColors.unselected : mapLabelColors.unavailable;
             const border = selected ? mapLabelColors.selected.border : colors.border;
             card.setAttribute('aria-label', label.accessibilityLabel);
-            card.style.cssText = `appearance:none;box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${labels.length - priority};visibility:hidden;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:${hasPrices ? 'white' : mapLabelColors.unavailable.text};border:2px solid ${border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:auto;cursor:pointer;user-select:none;font-variant-numeric:tabular-nums;`;
+            card.style.cssText = `appearance:none;box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${labels.length - priority};visibility:hidden;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:${hasPrices || pending ? 'white' : mapLabelColors.unavailable.text};border:2px solid ${border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:auto;cursor:pointer;user-select:none;font-variant-numeric:tabular-nums;`;
             card.style.backgroundColor = colors.background;
             if (hasPrices && !selected) {
               card.style.backgroundImage = mapLabelColors.unselected.gradient;
               card.style.textShadow = `0 1px 2px ${mapLabelColors.textShadow}, 0 0 4px ${mapLabelColors.textShadow}`;
             }
-            card.textContent = [label.name, ...label.priceLines].join('\n');
-            const status = document.createElement(hasPrices ? 'span' : 'em');
-            status.textContent = label.coverage;
-            card.append('\n', status);
+            if (pending) {
+              card.setAttribute('aria-busy', 'true');
+              card.style.cssText += 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;';
+              const name = document.createElement('span');
+              name.textContent = label.name;
+              name.style.cssText = 'max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+              card.append(name);
+              for (const width of label.skeletonWidths) {
+                const bar = document.createElement('span');
+                bar.setAttribute('aria-hidden', 'true');
+                bar.style.cssText = `flex:none;width:${width}%;height:7px;border-radius:4px;background:${mapLabelColors.skeleton.bar};`;
+                card.append(bar);
+              }
+            } else {
+              card.textContent = [label.name, ...label.priceLines].join('\n');
+              const status = document.createElement(hasPrices ? 'span' : 'em');
+              status.textContent = label.coverage;
+              card.append('\n', status);
+            }
             if (label.price.estimated || label.price.outdated) card.style.borderStyle = 'dashed';
             return { anchor: new google.maps.LatLng(label.anchor[1], label.anchor[0]), element: card };
           });

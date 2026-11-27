@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Show skeletons in map price cards while waiting for fuel prices on web and mobile.
+
 ## [1.3.0] - 2026-11-27
 
 ### Added

@@ -34,7 +34,7 @@ export type PriceFeed = {
 export type Viewport = { bounds: Bounds; zoom: number; width: number; height: number };
 export type MapSnapshot = {
   index: GeographicIndex | null; cities: City[]; features: Feature[];
-  prices: ReadonlyMap<string, CityPrices>; viewport: Viewport | null;
+  prices: ReadonlyMap<string, CityPrices>; pendingPriceIds: ReadonlySet<string>; viewport: Viewport | null;
   loading: boolean; detail: boolean; error: string | null;
 };
 export type LocationFocus = { latitude: number; longitude: number; request: number; areaBounds?: Bounds };

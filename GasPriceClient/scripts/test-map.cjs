@@ -195,21 +195,32 @@ function lifecycle(h, initial = {}) {
   const bacoorViewport = { ...viewport, bounds: bacoor.bbox };
   const panDavao = index.cities.find(city => city.name === 'City of Davao');
   const davaoViewport = { ...viewport, bounds: panDavao.bbox };
+  const panningController = panningUI.controllers[0];
+  const panLabels = panning.load('labels').placeLabels;
   panCamera.onIdle(viewport);
+  assert.equal(panLabels(panningController.snapshot, imus.id)[0].skeletonWidths.length, 3, 'The rectangle appears before the first request');
   await panning.advance(750);
   await panning.advance(800);
   const settledFiles = panning.calls.files.length;
   panCamera.onMove(manilaViewport);
+  assert.equal(panLabels(panningController.snapshot, manila.id)[0].accessibilityLabel, `${manila.name}, loading fuel prices`);
   await panning.flush();
   assert.equal(panning.calls.prices.length, 2, 'The first uncached viewport loads before the camera settles');
   assert(panning.calls.prices[1].includes(manila.id));
   assert.equal(panning.calls.files.length, settledFiles, 'Dragging does not start boundary downloads');
+  panCamera.onMove(davaoViewport);
+  await panning.advance(100);
+  assert(panningController.snapshot.pendingPriceIds.has(panDavao.id), 'A new rectangle appears while a previous request is in flight');
+  assert.equal(panning.calls.prices.length, 2);
+  panCamera.onMove(manilaViewport);
+  await panning.advance(100);
   dragGate.resolve();
   await panning.flush();
-  assert(panningUI.controllers[0].snapshot.prices.has(manila.id), 'New prices publish before releasing the drag');
+  assert(panningController.snapshot.prices.has(manila.id), 'New prices publish before releasing the drag');
+  assert.equal(panLabels(panningController.snapshot, manila.id)[0].skeletonWidths.length, 0, 'Cached prices replace the skeleton');
   panCamera.onMove(viewport);
   panCamera.onMove(bacoorViewport);
-  await panning.advance(799);
+  await panning.advance(599);
   assert.equal(panning.calls.prices.length, 2);
   await panning.advance(1);
   assert.deepEqual(panningUI.controllers[0].snapshot.viewport.bounds, bacoor.bbox, 'The throttle uses the latest viewport');
@@ -227,7 +238,7 @@ function lifecycle(h, initial = {}) {
   await panning.advance(750);
   assert(panning.calls.prices[panPriceRequests].includes(panDavao.id), 'Idle loads prices for a viewport skipped during the drag');
   panningUI.dispose();
-  console.log('PASS leading drag price fetch, throttled trailing viewport, cached reuse and settled reconciliation');
+  console.log('PASS immediate price skeletons, leading drag fetch, throttled requests and settled reconciliation');
 
   const gate = deferred();
   const slow = harness({ prices: (_version, ids, feed) => gate.promise.then(() => feed(ids)) });
@@ -281,7 +292,15 @@ function lifecycle(h, initial = {}) {
   assert.equal(broken.calls.prices.length, priceAttempts, 'Boundary retries reuse valid price data');
   partial.dispose();
   const invalid = harness({ prices: (_version, ids, feed) => ({ ...feed(ids), gasolineGrade: 'RON 95' }) });
-  await invalid.cache.loadIndex(); await assert.rejects(invalid.cache.loadPrices([imus]));
+  const invalidController = new invalid.Controller(invalid.cache);
+  invalidController.setAuthenticated(true); await invalidController.start();
+  invalidController.idle(viewport, true);
+  assert(invalidController.snapshot.pendingPriceIds.has(imus.id));
+  await invalid.advance(0);
+  assert.equal(invalidController.snapshot.pendingPriceIds.size, 0, 'A failed request clears the skeleton during backoff');
+  assert(invalidController.snapshot.error);
+  await assert.rejects(invalid.cache.loadPrices([imus]));
+  invalidController.dispose();
   const scoped = harness({ prices: (_version, ids, feed) => { const result = feed(ids); result.items[0].scope = 'province'; return result; } });
   await scoped.cache.loadIndex(); await assert.rejects(scoped.cache.loadPrices([imus]));
   const missing = harness({ prices: (_version, ids, feed) => { const result = feed(ids); result.items.forEach(item => Object.assign(item, { status: 'unavailable', gasoline: null, diesel: null })); return result; } });
@@ -455,7 +474,7 @@ function lifecycle(h, initial = {}) {
   const price = h.feed([city.id]).items[0];
   const snap = { index: { ...index, bbox: [-180, -80, 180, 80], cities: [city, { ...city, id: 'b' }] }, detail: true, viewport: { bounds: [0, 0, 10, 10], width: 1000, height: 800, zoom: 12 },
     cities: [city, { ...city, id: 'b' }], features: [{ ...feature, id: 'a' }, { ...feature, id: 'b' }],
-    prices: new Map([['a', price], ['b', { ...price, cityId: 'b' }]]) };
+    pendingPriceIds: new Set(), prices: new Map([['a', price], ['b', { ...price, cityId: 'b' }]]) };
   const labels = placeLabels(snap, 'b');
   assert.equal(labels[0].id, 'b', 'Selection has collision priority');
   assert.equal(labels.length, 2, 'Move the second box when another position fits');
@@ -464,7 +483,7 @@ function lifecycle(h, initial = {}) {
   const clipped = { bounds: [120.925, 14.36, 120.97, 14.393], width: 480, height: 500, zoom: 14 };
   assert(geometry.project(imus.labelPoint, clipped)[1] < 0, 'Original Imus label is offscreen after panning');
   const imusFeature = h.cache.feature(imus.id);
-  const imusSnapshot = { index, detail: true, viewport: clipped, cities: [imus], features: [imusFeature],
+  const imusSnapshot = { index, detail: true, viewport: clipped, cities: [imus], features: [imusFeature], pendingPriceIds: new Set(),
     prices: new Map([[imus.id, h.feed([imus.id]).items[0]]]) };
   const [relocated] = placeLabels(imusSnapshot, null);
   assert(relocated, 'A visible part of Imus still has room for both price ranges');
@@ -477,6 +496,10 @@ function lifecycle(h, initial = {}) {
   assert.equal(withoutPrices.accessibilityLabel, `${withoutPrices.name}, No recent report`);
   assert.equal(withoutPrices.height, relocated.height - 32, 'Omitting both price rows shrinks the card');
   const imusPrices = imusSnapshot.prices.get(imus.id);
+  const [noReport] = placeLabels({ ...imusSnapshot, prices: new Map([[imus.id,
+    { ...imusPrices, status: 'unavailable', gasoline: null, diesel: null }]]) }, imus.id);
+  assert.equal(noReport.skeletonWidths.length, 0, 'A confirmed empty report has no skeleton');
+  assert.equal(noReport.coverage, 'No recent report');
   for (const [missing, fuel] of [['gasoline', 'Diesel'], ['diesel', 'RON 91']]) {
     const [partial] = placeLabels({ ...imusSnapshot, prices: new Map([[imus.id, { ...imusPrices, [missing]: null }]]) }, imus.id);
     assert.equal(partial.priceLines.length, 1);
