@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Show a GasUp copyright footer on Fuel Prices, Weekly Changes, and news pages.
+
 ### Changed
 - Remove the details below the fuel map and make map credits available above it.
 - Give the desktop navigation header a neutral dark gray background to distinguish it from the blue news label and charcoal page body.

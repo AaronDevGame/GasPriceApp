@@ -4,6 +4,7 @@ import { ActivityIndicator, Button, Platform, StyleSheet, useWindowDimensions, V
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { AppFooter } from '@/components/app-footer';
 import { RefreshableScrollView } from '@/components/refreshable-scroll-view';
 import { ThemedView } from '@/components/themed-view';
 import { subscribeToForeground } from '@/auth/foreground';
@@ -60,6 +61,7 @@ export default function NewsScreen() {
           {items.map(item => <FuelNewsCard key={item.id} item={item} />)}
           {cursor && <Button title="Load older news" onPress={() => void load(cursor)} disabled={loading} />}
         </View>
+        <AppFooter />
       </RefreshableScrollView>
     </SafeAreaView>
   </ThemedView>;
@@ -67,7 +69,7 @@ export default function NewsScreen() {
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  scroll: { padding: 20, alignItems: 'center' },
+  scroll: { flexGrow: 1, padding: 20, alignItems: 'center' },
   content: { width: '100%', maxWidth: 1160, gap: 20, paddingVertical: 12 },
   accent: { color: '#76B4FF' },
   title: { fontSize: 28, lineHeight: 36, fontWeight: '600' },
