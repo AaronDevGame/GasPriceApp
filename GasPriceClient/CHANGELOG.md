@@ -13,6 +13,7 @@
 - Highlight the selected map card with a teal fill and a solid mint border, and show nozzle icons beside its fuel price ranges.
 
 ### Fixed
+- Keep the full fuel price card at the map edge while more than 20% of its area is visible.
 - Bring fuel map arrows closer to the edges and use the same spacing at the bottom as on the other sides.
 - Update web fuel map cards during drags while keeping visible cards anchored where space allows. Keep cards inside the map margins as the camera redraws and restore their preferred positions as soon as they fit. Keep regular cards separated and stable as cards touching the map margin pass behind them.
 

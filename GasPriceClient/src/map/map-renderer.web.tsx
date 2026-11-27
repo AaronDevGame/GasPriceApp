@@ -11,6 +11,10 @@ import { edgeMarker, edgeMarkerStatus, type LabelRectangle, type MapLabel, mapLa
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
+const geographicBounds = (bounds: google.maps.LatLngBounds): Bounds => {
+  const { west, south, east, north } = bounds.toJSON();
+  return [west, south, east, north];
+};
 const nozzleUris = {
   gasoline: Asset.fromModule(fuelNozzles.gasoline).uri,
   diesel: Asset.fromModule(fuelNozzles.diesel).uri,
@@ -154,9 +158,10 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
           const center = map.getCenter();
           const paneCenter = center && projection.fromLatLngToDivPixel(center);
           const containerCenter = center && projection.fromLatLngToContainerPixel(center);
-          if (!paneCenter || !containerCenter) return;
+          const visible = map.getBounds();
+          if (!paneCenter || !containerCenter || !visible) return;
           const host = map.getDiv();
-          const viewport = { width: host.clientWidth, height: host.clientHeight };
+          const viewport = { bounds: geographicBounds(visible), width: host.clientWidth, height: host.clientHeight };
           const left = paneCenter.x - containerCenter.x;
           const top = paneCenter.y - containerCenter.y;
           const projectPoint = ([lng, lat]: Point): Point | null => {
@@ -280,8 +285,7 @@ export default function MapRenderer(props: MapRendererProps) {
       const readViewport = (): Viewport | undefined => {
         const visible = instance.getBounds();
         if (!visible || !host.current?.clientWidth || !host.current.clientHeight || !active) return;
-        const sw = visible.getSouthWest(), ne = visible.getNorthEast();
-        return { bounds: [sw.lng(), sw.lat(), ne.lng(), ne.lat()], zoom: instance.getZoom() ?? 12,
+        return { bounds: geographicBounds(visible), zoom: instance.getZoom() ?? 12,
           width: host.current.clientWidth, height: host.current.clientHeight };
       };
       listeners.push(instance.addListener('bounds_changed', () => {

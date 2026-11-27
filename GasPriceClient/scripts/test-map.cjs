@@ -516,7 +516,8 @@ function lifecycle(h, initial = {}) {
   assert.deepEqual(updatedDuringPan.priceRows, relocated.priceRows);
   assert.equal(updatedDuringPan.skeletonWidths.length, 0);
   const [longitude, latitude] = imus.labelPoint;
-  const edgeViewport = { ...clipped, bounds: [longitude - 0.039, latitude - 0.015, longitude + 0.001, latitude + 0.015] };
+  const edgeViewport = { ...clipped, bounds: [longitude - 0.06, latitude - 0.015,
+    imus.bbox[0] + (imus.bbox[2] - imus.bbox[0]) * 0.1, latitude + 0.015] };
   const [edgeCard] = mapLabels({ ...imusSnapshot, viewport: edgeViewport }, imus.id);
   const edgePosition = webLabelPosition(edgeCard, edgeViewport, point => geometry.project(point, edgeViewport), [], 0, 1);
   assert.equal(edgePosition.width, edgeMarker.diameter, 'Use a compact circle at the right edge');
@@ -536,16 +537,47 @@ function lifecycle(h, initial = {}) {
   assert.equal(returned.x, preferredPosition[0], 'The overlay returns to the preferred position even before the next price snapshot');
   assert.equal(returned.y, preferredPosition[1]);
   assert.equal(returned.tailAngle, undefined, 'Restore the normal card before the next price snapshot');
+  const batangas = index.cities.find(city => city.name === 'Batangas City');
+  const batangasFeature = JSON.parse(fs.readFileSync(path.join(dataRoot, batangas.fileId + '.geojson'), 'utf8'))
+    .features.find(item => item.id === batangas.id);
+  const [west, south, east, north] = batangas.bbox;
+  const batangasCard = { ...edgeCard, bounds: batangas.bbox, labelPoint: batangas.labelPoint, geometry: batangasFeature.geometry };
+  const batangasFrame = right => ({ ...clipped, bounds: [west - (east - west), south, right, north] });
+  for (const [right, circle] of [
+    [batangas.labelPoint[0], false], // About 66% of the city.
+    [west + (east - west) * 0.25, true], // About 17% of the city, despite 25% of its bounding box.
+    [west + (east - west) * 0.30, false], // About 25% of the city.
+  ]) {
+    const frame = batangasFrame(right);
+    const position = webLabelPosition(batangasCard, frame, point => geometry.project(point, frame), [], 0, 1);
+    assert(position.edgePushed, 'Batangas reaches the card margin in both views');
+    assert.equal(position.tailAngle !== undefined, circle, 'Use the live visible boundary to switch between full card and circle');
+  }
+  const areaBox = [0, 0, 10, 10];
+  const sampleGeometry = { type: 'MultiPolygon', coordinates: [
+    [[[0, 0], [8, 0], [8, 10], [0, 10], [0, 0]], [[0.5, 1], [0.5, 9], [1.5, 9], [1.5, 1], [0.5, 1]]],
+    [[[9, 0], [10, 0], [10, 10], [9, 10], [9, 0]]],
+  ] };
+  assert.equal(geometry.visibleAreaFraction(areaBox, [0, 0, 2, 10]), 0.2, 'Approximate visibility with bounds while boundary data is missing');
+  assert(Math.abs(geometry.visibleAreaFraction(areaBox, [0, 0, 2, 10], sampleGeometry) - 12 / 82) < 1e-9,
+    'Subtract holes and include all islands when measuring visible area');
+  function framePosition(label, projectFrame, placed, priority, count, offset) {
+    const [left, top] = projectFrame([0, 0]);
+    const frame = { ...panned, bounds: [-left, top - panned.height, panned.width - left, top] };
+    const [x, y] = label.labelPoint, [west, screenBottom, east, screenTop] = label.bounds;
+    return webLabelPosition({ ...label, geometry: undefined, labelPoint: [x, -y], bounds: [west, -screenBottom, east, -screenTop] },
+      frame, ([x, y]) => projectFrame([x, -y]), placed, priority, count, offset);
+  }
   const higherPriority = { ...edgeCard, width: 130, height: 60, labelPoint: [100, 150], bounds: [65, 160, 135, 140] };
   const lowerPriority = { ...edgeCard, width: 130, height: 60, labelPoint: [260, 150], bounds: [255, 155, 265, 145] };
   for (const offset of [0, -27, -52, -60, -20]) {
     const projectFrame = ([x, y]) => [x + offset, y];
-    const first = webLabelPosition(higherPriority, panned, projectFrame, [], 0, 2);
-    const second = webLabelPosition(lowerPriority, panned, projectFrame, first.edgePushed ? [] : [first], 1, 2);
+    const first = framePosition(higherPriority, projectFrame, [], 0, 2);
+    const second = framePosition(lowerPriority, projectFrame, first.edgePushed ? [] : [first], 1, 2);
     const atEdge = 100 + offset <= 73;
     if (atEdge) {
-      assert(first.x > 100 + offset && Math.abs(Math.abs(first.tailAngle) - Math.PI) < 0.001,
-        'The left edge marker aims back toward its geographic anchor');
+      assert.equal(first.x, 73, 'Clamp the full card while its area is still visible');
+      assert.equal(first.tailAngle, undefined);
     } else {
       assert.equal(first.x, 100 + offset);
     }
@@ -554,34 +586,34 @@ function lifecycle(h, initial = {}) {
     assert.equal(first.zIndex < second.zIndex, atEdge, 'Layer an edge-pushed card behind a card at its preferred position');
   }
   const foregroundCard = { ...higherPriority, labelPoint: [150, 150], bounds: [140, 160, 160, 140] };
-  const foregroundPosition = webLabelPosition(foregroundCard, panned, point => point, [], 0, 2);
-  assert.equal(webLabelPosition(lowerPriority, panned, point => point, [foregroundPosition], 1, 2), null,
+  const foregroundPosition = framePosition(foregroundCard, point => point, [], 0, 2);
+  assert.equal(framePosition(lowerPriority, point => point, [foregroundPosition], 1, 2), null,
     'Two regular cards cannot overlap when there is no alternative position');
   const roomToShift = { ...lowerPriority, bounds: [255, 155, 310, 145] };
-  const shifted = webLabelPosition(roomToShift, panned, point => point, [foregroundPosition], 1, 2);
+  const shifted = framePosition(roomToShift, point => point, [foregroundPosition], 1, 2);
   assert(shifted.x >= foregroundPosition.x + 138 && !shifted.edgePushed, 'A regular card can move aside and stay in front');
   const nearRight = { ...higherPriority, labelPoint: [398, 150], bounds: [390, 160, 410, 140] };
   const neighbor = { ...lowerPriority, labelPoint: [286, 150], bounds: [232, 155, 318, 145] };
-  const rightPosition = webLabelPosition(nearRight, panned, point => point, [], 0, 2);
-  const neighborPosition = webLabelPosition(neighbor, panned, point => point, [rightPosition], 1, 2);
+  const rightPosition = framePosition(nearRight, point => point, [], 0, 2);
+  const neighborPosition = framePosition(neighbor, point => point, [rightPosition], 1, 2);
   assert(neighborPosition.offset, 'Before the edge, the neighboring card shifts to avoid the overlap');
   const slideRight = ([x, y]) => [x + 12, y];
-  const rightAtEdge = webLabelPosition(nearRight, panned, slideRight, [], 0, 2);
-  const neighborAtEdge = webLabelPosition(neighbor, panned, slideRight, [], 1, 2, neighborPosition.offset);
+  const rightAtEdge = framePosition(nearRight, slideRight, [], 0, 2);
+  const neighborAtEdge = framePosition(neighbor, slideRight, [], 1, 2, neighborPosition.offset);
   assert(rightAtEdge.edgePushed && neighborAtEdge.zIndex > rightAtEdge.zIndex);
   assert.equal(neighborAtEdge.x, neighborPosition.x + 12, 'The neighbor follows the map without snapping when the other card reaches the edge');
   assert.equal(neighborAtEdge.y, neighborPosition.y);
-  const secondEdge = webLabelPosition(higherPriority, panned, ([x, y]) => [x - 60, y], [], 1, 2);
-  const firstEdge = webLabelPosition(higherPriority, panned, ([x, y]) => [x - 60, y], [], 0, 2);
+  const secondEdge = framePosition(higherPriority, ([x, y]) => [x - 60, y], [], 1, 2);
+  const firstEdge = framePosition(higherPriority, ([x, y]) => [x - 60, y], [], 0, 2);
   assert(firstEdge.edgePushed && secondEdge.edgePushed && firstEdge.zIndex > secondEdge.zIndex,
     'Edge cards can overlap in their existing priority order');
   for (const [anchor, bounds, direction] of [
-    [[-20, 240], [-30, 270, 20, 200], [-1, 0]],
-    [[240, -20], [200, 20, 270, -30], [0, -1]],
-    [[240, 530], [200, 550, 270, 470], [0, 1]],
+    [[-20, 240], [-80, 270, 20, 200], [-1, 0]],
+    [[240, -20], [200, 20, 270, -80], [0, -1]],
+    [[240, 530], [200, 570, 270, 490], [0, 1]],
     [[-30, -20], [-45, 20, 30, -30], [-1, -1]],
   ]) {
-    const marker = webLabelPosition({ ...higherPriority, labelPoint: anchor, bounds }, panned, point => point, [], 0, 1);
+    const marker = framePosition({ ...higherPriority, labelPoint: anchor, bounds }, point => point, [], 0, 1);
     const dx = anchor[0] - marker.x, dy = anchor[1] - marker.y;
     assert.deepEqual([Math.sign(dx), Math.sign(dy)], direction);
     assert(Math.abs(Math.cos(marker.tailAngle) - dx / Math.hypot(dx, dy)) < 0.001 &&

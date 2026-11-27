@@ -8,7 +8,7 @@ import { fuelNozzles } from '@/fuel/nozzles';
 
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, FUEL_CARD_PAN_DURATION_MS, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
-import { edgeLabelPosition, edgeMarker, edgeMarkerStatus, mapLabelColors, mapLabelNozzle, placeLabels } from './labels';
+import { clampLabelCenter, edgeLabelPosition, edgeMarker, edgeMarkerStatus, mapLabelColors, mapLabelNozzle, placeLabels } from './labels';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const coordinate = ([longitude, latitude]: Point) => ({ latitude, longitude });
@@ -181,15 +181,15 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {labels.map((label, priority) => {
         if (!labelViewport || (liveViewport && !intersects(label.bounds, liveViewport.bounds))) return null;
-        const [x, y] = liveViewport ? project(label.anchor, liveViewport) : [label.x, label.y];
-        const preferred = project(label.labelPoint, labelViewport);
-        const regular = { x, y, width: label.width, height: label.height };
-        const edge = edgeLabelPosition(preferred, { ...regular, x: preferred[0], y: preferred[1] }, labelViewport) ??
-          edgeLabelPosition(preferred, regular, labelViewport);
+        const { width: cardWidth, height: cardHeight } = label;
+        const [x, y] = liveViewport
+          ? clampLabelCenter(project(label.anchor, liveViewport), liveViewport, cardWidth, cardHeight)
+          : [label.x, label.y];
+        const regular = { x, y, width: cardWidth, height: cardHeight };
+        const edge = edgeLabelPosition(label, project(label.labelPoint, labelViewport), regular, labelViewport);
         const position = edge ?? regular;
         const { width, height } = position;
         const left = position.x - width / 2, top = position.y - height / 2;
-        if (liveViewport && (left + width < 0 || left > size.width || top + height < 0 || top > size.height)) return null;
         const highlighted = label.id === selected;
         const hasPrices = label.priceRows.length > 0;
         const pending = label.skeletonWidths.length > 0;

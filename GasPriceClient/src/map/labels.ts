@@ -1,6 +1,6 @@
-import { boundsCenter, pointAtPixel, project } from './geometry';
+import { boundsCenter, pointAtPixel, project, visibleAreaFraction } from './geometry';
 import { areaPrices, mapLevel, visibleAreas } from './hierarchy';
-import type { Bounds, CityPrices, MapSnapshot, Point, PriceRange, Viewport } from './types';
+import type { Bounds, CityPrices, MapSnapshot, Point, PolygonGeometry, PriceRange, Viewport } from './types';
 
 export const mapLabelColors = {
   selected: { background: '#116453', border: '#92F4C8' },
@@ -46,25 +46,29 @@ export type MapLabel = {
   id: string; name: string; priceRows: { fuel: typeof mapFuels[number]; text: string; edgeText: string }[];
   skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
   center: Point; labelPoint: Point; bounds: Bounds; width: number; height: number; fontSize: number;
+  geometry?: PolygonGeometry;
 };
 export type LabelRectangle = { x: number; y: number; width: number; height: number };
-type LabelViewport = Pick<Viewport, 'width' | 'height'>;
+type LabelSize = Pick<Viewport, 'width' | 'height'>;
+type LabelViewport = Pick<Viewport, 'width' | 'height' | 'bounds'>;
 type EdgeLabelPosition = LabelRectangle & { tailAngle: number };
 const cardInset = 8;
 const edgeMarkerInset = 4;
-export function clampLabelCenter([x, y]: Point, viewport: LabelViewport,
+const edgeMarkerMaxVisible = 0.2;
+export function clampLabelCenter([x, y]: Point, viewport: LabelSize,
   width: number, height: number, inset = cardInset): Point {
   return [
     Math.max(inset + width / 2, Math.min(x, viewport.width - inset - width / 2)),
     Math.max(inset + height / 2, Math.min(y, viewport.height - inset - height / 2)),
   ];
 }
-function touchesCardMargin([x, y]: Point, viewport: LabelViewport, width: number, height: number) {
+function touchesCardMargin([x, y]: Point, viewport: LabelSize, width: number, height: number) {
   return x <= cardInset + width / 2 || x >= viewport.width - cardInset - width / 2 ||
     y <= cardInset + height / 2 || y >= viewport.height - cardInset - height / 2;
 }
 
-export function edgeLabelPosition(preferred: Point, position: LabelRectangle, viewport: LabelViewport): EdgeLabelPosition | undefined {
+export function edgeLabelPosition(label: MapLabel, preferred: Point, position: LabelRectangle,
+  viewport: LabelViewport): EdgeLabelPosition | undefined {
   const { x, y, width, height } = position;
   const horizontal = x <= cardInset + width / 2 ? -1 : x >= viewport.width - cardInset - width / 2 ? 1 : 0;
   const vertical = y <= cardInset + height / 2 ? -1 : y >= viewport.height - cardInset - height / 2 ? 1 : 0;
@@ -72,6 +76,7 @@ export function edgeLabelPosition(preferred: Point, position: LabelRectangle, vi
   const { diameter, tailLength, tailOverlap } = edgeMarker;
   const footprint = diameter + 2 * (tailLength - tailOverlap);
   if (viewport.width < footprint + 2 * edgeMarkerInset || viewport.height < footprint + 2 * edgeMarkerInset) return;
+  if (visibleAreaFraction(label.bounds, viewport.bounds, label.geometry) > edgeMarkerMaxVisible) return;
 
   // Pin to the touched margin, leaving room for the tail even when the anchor still fits on screen.
   const [px, py] = preferred;
@@ -133,7 +138,7 @@ export function webLabelPosition(label: MapLabel, viewport: LabelViewport, proje
   const [x, y] = clampLabelCenter(preferred, viewport, width, height);
   const zIndex = cardCount - priority;
   if (touchesCardMargin([x, y], viewport, width, height)) {
-    const edge = edgeLabelPosition(preferred, { x, y, width, height }, viewport);
+    const edge = edgeLabelPosition(label, preferred, { x, y, width, height }, viewport);
     return edge ? { ...edge, zIndex, edgePushed: true } : { x, y, width, height, zIndex, edgePushed: true };
   }
   let position: LabelRectangle | null = null;
@@ -148,7 +153,7 @@ export function webLabelPosition(label: MapLabel, viewport: LabelViewport, proje
   position ??= findLabelPosition(label, viewport, projected, placed);
   if (!position) return null;
   const edgePushed = touchesCardMargin([position.x, position.y], viewport, width, height);
-  const edge = edgePushed && edgeLabelPosition(preferred, position, viewport);
+  const edge = edgePushed && edgeLabelPosition(label, preferred, position, viewport);
   if (edge) return { ...edge, zIndex, edgePushed: true };
   const offset: Point = [position.x - preferred[0], position.y - preferred[1]];
   return { ...position, zIndex: edgePushed ? zIndex : zIndex + cardCount, edgePushed,
@@ -173,6 +178,7 @@ export function mapLabels(snapshot: MapSnapshot, selected: string | null): MapLa
   if (!snapshot.index) return [];
   const level = mapLevel(snapshot.index, viewport);
   const areas = visibleAreas(snapshot.index, viewport);
+  const boundaries = new Map(snapshot.features.map(feature => [feature.id, feature.geometry]));
   const sorted = areas.map(area => {
     const price = areaPrices(area, snapshot);
     const pending = !price.gasoline && !price.diesel && area.members.some(city => snapshot.pendingPriceIds.has(city.id));
@@ -208,7 +214,7 @@ export function mapLabels(snapshot: MapSnapshot, selected: string | null): MapLa
       ...priceRows.map(({ text }) => mapLabelNozzle.size + mapLabelNozzle.gap + textWidth(text)));
     const width = Math.min(viewport.width - 16, Math.max(pending ? 154 : 130, contentWidth + 18));
     return { id: area.id, priceRows, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
-      center: boundsCenter(area.bbox), labelPoint: area.labelPoint, bounds: area.bbox, width };
+      center: boundsCenter(area.bbox), labelPoint: area.labelPoint, bounds: area.bbox, width, geometry: boundaries.get(area.id) };
   });
 }
 
@@ -226,7 +232,7 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null) {
       ? { x, y, width: label.width, height: label.height }
       : findLabelPosition(label, viewport, projected, regular);
     if (!position) continue;
-    if (!edgeLabelPosition(projected.preferred, position, viewport)) regular.push(position);
+    if (!edgeLabelPosition(label, projected.preferred, position, viewport)) regular.push(position);
     placed.push({ ...label, ...position, anchor: pointAtPixel([position.x, position.y], viewport) });
   }
   return placed;

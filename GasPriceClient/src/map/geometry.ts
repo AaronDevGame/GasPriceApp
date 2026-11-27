@@ -42,6 +42,60 @@ export function featureIntersects(feature: Feature, box: Bounds) {
 export function containsFeature(feature: Feature, point: Point) {
   return polygons(feature.geometry).some(rings => insidePolygon(point, rings));
 }
+function ringArea(ring: Point[]) {
+  if (ring.length < 3) return 0;
+  const [x, y] = ring[0];
+  let area = 0;
+  for (let i = 2; i < ring.length; i++) {
+    const a = ring[i - 1], b = ring[i];
+    area += (a[0] - x) * (b[1] - y) - (a[1] - y) * (b[0] - x);
+  }
+  return Math.abs(area) / 2;
+}
+// Clip each ring against the four sides of the viewport before measuring its area.
+function clipRing(ring: Point[], view: Bounds) {
+  for (const side of [0, 1, 2, 3] as const) {
+    if (!ring.length) break;
+    const axis = side % 2, other = 1 - axis, limit = view[side];
+    const inside = (point: Point) => side < 2 ? point[axis] >= limit : point[axis] <= limit;
+    const clipped: Point[] = [];
+    let previous = ring[ring.length - 1], previousInside = inside(previous);
+    for (const point of ring) {
+      const pointInside = inside(point);
+      if (pointInside !== previousInside) {
+        const ratio = (limit - previous[axis]) / (point[axis] - previous[axis]);
+        const intersection: Point = [limit, limit];
+        intersection[other] = previous[other] + ratio * (point[other] - previous[other]);
+        clipped.push(intersection);
+      }
+      if (pointInside) clipped.push(point);
+      previous = point;
+      previousInside = pointInside;
+    }
+    ring = clipped;
+  }
+  return ring;
+}
+const boundaryAreas = new WeakMap<PolygonGeometry, number>();
+export function visibleAreaFraction(bounds: Bounds, view: Bounds, geometry?: PolygonGeometry) {
+  if (!intersects(bounds, view)) return 0;
+  if (inBox([bounds[0], bounds[1]], view) && inBox([bounds[2], bounds[3]], view)) return 1;
+  if (geometry) {
+    const parts = polygons(geometry);
+    const area = (clip?: Bounds) => parts.reduce((total, rings) => total + rings.reduce((part, ring, i) =>
+      part + (i === 0 ? 1 : -1) * ringArea(clip ? clipRing(ring, clip) : ring), 0), 0);
+    let total = boundaryAreas.get(geometry);
+    if (total === undefined) {
+      total = area();
+      boundaryAreas.set(geometry, total);
+    }
+    if (total > 0) return Math.max(0, Math.min(1, area(view) / total));
+  }
+  const width = bounds[2] - bounds[0], height = bounds[3] - bounds[1];
+  if (width <= 0 || height <= 0) return 1;
+  return (Math.min(bounds[2], view[2]) - Math.max(bounds[0], view[0])) / width *
+    (Math.min(bounds[3], view[3]) - Math.max(bounds[1], view[1])) / height;
+}
 export function world([lng, lat]: Point): Point {
   const sin = Math.sin(Math.max(-85, Math.min(85, lat)) * Math.PI / 180);
   return [(lng + 180) / 360, 0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)];
