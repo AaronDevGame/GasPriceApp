@@ -1,4 +1,4 @@
-import { MapDataCache, MapRequestFailure, mapCache } from './cache';
+import { MapDataCache, MapRequestFailure, mapCache, priceRequestInterval } from './cache';
 import { areaBoundaries } from './area-boundaries';
 import { MAX_DETAIL_CITIES } from './geometry';
 import { mapLevel, visibleAreas } from './hierarchy';
@@ -9,6 +9,10 @@ export class MapController {
   private listeners = new Set<() => void>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private expiryTimer: ReturnType<typeof setTimeout> | undefined;
+  private motionTimer: ReturnType<typeof setTimeout> | undefined;
+  private motionViewport: Viewport | undefined;
+  private motionPriceFlight: Promise<void> | undefined;
+  private motionUpdateAt = 0;
   private retryAt = 0;
   private active = true;
   private moving = false;
@@ -29,7 +33,7 @@ export class MapController {
   setActive(value: boolean) {
     if (value === this.active || this.disposed) return false;
     this.active = value;
-    if (!value) { this.move(); this.update({ loading: false }); }
+    if (!value) { this.cancelViewportWork(); this.update({ loading: false }); }
     else { this.moving = false; this.publish(); this.scheduleRefresh(); }
     return value;
   }
@@ -60,14 +64,47 @@ export class MapController {
     }
     this.scheduleRefresh();
   }
-  move = () => {
-    ++this.generation; this.moving = true;
+  private cancelViewportWork() {
+    ++this.generation;
     clearTimeout(this.timer); this.timer = undefined;
     clearTimeout(this.expiryTimer); this.expiryTimer = undefined;
+    clearTimeout(this.motionTimer); this.motionTimer = undefined;
+    this.motionViewport = undefined;
+    this.motionUpdateAt = 0;
+  }
+  move = (viewport?: Viewport) => {
+    if (!this.active || this.disposed) return;
+    if (!this.moving) {
+      this.cancelViewportWork();
+      this.moving = true;
+    }
+    if (!viewport || !this.snapshot.viewport) return;
+    this.motionViewport = viewport;
+    if (this.motionTimer !== undefined || this.motionPriceFlight) return;
+    const delay = this.motionUpdateAt - Date.now();
+    if (delay > 0) this.motionTimer = setTimeout(this.updateMovingViewport, delay);
+    else this.updateMovingViewport();
+  };
+  private updateMovingViewport = () => {
+    this.motionTimer = undefined;
+    const viewport = this.motionViewport;
+    this.motionViewport = undefined;
+    const index = this.cache.index;
+    if (!viewport || !index) return;
+    this.motionUpdateAt = Date.now() + priceRequestInterval;
+    this.publish(viewport);
+    if (this.authenticated) {
+      const members = visibleAreas(index, viewport).flatMap(area => area.members);
+      // The cache records backoff. The settled load reports any failure still relevant to the final view.
+      this.motionPriceFlight = this.cache.loadPrices(members).catch(() => {}).finally(() => {
+        this.motionPriceFlight = undefined;
+        if (this.motionViewport) this.move(this.motionViewport);
+      });
+    }
   };
   idle = (viewport: Viewport, immediate = false) => {
     if (this.disposed) return;
-    this.move(); this.moving = false;
+    this.cancelViewportWork(); this.moving = false;
     const generation = this.generation;
     this.update({ viewport, error: null });
     this.publish(); // Cached Imus data appears synchronously, before the debounce/network work.
@@ -145,7 +182,7 @@ export class MapController {
     if (!this.active || this.disposed || !this.snapshot.viewport) return Promise.resolve();
     if (this.refreshFlight?.generation === this.generation) return this.refreshFlight.promise;
     this.refreshPrices = true;
-    this.move(); this.moving = false;
+    this.cancelViewportWork(); this.moving = false;
     const generation = this.generation;
     const promise = this.load(generation, true).finally(() => {
       if (this.refreshFlight?.promise === promise) this.refreshFlight = null;
@@ -153,9 +190,8 @@ export class MapController {
     this.refreshFlight = { generation, promise };
     return promise;
   };
-  private publish() {
+  private publish(viewport = this.snapshot.viewport) {
     if (this.disposed) return;
-    const viewport = this.snapshot.viewport;
     const candidates = viewport ? this.cache.cities(viewport) : [];
     const cities = viewport ? this.cache.cities(viewport, true) : [];
     const level = viewport && this.cache.index ? mapLevel(this.cache.index, viewport) : 'country';
@@ -168,7 +204,7 @@ export class MapController {
       ? areas.flatMap(area => outlines.get(area.id) ?? [])
       : (detail ? cities : selected?.members ?? []).flatMap(city => this.cache.feature(city.id) ?? []);
     const previous = this.snapshot.features;
-    this.update({ index: this.cache.index, cities, detail,
+    this.update({ index: this.cache.index, viewport, cities, detail,
       features: previous.length === features.length && previous.every((f, i) => f === features[i]) ? previous : features,
       prices: new Map(this.authenticated ? members.flatMap(city => this.cache.price(city.id) ? [[city.id, this.cache.price(city.id)!] as const] : []) : []) });
   }
@@ -177,5 +213,5 @@ export class MapController {
     this.snapshot = { ...this.snapshot, ...patch };
     for (const listener of this.listeners) listener();
   }
-  dispose() { this.disposed = true; this.move(); this.unsubscribe(); this.listeners.clear(); }
+  dispose() { this.disposed = true; this.cancelViewportWork(); this.unsubscribe(); this.listeners.clear(); }
 }

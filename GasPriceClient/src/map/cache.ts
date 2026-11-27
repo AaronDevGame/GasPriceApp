@@ -5,6 +5,8 @@ import type { BoundaryFile, City, CityPrices, Feature, GeographicIndex, PriceFee
 type Api = typeof mapApi;
 const longRetryInterval = 6 * 60 * 60 * 1000;
 const refreshCoalesceInterval = 1100;
+// Leave a little room above the backend's 750 ms per-route cooldown.
+export const priceRequestInterval = 800;
 export class MapRequestFailure extends Error {
   constructor(public retryAt: number) { super('Map data temporarily unavailable'); }
 }
@@ -28,6 +30,7 @@ export class MapDataCache {
   private refreshedAt = new Map<string, number>();
   private listeners = new Set<() => void>();
   private epoch = 0;
+  private nextPriceRequestAt = 0;
   private session: string | null | undefined;
   private activeDownloads = 0;
   private waiters: (() => void)[] = [];
@@ -147,7 +150,13 @@ export class MapDataCache {
       const epoch = this.epoch;
       const requested = new Set(missing);
       // At most the entire Philippine index (1,642 IDs) in one HTTP request.
-      const flight = Promise.resolve().then(() => this.api.prices(version, missing)).then(feed => {
+      const flight = Promise.resolve().then(async () => {
+        while (epoch === this.epoch && this.now() < this.nextPriceRequestAt) {
+          await new Promise<void>(resolve => setTimeout(resolve, this.nextPriceRequestAt - this.now()));
+        }
+        if (epoch !== this.epoch) return;
+        this.nextPriceRequestAt = this.now() + priceRequestInterval;
+        const feed = await this.api.prices(version, missing);
         this.validatePrices(feed, version, requested);
         if (epoch !== this.epoch) return; // Logout/account change invalidates older authorized work.
         const generated = Date.parse(feed.generatedAtUtc);

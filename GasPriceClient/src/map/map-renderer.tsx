@@ -6,7 +6,7 @@ import MapView, { Polygon, PROVIDER_GOOGLE, type Region } from 'react-native-map
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { mapLabelColors, placeLabels } from './labels';
-import type { Bounds, MapRendererProps, Point } from './types';
+import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const coordinate = ([longitude, latitude]: Point) => ({ latitude, longitude });
 function ringBounds(ring: Point[]): Bounds {
@@ -50,7 +50,8 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
     labelFrame.current = null;
   }, []);
   const start = useCallback((region: Region) => {
-    ++sequence.current; onMove();
+    ++sequence.current;
+    let viewport: Viewport | undefined;
     if (region.latitudeDelta > 0 && region.longitudeDelta > 0) {
       const halfWidth = region.longitudeDelta / 2, halfHeight = region.latitudeDelta / 2;
       pendingBounds.current = [region.longitude - halfWidth, region.latitude - halfHeight,
@@ -59,7 +60,11 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         labelFrame.current = null;
         setLiveBounds(pendingBounds.current);
       });
+      if (size.width && size.height) {
+        viewport = { bounds: pendingBounds.current, zoom: fitZoom(pendingBounds.current, size.width, size.height, 0), ...size };
+      }
     }
+    onMove(viewport);
     const latitude = Math.max(bounds[1], Math.min(bounds[3], region.latitude));
     const longitude = Math.max(bounds[0], Math.min(bounds[2], region.longitude));
     // SDK 57 uses Fabric; the library's legacy setMapBoundaries can be a no-op there.
@@ -67,7 +72,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
     if (Math.abs(latitude - region.latitude) > 0.00001 || Math.abs(longitude - region.longitude) > 0.00001) {
       map.current?.setCamera({ center: { latitude, longitude }, pitch: 0, heading: 0 });
     }
-  }, [bounds, onMove]);
+  }, [bounds, onMove, size]);
   const settle = useCallback(async () => {
     if (!map.current || !size.width) return;
     const ticket = ++sequence.current;
@@ -155,7 +160,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       zIndex={highlighted ? 1 : 0} strokeColor={highlighted ? '#D38B00' : '#3F83BE'}
       fillColor={highlighted ? '#FFD16655' : '#348EF020'} />;
   }), [shapes, visibleBounds, selected, onSelect]);
-  // Keep the settled label layout while moving its geographic anchors with the camera.
+  // Keep geographic anchors moving between viewport updates from the controller.
   const labels = useMemo(() => placeLabels(snapshot, selected), [snapshot, selected]);
   const liveViewport = liveBounds && snapshot.viewport ? { ...snapshot.viewport, ...size, bounds: liveBounds } : null;
   return <View style={styles.fill} onLayout={event => {

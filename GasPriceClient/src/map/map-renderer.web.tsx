@@ -5,7 +5,7 @@ import { boundsCenter, cameraBounds, fitZoom, MAX_ZOOM, polygons } from './geome
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
 import { type MapLabel, mapLabelColors, placeLabels } from './labels';
-import type { Bounds, MapRendererProps } from './types';
+import type { Bounds, MapRendererProps, Viewport } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
 type LabelOverlay = google.maps.OverlayView & { setLabels(labels: MapLabel[], selected: string | null): void };
@@ -110,13 +110,17 @@ export default function MapRenderer(props: MapRendererProps) {
         latest.current.onSelect(label.id);
       });
       labels.setMap(instance); overlay.current = labels;
-      listeners.push(instance.addListener('bounds_changed', () => latest.current.onMove()));
-      listeners.push(instance.addListener('idle', () => {
+      const readViewport = (): Viewport | undefined => {
         const visible = instance.getBounds();
         if (!visible || !host.current?.clientWidth || !host.current.clientHeight || !active) return;
         const sw = visible.getSouthWest(), ne = visible.getNorthEast();
-        latest.current.onIdle({ bounds: [sw.lng(), sw.lat(), ne.lng(), ne.lat()], zoom: instance.getZoom() ?? 12,
-          width: host.current.clientWidth, height: host.current.clientHeight });
+        return { bounds: [sw.lng(), sw.lat(), ne.lng(), ne.lat()], zoom: instance.getZoom() ?? 12,
+          width: host.current.clientWidth, height: host.current.clientHeight };
+      };
+      listeners.push(instance.addListener('bounds_changed', () => latest.current.onMove(readViewport())));
+      listeners.push(instance.addListener('idle', () => {
+        const viewport = readViewport();
+        if (viewport) latest.current.onIdle(viewport);
       }));
       const updateSize = () => {
         const width = host.current?.clientWidth, height = host.current?.clientHeight;

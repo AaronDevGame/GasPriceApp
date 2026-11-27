@@ -44,5 +44,5 @@ export type MapRendererProps = {
   zoomFocus?: ZoomFocus | null;
   locationFocus?: LocationFocus | null;
   snapshot: MapSnapshot; selected: string | null; focusBounds?: Bounds | null; active?: boolean;
-  onMove(): void; onIdle(viewport: Viewport): void; onSelect(id: string): void;
+  onMove(viewport?: Viewport): void; onIdle(viewport: Viewport): void; onSelect(id: string): void;
 };

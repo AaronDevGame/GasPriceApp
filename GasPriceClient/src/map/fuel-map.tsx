@@ -103,7 +103,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
     updateActivity.current?.(isAppForeground());
   }, [eligible]);
   const onIdle = useCallback((viewport: Viewport) => { lastViewport.current = viewport; controller.current?.idle(viewport); }, []);
-  const onMove = useCallback(() => controller.current?.move(), []);
+  const onMove = useCallback((viewport?: Viewport) => controller.current?.move(viewport), []);
   const metroBounds = useMemo(() => snapshot.index ? metroManilaBounds(snapshot.index) : undefined, [snapshot.index]);
   const locationCity = location?.city;
   const locationProvince = location?.province;
