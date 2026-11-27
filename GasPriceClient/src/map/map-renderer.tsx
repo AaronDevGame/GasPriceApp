@@ -8,7 +8,7 @@ import { fuelNozzles } from '@/fuel/nozzles';
 
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, FUEL_CARD_PAN_DURATION_MS, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
-import { mapLabelColors, mapLabelNozzle, placeLabels } from './labels';
+import { edgeLabelPosition, edgeMarker, edgeMarkerStatus, mapLabelColors, mapLabelNozzle, placeLabels } from './labels';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const coordinate = ([longitude, latitude]: Point) => ({ latitude, longitude });
@@ -166,6 +166,7 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
   // Keep geographic anchors moving between viewport updates from the controller.
   const labels = useMemo(() => placeLabels(snapshot, selected), [snapshot, selected]);
   const liveViewport = liveBounds && snapshot.viewport ? { ...snapshot.viewport, ...size, bounds: liveBounds } : null;
+  const labelViewport = liveViewport ?? snapshot.viewport;
   return <View style={styles.fill} onLayout={event => {
     const { width, height } = event.nativeEvent.layout;
     setSize(old => old.width === width && old.height === height ? old : { width, height });
@@ -179,35 +180,49 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
     </MapView>
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {labels.map((label, priority) => {
+        if (!labelViewport || (liveViewport && !intersects(label.bounds, liveViewport.bounds))) return null;
         const [x, y] = liveViewport ? project(label.anchor, liveViewport) : [label.x, label.y];
-        const left = x - label.width / 2, top = y - label.height / 2;
-        if (liveViewport && (left + label.width < 0 || left > size.width || top + label.height < 0 || top > size.height)) return null;
+        const preferred = project(label.labelPoint, labelViewport);
+        const regular = { x, y, width: label.width, height: label.height };
+        const edge = edgeLabelPosition(preferred, { ...regular, x: preferred[0], y: preferred[1] }, labelViewport) ??
+          edgeLabelPosition(preferred, regular, labelViewport);
+        const position = edge ?? regular;
+        const { width, height } = position;
+        const left = position.x - width / 2, top = position.y - height / 2;
+        if (liveViewport && (left + width < 0 || left > size.width || top + height < 0 || top > size.height)) return null;
         const highlighted = label.id === selected;
         const hasPrices = label.priceRows.length > 0;
         const pending = label.skeletonWidths.length > 0;
         const colors = highlighted ? mapLabelColors.selected : pending ? mapLabelColors.skeleton : mapLabelColors.neutral;
         const muted = !highlighted && !hasPrices && !pending;
-        const priceStyle = [styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }];
+        const priceStyle = [styles.price, edge
+          ? { fontSize: edgeMarker.fontSize, lineHeight: 13 }
+          : { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }];
+        const coverage = edge ? (hasPrices ? '' : edgeMarkerStatus) : label.coverage;
         return <Pressable key={label.id} accessibilityRole="button" accessibilityLabel={label.accessibilityLabel}
           accessibilityState={{ busy: pending, selected: highlighted }}
           onPress={() => {
             map.current?.animateCamera({ center: coordinate(label.center) }, { duration: FUEL_CARD_PAN_DURATION_MS });
             onSelect(label.id);
           }}
-          style={[styles.label, { position: 'absolute', left, top, zIndex: labels.length - priority,
-            width: label.width, height: label.height, backgroundColor: colors.background, borderColor: colors.border }]}>
+          style={[styles.label, edge && styles.edgeLabel, { position: 'absolute', left, top,
+            zIndex: (edge ? 1 : 2) * labels.length - priority,
+            width, height, backgroundColor: colors.background, borderColor: colors.border }]}>
+          {edge && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { transform: [{ rotate: `${edge.tailAngle}rad` }] }]}>
+            <View style={[styles.edgeTail, { borderLeftColor: colors.border }]} />
+          </View>}
           <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, muted && styles.unavailableText]}>{label.name}</Text>
           {pending ? label.skeletonWidths.map(width => (
-            <View key={width} style={styles.skeletonRow}><View style={[styles.skeletonBar, { width: `${width}%` }]} /></View>
+            <View key={width} style={[styles.skeletonRow, edge && styles.edgeSkeletonRow]}><View style={[styles.skeletonBar, { width: `${width}%` }]} /></View>
           )) : <>
-            {label.priceRows.map(({ fuel, text }) => (
+            {label.priceRows.map(({ fuel, text, minimum }) => (
               <View key={fuel} style={styles.priceRow}>
                 <Image source={fuelNozzles[fuel]} style={styles.nozzle} contentFit="contain" accessible={false} />
-                <Text allowFontScaling={false} style={priceStyle}>{text}</Text>
+                <Text allowFontScaling={false} style={priceStyle}>{edge ? minimum : text}</Text>
               </View>
             ))}
-            {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, styles.coverage,
-              muted && styles.unavailableText, !hasPrices && styles.noReport]}>{label.coverage}</Text>}
+            {!!coverage && <Text allowFontScaling={false} style={[styles.price, styles.coverage, edge && styles.edgeCoverage,
+              muted && styles.unavailableText, !hasPrices && styles.noReport]}>{coverage}</Text>}
           </>}
         </Pressable>;
       })}
@@ -221,11 +236,20 @@ const styles = StyleSheet.create({
   fill: { flex: 1 }, unavailable: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   notice: { color: '#E8EDF5', textAlign: 'center' }, warning: { position: 'absolute', top: 10, left: 12, right: 12, padding: 10, backgroundColor: '#243142' },
   label: { height: 46, paddingVertical: 5, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  edgeLabel: { borderRadius: edgeMarker.diameter / 2, paddingHorizontal: 7 },
+  edgeTail: {
+    position: 'absolute', width: 0, height: 0, left: edgeMarker.diameter - edgeMarker.tailOverlap - 1,
+    top: edgeMarker.diameter / 2 - edgeMarker.tailHalfWidth - 1, borderLeftWidth: edgeMarker.tailLength,
+    borderTopWidth: edgeMarker.tailHalfWidth, borderBottomWidth: edgeMarker.tailHalfWidth,
+    borderTopColor: 'transparent', borderBottomColor: 'transparent',
+  },
   skeletonRow: { height: 16, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
+  edgeSkeletonRow: { height: 10 },
   skeletonBar: { height: 7, borderRadius: 4, backgroundColor: mapLabelColors.skeleton.bar },
   unavailableText: { color: mapLabelColors.unavailableText },
   noReport: { fontStyle: 'italic' },
   coverage: { fontSize: 10, textAlign: 'center' },
+  edgeCoverage: { lineHeight: 13 },
   retry: { padding: 10, marginTop: 6, borderRadius: 8, backgroundColor: '#354B64' },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: mapLabelNozzle.gap },
   nozzle: { width: mapLabelNozzle.size, height: mapLabelNozzle.size },

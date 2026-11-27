@@ -10,6 +10,8 @@ export const mapLabelColors = {
   textShadow: '#071322',
 };
 export const mapLabelNozzle = { size: 14, gap: 4 };
+export const edgeMarker = { diameter: 76, tailLength: 12, tailHalfWidth: 7, tailOverlap: 3, fontSize: 10 };
+export const edgeMarkerStatus = 'No recent\nreport';
 
 export const rangeText = (value: PriceRange | null) => value
   ? `₱${value.minPrice.toFixed(2)}–₱${value.maxPrice.toFixed(2)}/L` : '—';
@@ -38,12 +40,13 @@ export function priceLabel(price: ReturnType<typeof areaPrices>) {
 const fuelNames = { gasoline: 'RON 91', diesel: 'Diesel' };
 const mapFuels = ['gasoline', 'diesel'] as const;
 export type MapLabel = {
-  id: string; name: string; priceRows: { fuel: typeof mapFuels[number]; text: string }[];
+  id: string; name: string; priceRows: { fuel: typeof mapFuels[number]; text: string; minimum: string }[];
   skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
   center: Point; labelPoint: Point; bounds: Bounds; width: number; height: number; fontSize: number;
 };
 export type LabelRectangle = { x: number; y: number; width: number; height: number };
 type LabelViewport = Pick<Viewport, 'width' | 'height'>;
+type EdgeLabelPosition = LabelRectangle & { tailAngle: number };
 const cardInset = 8;
 const cardBottomInset = 36;
 export function clampLabelCenter([x, y]: Point, viewport: LabelViewport,
@@ -56,6 +59,29 @@ export function clampLabelCenter([x, y]: Point, viewport: LabelViewport,
 function touchesCardMargin([x, y]: Point, viewport: LabelViewport, width: number, height: number) {
   return x <= cardInset + width / 2 || x >= viewport.width - cardInset - width / 2 ||
     y <= cardInset + height / 2 || y >= viewport.height - cardBottomInset - height / 2;
+}
+
+export function edgeLabelPosition(preferred: Point, position: LabelRectangle, viewport: LabelViewport): EdgeLabelPosition | undefined {
+  const { x, y, width, height } = position;
+  const horizontal = x <= cardInset + width / 2 ? -1 : x >= viewport.width - cardInset - width / 2 ? 1 : 0;
+  const vertical = y <= cardInset + height / 2 ? -1 : y >= viewport.height - cardBottomInset - height / 2 ? 1 : 0;
+  if (!horizontal && !vertical) return;
+  const { diameter, tailLength, tailOverlap } = edgeMarker;
+  const footprint = diameter + 2 * (tailLength - tailOverlap);
+  if (viewport.width < footprint + 2 * cardInset || viewport.height < footprint + cardInset + cardBottomInset) return;
+
+  // Pin to the touched margin, leaving room for the tail even when the anchor still fits on screen.
+  const [px, py] = preferred;
+  const markerX = horizontal < 0 ? Math.min(cardInset + width / 2, px) + 1
+    : horizontal > 0 ? Math.max(viewport.width - cardInset - width / 2, px) - 1 : x;
+  const markerY = vertical < 0 ? Math.min(cardInset + height / 2, py) + 1
+    : vertical > 0 ? Math.max(viewport.height - cardBottomInset - height / 2, py) - 1 : y;
+  let [cx, cy] = clampLabelCenter([markerX, markerY], viewport, footprint, footprint);
+  if (cx === px && cy === py) {
+    [cx, cy] = clampLabelCenter([cx - horizontal, cy - vertical], viewport, footprint, footprint);
+  }
+  const tailAngle = Math.atan2(py - cy, px - cx);
+  return { x: cx, y: cy, width: diameter, height: diameter, tailAngle };
 }
 
 function overlapsLabel(x: number, y: number, width: number, height: number, placed: readonly LabelRectangle[]) {
@@ -96,7 +122,7 @@ function projectLabel(label: MapLabel, viewport: LabelViewport, projectPoint: (p
 
 export function webLabelPosition(label: MapLabel, viewport: LabelViewport, projectPoint: (point: Point) => Point | null,
   placed: readonly LabelRectangle[], priority: number, cardCount: number, previousOffset?: Point):
-  (LabelRectangle & { zIndex: number; edgePushed: boolean; offset?: Point }) | null {
+  (LabelRectangle & { zIndex: number; edgePushed: boolean; tailAngle?: number; offset?: Point }) | null {
   const projected = projectLabel(label, viewport, projectPoint);
   if (!projected) return null;
   const { preferred } = projected;
@@ -104,7 +130,8 @@ export function webLabelPosition(label: MapLabel, viewport: LabelViewport, proje
   const [x, y] = clampLabelCenter(preferred, viewport, width, height);
   const zIndex = cardCount - priority;
   if (touchesCardMargin([x, y], viewport, width, height)) {
-    return { x, y, width, height, zIndex, edgePushed: true };
+    const edge = edgeLabelPosition(preferred, { x, y, width, height }, viewport);
+    return edge ? { ...edge, zIndex, edgePushed: true } : { x, y, width, height, zIndex, edgePushed: true };
   }
   let position: LabelRectangle | null = null;
   if (previousOffset) {
@@ -118,6 +145,8 @@ export function webLabelPosition(label: MapLabel, viewport: LabelViewport, proje
   position ??= findLabelPosition(label, viewport, projected, placed);
   if (!position) return null;
   const edgePushed = touchesCardMargin([position.x, position.y], viewport, width, height);
+  const edge = edgePushed && edgeLabelPosition(preferred, position, viewport);
+  if (edge) return { ...edge, zIndex, edgePushed: true };
   const offset: Point = [position.x - preferred[0], position.y - preferred[1]];
   return { ...position, zIndex: edgePushed ? zIndex : zIndex + cardCount, edgePushed,
     offset: !edgePushed && (offset[0] || offset[1]) ? offset : undefined };
@@ -155,11 +184,13 @@ export function mapLabels(snapshot: MapSnapshot, selected: string | null): MapLa
     const isSelected = area.id === selected;
     const prices = mapFuels.flatMap(fuel => {
       const range = price[fuel];
-      return range ? [{ fuel, amount: isSelected ? rangeText(range) : `₱${range.minPrice.toFixed(2)}` }] : [];
+      if (!range) return [];
+      const minimum = `₱${range.minPrice.toFixed(2)}`;
+      return [{ fuel, amount: isSelected ? rangeText(range) : minimum, minimum }];
     });
     const compact = !isSelected && prices.length > 0;
-    const priceRows = prices.map(({ fuel, amount }) => ({
-      fuel, text: isSelected && prices.length === 1 ? `${fuelNames[fuel]} ${amount}` : amount,
+    const priceRows = prices.map(({ fuel, amount, minimum }) => ({
+      fuel, minimum, text: isSelected && prices.length === 1 ? `${fuelNames[fuel]} ${amount}` : amount,
     }));
     const skeletonWidths = pending ? (level === 'city' ? [74, 62, 46] : [74, 62, 46, 58]) : [];
     const coverage = pending || compact ? '' : [priceLabel(price), !prices.length ? '' : level === 'city' ? (price.complete ? '' : 'Incomplete') :
@@ -183,10 +214,17 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null) {
   const viewport = snapshot.viewport;
   if (!viewport) return placed;
   const projectPoint = (point: Point) => project(point, viewport);
+  const regular: LabelRectangle[] = [];
   for (const label of mapLabels(snapshot, selected)) {
     const projected = projectLabel(label, viewport, projectPoint);
-    const position = projected && findLabelPosition(label, viewport, projected, placed);
-    if (position) placed.push({ ...label, ...position, anchor: pointAtPixel([position.x, position.y], viewport) });
+    if (!projected) continue;
+    const [x, y] = clampLabelCenter(projected.preferred, viewport, label.width, label.height);
+    const position = touchesCardMargin([x, y], viewport, label.width, label.height)
+      ? { x, y, width: label.width, height: label.height }
+      : findLabelPosition(label, viewport, projected, regular);
+    if (!position) continue;
+    if (!edgeLabelPosition(projected.preferred, position, viewport)) regular.push(position);
+    placed.push({ ...label, ...position, anchor: pointAtPixel([position.x, position.y], viewport) });
   }
   return placed;
 }

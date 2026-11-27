@@ -507,7 +507,7 @@ function lifecycle(h, initial = {}) {
   assert.equal(withoutPrices.coverage, 'No recent report');
   assert.equal(withoutPrices.accessibilityLabel, `${withoutPrices.name}, No recent report`);
   assert.equal(withoutPrices.height, relocated.height - 32, 'Omitting both price rows shrinks the card');
-  const { clampLabelCenter, mapLabels, webLabelPosition } = h.load('labels');
+  const { clampLabelCenter, edgeMarker, mapLabels, webLabelPosition } = h.load('labels');
   const [pendingDuringPan] = mapLabels({ ...imusSnapshot, prices: new Map(), pendingPriceIds: new Set([imus.id]) }, imus.id);
   assert(pendingDuringPan.skeletonWidths.length > 0);
   const panned = { ...clipped, bounds: [120.926, 14.36, 120.971, 14.393] };
@@ -519,12 +519,19 @@ function lifecycle(h, initial = {}) {
   const edgeViewport = { ...clipped, bounds: [longitude - 0.039, latitude - 0.015, longitude + 0.001, latitude + 0.015] };
   const [edgeCard] = mapLabels({ ...imusSnapshot, viewport: edgeViewport }, imus.id);
   const edgePosition = webLabelPosition(edgeCard, edgeViewport, point => geometry.project(point, edgeViewport), [], 0, 1);
-  assert.equal(edgePosition.x, edgeViewport.width - 8 - edgeCard.width / 2, 'Keep the full web card inside the right edge');
+  assert.equal(edgePosition.width, edgeMarker.diameter, 'Use a compact circle at the right edge');
+  assert.equal(edgePosition.height, edgeMarker.diameter);
+  assert(Math.abs(edgePosition.tailAngle) < 0.001, 'Point directly right at the geographic anchor');
+  assert.equal(edgePosition.x + edgeMarker.diameter / 2 + edgeMarker.tailLength - edgeMarker.tailOverlap,
+    edgeViewport.width - 8, 'Keep the tail inside the right margin');
+  assert.deepEqual(Array.from(edgeCard.priceRows, row => row.minimum), displayRows(compact).map(([, text]) => text),
+    'A selected bubble can display both minimum prices in its compact layout');
   const centeredViewport = { ...clipped, bounds: [longitude - 0.02, latitude - 0.015, longitude + 0.02, latitude + 0.015] };
   const preferredPosition = geometry.project(imus.labelPoint, centeredViewport);
   const returned = webLabelPosition(edgeCard, centeredViewport, point => geometry.project(point, centeredViewport), [], 0, 1);
   assert.equal(returned.x, preferredPosition[0], 'The overlay returns to the preferred position even before the next price snapshot');
   assert.equal(returned.y, preferredPosition[1]);
+  assert.equal(returned.tailAngle, undefined, 'Restore the normal card before the next price snapshot');
   const higherPriority = { ...edgeCard, width: 130, height: 60, labelPoint: [100, 150], bounds: [65, 160, 135, 140] };
   const lowerPriority = { ...edgeCard, width: 130, height: 60, labelPoint: [260, 150], bounds: [255, 155, 265, 145] };
   for (const offset of [0, -27, -52, -60, -20]) {
@@ -532,7 +539,12 @@ function lifecycle(h, initial = {}) {
     const first = webLabelPosition(higherPriority, panned, projectFrame, [], 0, 2);
     const second = webLabelPosition(lowerPriority, panned, projectFrame, first.edgePushed ? [] : [first], 1, 2);
     const atEdge = 100 + offset <= 73;
-    assert.equal(first.x, Math.max(73, 100 + offset), 'The edge card stays at its clamped position');
+    if (atEdge) {
+      assert(first.x > 100 + offset && Math.abs(Math.abs(first.tailAngle) - Math.PI) < 0.001,
+        'The left edge marker aims back toward its geographic anchor');
+    } else {
+      assert.equal(first.x, 100 + offset);
+    }
     assert.equal(second.x, 260 + offset, 'The foreground card keeps its preferred position during overlap');
     assert.equal(first.edgePushed, atEdge, 'Only cards pushed inward by the map edge can overlap');
     assert.equal(first.zIndex < second.zIndex, atEdge, 'Layer an edge-pushed card behind a card at its preferred position');
@@ -559,6 +571,18 @@ function lifecycle(h, initial = {}) {
   const firstEdge = webLabelPosition(higherPriority, panned, ([x, y]) => [x - 60, y], [], 0, 2);
   assert(firstEdge.edgePushed && secondEdge.edgePushed && firstEdge.zIndex > secondEdge.zIndex,
     'Edge cards can overlap in their existing priority order');
+  for (const [anchor, bounds, direction] of [
+    [[240, -20], [200, 20, 270, -30], [0, -1]],
+    [[240, 530], [200, 550, 270, 470], [0, 1]],
+    [[-30, -20], [-45, 20, 30, -30], [-1, -1]],
+  ]) {
+    const marker = webLabelPosition({ ...higherPriority, labelPoint: anchor, bounds }, panned, point => point, [], 0, 1);
+    const dx = anchor[0] - marker.x, dy = anchor[1] - marker.y;
+    assert.deepEqual([Math.sign(dx), Math.sign(dy)], direction);
+    assert(Math.abs(Math.cos(marker.tailAngle) - dx / Math.hypot(dx, dy)) < 0.001 &&
+      Math.abs(Math.sin(marker.tailAngle) - dy / Math.hypot(dx, dy)) < 0.001,
+    'Rotate the tail toward the off-screen anchor, including at a corner');
+  }
   // Draw successive camera positions against the same viewport dimensions and card layout.
   const leftEdge = relocated.width / 2 + 8;
   for (const [offset, expected] of [[2, 2], [1, 1], [0, 0], [-1, 0], [-2, 0]]) {

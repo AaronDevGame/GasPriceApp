@@ -7,6 +7,7 @@
 - Show a smaller, muted publication date after each headline in the single-line fuel news ticker, and label the date on News cards and article pages.
 
 ### Changed
+- Use smaller circular fuel price markers at map edges, with a tail pointing toward each area's location.
 - Smoothly center the map on the selected area when a fuel card is tapped.
 - Show only the lowest available price per fuel on unselected map cards, using the gasoline and diesel nozzle icons and a compact gray design with white text.
 - Highlight the selected map card with a teal fill and a solid mint border, and show nozzle icons beside its fuel price ranges.
