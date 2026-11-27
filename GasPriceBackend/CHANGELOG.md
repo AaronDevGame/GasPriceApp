@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Include Gasoline 95 ranges in map price responses when the selected city report contains that grade.
+
 ### Fixed
 - Default the Fuel Prices summary and DOE company list to the City of Manila when no location is selected.
 

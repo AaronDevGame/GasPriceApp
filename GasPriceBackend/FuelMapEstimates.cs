@@ -58,7 +58,7 @@ public static class FuelMapEstimates
         {
             var baseline = row.MonitoringEnd ?? row.WeekEnd;
             if (baseline < row.WeekStart || baseline > row.WeekEnd) return null;
-            var fuel = row.FuelGrade == FuelMapPriceService.GasolineGrade ? "gasoline" : "diesel";
+            var fuel = row.FuelGrade == FuelMapPriceService.DieselGrade ? "diesel" : "gasoline";
             var candidates = evidence.Where(item => item.Fuel == fuel && item.EffectiveDate > baseline &&
                 item.EffectiveDate <= today && (item.OilCompany is null ||
                     DoeLocationMatcher.Normalize(item.OilCompany) == DoeLocationMatcher.Normalize(row.OilCompany))).ToArray();

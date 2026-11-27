@@ -60,6 +60,7 @@ Check(FuelMapPriceService.BuildFeed([imusId], [untrusted], geo, now).Items[0].St
     "Unrelated CDN distributions cannot supply city prices");
 var feed = FuelMapPriceService.BuildFeed(["1380600000", "1380200000"], sample, geo, now);
 Check(feed.Items[0].Gasoline?.MinPrice == 58 && feed.Items[0].Diesel?.MinPrice == 50 &&
+    feed.Items[0].Gasoline95 is { MinPrice: 1, MaxPrice: 99 } &&
     feed.Items[0].Status == "available" && feed.Items[1].Status == "unavailable" &&
     feed.Items.All(item => item.Scope == "city"), "Grade isolation and no provincial/neighbor fallback");
 var cacheNow = today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
@@ -100,7 +101,8 @@ Console.WriteLine("PASS city identity, grades, scope, report selection, aggregat
 
 var estimateNow = new DateTime(2026, 11, 18, 8, 0, 0, DateTimeKind.Utc);
 var estimateToday = new DateOnly(2026, 11, 18);
-var baseline = new[] { Row("Imus City", "Cavite", min: 60, max: 65), Row("Imus City", "Cavite", "DIESEL", 50, 55) };
+var baseline = new[] { Row("Imus City", "Cavite", min: 60, max: 65),
+    Row("Imus City", "Cavite", "DIESEL", 50, 55), Row("Imus City", "Cavite", "RON 95", 66, 70) };
 foreach (var row in baseline)
 {
     row.WeekStart = new(2026, 11, 3); row.WeekEnd = new(2026, 11, 9);
@@ -114,6 +116,7 @@ FuelMapCityPrices Estimated(params FuelMapAdjustment[] supplied) =>
 var calculated = Estimated(changes);
 Check(calculated.PriceKind == "estimated" && !calculated.IsOutdated && calculated.AsOf == estimateToday &&
     calculated.Gasoline is { MinPrice: 61, MaxPrice: 66 } && calculated.Diesel is { MinPrice: 51, MaxPrice: 56 } &&
+    calculated.Gasoline95 is { MinPrice: 67, MaxPrice: 71 } && calculated.ReportedGasoline95?.MinPrice == 66 &&
     calculated.ReportedGasoline?.MinPrice == 60 && calculated.WeekEnd == new DateOnly(2026, 11, 9),
     "Estimate applies signed per-fuel adjustments and preserves original report prices/dates");
 Check(Estimated(changes.Concat(changes).ToArray()).Gasoline?.MinPrice == 61, "Duplicate sources do not double count changes");
@@ -226,6 +229,7 @@ try
     using var prices = JsonDocument.Parse(await result.Content.ReadAsStringAsync());
     var items = prices.RootElement.GetProperty("data").GetProperty("items");
     Check(items.GetArrayLength() == 3 && items[0].GetProperty("gasoline").GetProperty("minPrice").GetDecimal() == 58 &&
+        items[0].GetProperty("gasoline95").GetProperty("minPrice").GetDecimal() == 1 &&
         items[1].GetProperty("status").GetString() == "unavailable", "Batch query, ordering, deduplication and missing data");
     Check(items[2].GetProperty("cityId").GetString() == imusId &&
         items[2].GetProperty("status").GetString() == "available" &&

@@ -9,7 +9,9 @@ public sealed record FuelMapCityPrices(string CityId, string Scope, string Statu
     public string PriceKind { get; init; } = "unavailable";
     public bool IsOutdated { get; init; }
     public DateOnly? AsOf { get; init; }
+    public FuelMapRange? Gasoline95 { get; init; }
     public FuelMapRange? ReportedGasoline { get; init; }
+    public FuelMapRange? ReportedGasoline95 { get; init; }
     public FuelMapRange? ReportedDiesel { get; init; }
     public FuelMapAdjustment[] Adjustments { get; init; } = [];
 }
@@ -19,6 +21,7 @@ public sealed record FuelMapPriceFeed(string BoundaryVersion, string GasolineGra
 public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geography, TimeProvider clock)
 {
     public const string GasolineGrade = "RON 91";
+    public const string Gasoline95Grade = "RON 95";
     public const string DieselGrade = "DIESEL";
     public const int MaxCities = 2000;
     public const string FreshnessPolicy = "doe-reported-or-confirmed-estimate-30-days-v2";
@@ -27,7 +30,7 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
     {
         var now = clock.GetUtcNow().UtcDateTime;
         var today = PhilippineDate(now);
-        // One bounded, no-tracking query for candidate province keys and two exact grades.
+        // One bounded, no-tracking query for candidate province keys and three exact grades.
         // Geography.Resolve also checks actual province/name identity; no province fallback.
         var keys = cityIds.Select(id => geography.Cities[id])
             .SelectMany(city => DoeLocationMatcher.ProvinceKeyCandidates(
@@ -35,7 +38,7 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
             .ToHashSet(StringComparer.Ordinal);
         if (keys.Any(key => key.Contains("MAGUINDANAO", StringComparison.Ordinal))) keys.UnionWith(DoeLocationMatcher.ProvinceKeyCandidates("Maguindanao"));
         var rows = await db.DoeFuelPrices.AsNoTracking().Where(row => keys.Contains(row.ProvinceKey) &&
-            (row.FuelGrade == GasolineGrade || row.FuelGrade == DieselGrade) &&
+            (row.FuelGrade == GasolineGrade || row.FuelGrade == Gasoline95Grade || row.FuelGrade == DieselGrade) &&
             (row.City != "" || row.CityKey != "") && row.WeekStart <= today && row.WeekEnd >= today.AddDays(-30))
             .ToListAsync(cancellationToken);
         var from = today.AddDays(-37);
@@ -58,7 +61,7 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
                 row.WeekEnd >= row.WeekStart && row.WeekEnd <= row.WeekStart.AddDays(7) &&
                 row.FetchedAtUtc <= now && row.MinPricePerLiter > 0 && row.MaxPricePerLiter >= row.MinPricePerLiter &&
                 row.MaxPricePerLiter <= 999999.99m &&
-                row.FuelGrade is GasolineGrade or DieselGrade && !string.IsNullOrWhiteSpace(row.OilCompany) &&
+                row.FuelGrade is GasolineGrade or Gasoline95Grade or DieselGrade && !string.IsNullOrWhiteSpace(row.OilCompany) &&
                 Uri.TryCreate(row.SourceUrl, UriKind.Absolute, out var uri) && FuelAdjustmentImporter.IsAllowedPdfUrl(uri))
             .Select(row => (Row: row, City: geography.Resolve(row)))
             .Where(item => item.City is not null && wanted.Contains(item.City.Id))
@@ -85,6 +88,7 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
                 return values.Length == 0 ? null : new(values.Min(row => row.MinPricePerLiter), values.Max(row => row.MaxPricePerLiter));
             }
             var reportedGasoline = Range(selected, GasolineGrade);
+            var reportedGasoline95 = Range(selected, Gasoline95Grade);
             var reportedDiesel = Range(selected, DieselGrade);
             var estimate = FuelMapEstimates.Estimate(selected, adjustments, today, now);
             var gasoline = estimate.HasValue ? Range(estimate.Value.Rows, GasolineGrade) : reportedGasoline;
@@ -104,6 +108,8 @@ public sealed class FuelMapPriceService(AppDbContext db, FuelMapGeography geogra
                 PriceKind = estimate.HasValue ? "estimated" : "doe_reported",
                 IsOutdated = !estimate.HasValue && report.Key.WeekEnd < today.AddDays(-7),
                 AsOf = estimate.HasValue ? today : report.Key.WeekEnd,
+                Gasoline95 = estimate.HasValue ? Range(estimate.Value.Rows, Gasoline95Grade) : reportedGasoline95,
+                ReportedGasoline95 = reportedGasoline95,
                 ReportedGasoline = reportedGasoline, ReportedDiesel = reportedDiesel,
                 Adjustments = estimate?.Applied ?? []
             };
