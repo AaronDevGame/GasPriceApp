@@ -2,7 +2,7 @@ import { AppIcon } from '@/components/app-icon';
 import { MobileHeader } from '@/components/mobile-header';
 import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, TextInput, View, type ScrollView } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, TextInput, View, type ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-provider';
@@ -264,13 +264,13 @@ export default function FuelPricesScreen() {
           </>
           <View style={styles.comparison} onLayout={event => setComparisonY(event.nativeEvent.layout.y)}>
             {report && <>
-              <View style={styles.reportHeading}>
-                <ThemedText style={styles.sectionTitle}>{doeCoverageLabel(report)}</ThemedText>
+              <ThemedText style={styles.sectionTitle}>{doeCoverageLabel(report)}</ThemedText>
+              <View style={styles.comparisonControls}>
+                <Pressable accessibilityRole="button" onPress={() => setSortByPrice(value => !value)}>
+                  <ThemedText type="smallBold" style={styles.accent}>Sort: {sortByPrice ? 'Lowest reported price' : 'Company name'} ↕</ThemedText>
+                </Pressable>
                 <ThemedText type="small" themeColor="textSecondary">DOE reported · ₱/L · {report.weekStart} to {report.weekEnd}</ThemedText>
               </View>
-              <Pressable accessibilityRole="button" onPress={() => setSortByPrice(value => !value)}>
-                <ThemedText type="smallBold" style={styles.accent}>Sort: {sortByPrice ? 'Lowest reported price' : 'Company name'} ↕</ThemedText>
-              </Pressable>
               {rows.length ? <ThemedView type="backgroundElement" style={styles.table}>
                 <View style={styles.priceRow}>
                   <ThemedText type="smallBold" style={styles.company}>Company</ThemedText>
@@ -288,10 +288,6 @@ export default function FuelPricesScreen() {
                   })}
                 </View>)}
               </ThemedView> : <ThemedText themeColor="textSecondary">No company prices for these fuels in the selected report.</ThemedText>}
-              {!!report.prices.length && <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(report.prices[0].sourceUrl)}>
-                <ThemedText type="smallBold" style={styles.accent}>View DOE report ↗</ThemedText>
-              </Pressable>}
-              <ThemedText type="small" themeColor="textSecondary">DOE reports {report.scope === 'province' ? 'province' : 'city'}-level prices by oil company. Individual station locations and availability are not included.</ThemedText>
             </>}
             {showLocal && <RecentPriceUpdates area={showLocal.area.name} updates={fuel.updates} error={fuel.historyError} />}
             {showLocal && <ThemedText type="small" themeColor="textSecondary">Location lookup uses Geoapify and OpenStreetMap contributors.</ThemedText>}
@@ -315,8 +311,9 @@ const styles = StyleSheet.create({
   iconButton: { width: 44, height: 44, borderWidth: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   cityList: { gap: 8 }, search: { borderWidth: 1, borderRadius: 10, padding: 12 },
   cityOption: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#77777733' },
-  reportHeading: { gap: 4 }, sectionTitle: { fontSize: 22, lineHeight: 28, fontWeight: '700' },
+  sectionTitle: { fontSize: 22, lineHeight: 28, fontWeight: '700' },
   comparison: { gap: 16 },
+  comparisonControls: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', columnGap: 12, rowGap: 4 },
   table: { borderRadius: 14, paddingHorizontal: 8 },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 12 },
   company: { flex: 1.15 }, amount: { flex: 1, textAlign: 'right', fontVariant: ['tabular-nums'] },
