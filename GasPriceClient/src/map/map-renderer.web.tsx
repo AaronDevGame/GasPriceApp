@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { fuelNozzles } from '@/fuel/nozzles';
 
+import { stationPinAnchor, stationPinImage, stationPinLabel, stationPinSize } from './station-pin';
 import { stationDirections, stationMarkers } from './stations';
 import { boundsCenter, cameraBounds, fitZoom, FUEL_CARD_PAN_DURATION_MS, MAX_ZOOM, polygons } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
@@ -325,13 +326,21 @@ export default function MapRenderer(props: MapRendererProps) {
   }, [key, version, retry, cancelCardPan]);
   useEffect(() => {
     const instance = map.current;
-    if (!ready || !instance) return;
+    if (!ready || !instance || level !== 'city') return;
     const info = new google.maps.InfoWindow({ disableAutoPan: true });
     const markers = stationMarkers(props.snapshot.viewport).map(station => {
       const marker = new google.maps.Marker({
         map: instance, position: { lat: station.lat, lng: station.lng },
         title: station.count > 1 ? station.count + ' fuel stations' : station.name,
-        label: station.count > 1 ? String(station.count) : undefined,
+        icon: {
+          url: Asset.fromModule(stationPinImage(station.count)).uri,
+          scaledSize: new google.maps.Size(stationPinSize.width, stationPinSize.height),
+          anchor: new google.maps.Point(stationPinAnchor.x, stationPinAnchor.y),
+          labelOrigin: new google.maps.Point(stationPinLabel.x, stationPinLabel.y),
+        },
+        label: station.count > 1
+          ? { text: String(station.count), color: '#fff', fontSize: '10px', fontWeight: '700' }
+          : undefined,
       });
       marker.addListener('click', () => {
         if (station.count > 1) {
@@ -356,7 +365,7 @@ export default function MapRenderer(props: MapRendererProps) {
         marker.setMap(null);
       }
     };
-  }, [ready, props.snapshot.viewport]);
+  }, [ready, level, props.snapshot.viewport]);
   useEffect(() => {
     if (!ready || !map.current || props.active === false || !props.focusBounds || !host.current?.clientWidth || focusedBounds.current === props.focusBounds) return;
     cancelCardPan();

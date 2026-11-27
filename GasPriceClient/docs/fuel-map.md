@@ -98,6 +98,6 @@ Before release, use restricted real keys and the deployed backend to test live w
 
 ## Station locations
 
-The station layer uses the 2026-11-26 Geofabrik Philippines extract. It includes named and unnamed OSM fuel points and station footprints independently of DOE reporting. At zoom 15 each mapped record has its own pin. At lower zooms nearby visible records share a marker. Selecting a station gives directions to its coordinates.
+The station layer uses the 2026-11-26 Geofabrik Philippines extract. It includes named and unnamed OSM fuel points and station footprints independently of DOE reporting. Station pins appear only in Cities view. At zoom 15 each mapped record has its own pin. At lower zooms within Cities view, a pair uses one numbered pin and groups of three or more use numbered stacked pins. Selecting a station gives directions to its coordinates.
 
 Station database © OpenStreetMap contributors, distributed under the [Open Database License](https://www.openstreetmap.org/copyright). To refresh it, extract the traffic point and area shapefiles from the [Philippines shapefile archive](https://download.geofabrik.de/asia/philippines.html), then run `python3 scripts/prepare-fuel-stations.py /path/to/shapefiles` from the client with pyshp and shapely installed. Update the extract date here.

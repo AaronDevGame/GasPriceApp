@@ -7,6 +7,7 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, 
 
 import { fuelNozzles } from '@/fuel/nozzles';
 
+import { stationPinAnchor, stationPinImage, stationPinLabel, stationPinSize } from './station-pin';
 import { stationDirections, stationMarkers } from './stations';
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, FUEL_CARD_PAN_DURATION_MS, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
@@ -156,8 +157,8 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       outer: rings[0].map(coordinate), holes: rings.slice(1).map(ring => ring.map(coordinate)),
     }));
   }), [snapshot.features, ids]);
+  const stations = useMemo(() => level === 'city' ? stationMarkers(snapshot.viewport) : [], [level, snapshot.viewport]);
   // Native Maps needs one overlay per separate island. Mount only the visible parts.
-  const stations = useMemo(() => stationMarkers(snapshot.viewport), [snapshot.viewport]);
   const visibleBounds = snapshot.viewport?.bounds;
   const polygonOverlays = useMemo(() => shapes.filter(shape => visibleBounds && intersects(shape.bbox, visibleBounds)).map(shape => {
     const highlighted = shape.areaId === selected;
@@ -196,15 +197,18 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         coordinate={{ latitude: station.lat, longitude: station.lng }}
         title={station.count > 1 ? station.count + ' fuel stations' : station.name}
         description={station.count > 1 ? 'Zoom in to see stations' : 'Get directions'}
-        pinColor="#00796b"
+        anchor={{ x: stationPinAnchor.x / stationPinSize.width, y: stationPinAnchor.y / stationPinSize.height }}
         onCalloutPress={() => {
           if (station.count === 1) void Linking.openURL(stationDirections(station));
           else map.current?.animateCamera({ center: { latitude: station.lat, longitude: station.lng },
             zoom: Math.min(15, (snapshot.viewport?.zoom ?? 10) + 2) });
         }}>
-        {station.count > 1 && <View style={styles.stationCluster}>
-          <Text style={styles.stationCount}>{station.count}</Text>
-        </View>}
+        <View style={stationPinSize}>
+          <Image source={stationPinImage(station.count)} style={stationPinSize} />
+          {station.count > 1 && <View style={styles.stationLabel}>
+            <Text allowFontScaling={false} style={styles.stationCount}>{station.count}</Text>
+          </View>}
+        </View>
       </Marker>)}
     </MapView>
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
@@ -268,9 +272,9 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
   </View>;
 }
 const styles = StyleSheet.create({
-  stationCluster: { borderRadius: 18, backgroundColor: '#00796b', borderWidth: 1, borderColor: 'white',
-    minWidth: 32, height: 32, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
-  stationCount: { color: 'white', fontSize: 12, fontWeight: '700' },
+  stationLabel: { position: 'absolute', top: stationPinLabel.y - 7, height: 14,
+    left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
+  stationCount: { color: 'white', fontSize: 10, lineHeight: 14, fontWeight: '700', includeFontPadding: false },
   fill: { flex: 1 }, unavailable: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   notice: { color: '#E8EDF5', textAlign: 'center' }, warning: { position: 'absolute', top: 10, left: 12, right: 12, padding: 10, backgroundColor: '#243142' },
   label: { height: 46, paddingVertical: 5, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
