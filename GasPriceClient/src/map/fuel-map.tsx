@@ -16,6 +16,7 @@ import type { Coordinates, DoePriceLocation } from '@/fuel/api';
 import type { LocationFocus, MapSnapshot, Viewport, ZoomFocus } from './types';
 
 const empty: MapSnapshot = { index: null, cities: [], features: [], prices: new Map(), viewport: null, loading: true, detail: false, error: null };
+const showMapCredits = false;
 export type FuelMapHandle = { refresh(): Promise<void> };
 
 export default function FuelMap({ ref, foregroundRefreshing = false, onForegroundRefreshChange, location, userLocation, userCoordinates, onReturnToLocation, locations = [], onLocationChange, active = true, initialLocationPending = false }: {
@@ -140,6 +141,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
   const level = snapshot.index && snapshot.viewport ? mapLevel(snapshot.index, snapshot.viewport) : metroBounds ? 'city' : 'country';
   const noPrices = authenticated && !snapshot.loading && !snapshot.error && snapshot.prices.size > 0 &&
     [...snapshot.prices.values()].every(price => price.status === 'unavailable');
+  const updatingMap = !!snapshot.index && snapshot.loading && !foregroundRefreshing;
   return <View style={styles.wrapper}>
     <ThemedText type="small" themeColor="textSecondary">Select a reported city or province to update the company list below. Broader areas show map ranges only.</ThemedText>
     <View style={styles.levelButtons} accessibilityLabel="Map geographic levels">
@@ -167,11 +169,11 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
       }}>
       <ThemedText type="smallBold">Center on Metro Manila</ThemedText>
     </Pressable>}
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded: showCredits }}
+    {showMapCredits && <Pressable accessibilityRole="button" accessibilityState={{ expanded: showCredits }}
       onPress={() => setShowCredits(value => !value)}>
       <ThemedText type="small" themeColor="textSecondary">Map credits {showCredits ? '↑' : '↓'}</ThemedText>
-    </Pressable>
-    {showCredits && <View style={styles.status}>
+    </Pressable>}
+    {showMapCredits && showCredits && <View style={styles.credits}>
       <Pressable accessibilityRole="link" accessibilityLabel="Boundary source and license" onPress={() => void Linking.openURL('https://github.com/faeldon/philippines-json-maps')}>
         <ThemedText style={styles.attribution}>Boundaries: NAMRIA / PSA through OCHA COD-AB · CC BY 3.0 IGO · James Faeldon · MIT. GasPriceApp regrouped city boundaries, normalized ring orientation, and merged and simplified area outlines.</ThemedText>
       </Pressable>
@@ -180,9 +182,7 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
       </Pressable>
       <ThemedText style={styles.attribution}>Location lookup uses Geoapify and OpenStreetMap contributors.</ThemedText>
     </View>}
-    {snapshot.loading && !foregroundRefreshing && <View style={styles.loading}><ActivityIndicator size="small" /><ThemedText type="small">Updating map…</ThemedText></View>}
     {!authenticated && !authLoading && <ThemedText type="small">Tap Reconnect above to load city prices.</ThemedText>}
-    {noPrices && <ThemedText type="small">No city reports from the last 30 days are available in this view.</ThemedText>}
     {snapshot.error && <View style={styles.error}><ThemedText type="small" accessibilityRole="alert">{snapshot.error}</ThemedText>
       <Pressable accessibilityRole="button" onPress={() => controller.current?.retry()} style={styles.retry}><ThemedText type="smallBold">Retry</ThemedText></Pressable></View>}
     <View style={styles.canvas}>
@@ -195,6 +195,16 @@ export default function FuelMap({ ref, foregroundRefreshing = false, onForegroun
         <AppIcon name="location" color="#76B4FF" />
       </Pressable>}
     </View>
+    <View style={styles.mapStatus} accessibilityLiveRegion="polite">
+      {updatingMap && <View style={styles.loading}>
+        <ActivityIndicator size="small" />
+        <ThemedText type="small">Updating map…</ThemedText>
+      </View>}
+      {/* Reserve the same space at every font size, including when the message wraps. */}
+      <ThemedText type="small" aria-hidden={!noPrices} style={!noPrices && styles.hiddenStatus}>
+        No city reports in this view in the last 30 days.
+      </ThemedText>
+    </View>
   </View>;
 }
 const styles = StyleSheet.create({
@@ -204,8 +214,11 @@ const styles = StyleSheet.create({
   metroButton: { alignSelf: 'flex-start', minHeight: 44, paddingHorizontal: 12, justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#495569' },
   locationButton: { position: 'absolute', left: 12, top: 12, width: 48, height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#76B4FF', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A2029', zIndex: 20 },
   wrapper: { gap: 10 }, canvas: { height: 560, minHeight: 380, borderRadius: 14, overflow: 'hidden', backgroundColor: '#202832' },
-  initial: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }, status: { gap: 8 },
-  loading: { flexDirection: 'row', alignItems: 'center', gap: 8 }, error: { gap: 6 },
+  initial: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }, credits: { gap: 8 },
+  mapStatus: { minHeight: 44 },
+  hiddenStatus: { opacity: 0 },
+  loading: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  error: { gap: 6 },
   retry: { alignSelf: 'flex-start', padding: 10, borderRadius: 8, backgroundColor: '#293B50' },
   attribution: { color: '#98A8BB', fontSize: 10, lineHeight: 15 },
 });

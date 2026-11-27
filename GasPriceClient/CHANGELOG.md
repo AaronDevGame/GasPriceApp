@@ -8,7 +8,7 @@
 ### Changed
 - Simplify the local DOE price card with a single footer for the report dates and per-liter unit, and remove the extra note and report link.
 - Show the DOE company list below the fuel map and remove the Map and Company list buttons.
-- Remove the details below the fuel map and make map credits available above it.
+- Remove the details below the fuel map and temporarily hide the custom Map credits toggle.
 - Give the desktop navigation header a neutral dark gray background to distinguish it from the blue news label and charcoal page body.
 - Combine area selection and local prices in one card, with inline city search and a location icon that supports retrying after permission is denied.
 - Show the desktop GasUp brand lockup on mobile and add space between the fuel adjustment cards and news ticker.
@@ -16,6 +16,7 @@
 - Rename the app to GasUp in mobile and desktop headers, the installed app name, and the location permission prompt.
 
 ### Fixed
+- Keep the fuel map steady while loading or showing that there are no recent city reports by reserving a shared status row below it.
 - Keep Manila’s default price report hidden on reload while the app locates the device and when a device location is available.
 - Remove the desktop scroll gutter so the news strip reaches the right edge and tab content aligns with the header.
 - Keep the news ticker label width consistent as stories rotate.

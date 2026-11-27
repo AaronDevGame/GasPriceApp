@@ -53,7 +53,7 @@ Google Cloud requires billing enabled. Native maps without map IDs use the Maps 
 - Province membership uses `provinceId`. Highly urbanized / independent cities without a province stay separate at that level; geographic storage groups are not treated as administrative provinces. The island grouping uses the index's regions, including Negros Island Region in Visayas and BARMM in Mindanao.
 - The client bundles simplified area outlines for the matching geography version. Regenerate them from the versioned backend city files with `python3 scripts/prepare-area-boundaries.py` in the client directory (Shapely 2.0.7). When the backend serves a different version, cards fall back to highlighting the selected area using that version’s city files.
 - MultiPolygons retain their outer rings and holes. Exact rectangle/polygon intersection refines bounding-box candidates once geometry is available.
-- Polygon taps highlight their city; no tap is required to fetch visible prices. Existing provider attribution remains unobscured. NAMRIA/PSA/OCHA, CC BY 3.0 IGO, James Faeldon/MIT and modification notices are displayed below the map with source/license links.
+- Polygon taps highlight their city; no tap is required to fetch visible prices. Google Maps attribution remains visible. The custom Map credits toggle is temporarily hidden. See the [boundary source and license notices](../../GasPriceBackend/docs/fuel-map.md).
 
 ## Loading and cache behavior
 
