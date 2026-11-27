@@ -25,8 +25,10 @@ builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<FuelMapGeography>();
 builder.Services.AddScoped<FuelMapPriceService>();
+builder.Services.AddHttpClient<DoeFuelPriceImporter>();
 await using var app = builder.Build();
 app.MapFuelMapEndpoints(new AuthService(), "map-fixture");
+app.MapDoePriceBrowseEndpoints(new AuthService(), "map-fixture");
 var geo = app.Services.GetRequiredService<FuelMapGeography>();
 Check(geo.Cities.Count == 1642 && geo.Index.Files.Length == 93, "National catalog coverage");
 Check(geo.Cities["1380600000"].ProvinceId is null && geo.Cities["0730600000"].CityClass == "HUC" &&
@@ -39,7 +41,8 @@ DoeFuelPrice Row(string city = "Manila", string province = "Metro Manila", strin
     City = city, CityKey = DoeFuelPriceImporter.Normalize(city), Province = province,
     ProvinceKey = DoeFuelPriceImporter.Normalize(province), Region = null, OilCompany = "Fixture",
     FuelGrade = grade, MinPricePerLiter = min, MaxPricePerLiter = max,
-    WeekStart = today.AddDays(-2), WeekEnd = today, SourceUrl = "https://doe.gov.ph/fixture.pdf", FetchedAtUtc = now.AddMinutes(-1)
+    WeekStart = today.AddDays(-2), WeekEnd = today, SourceUrl = "https://doe.gov.ph/fixture.pdf",
+    FetchedAtUtc = today.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddHours(-8)
 };
 var sample = new[] { Row(), Row(grade: "DIESEL", min: 50, max: 55),
     Row(grade: "RON 95", min: 1, max: 99), Row(grade: "DIESEL PLUS", min: 1, max: 99),
@@ -165,6 +168,7 @@ using (var scope = app.Services.CreateScope())
         CreatedAt = now, LastLoginAt = now, AccessTokenHash = auth.HashSecret(token), AccessTokenExpiresAt = now.AddHours(1) });
     db.DoeFuelPrices.AddRange(sample);
     db.DoeFuelPrices.AddRange(imusRows);
+    db.DoeFuelPrices.Add(Row("Bangued City", "Abra"));
     var tanza = new[] { Row("Tanza", "Cavite"), Row("Tanza", "Cavite", "DIESEL", 50, 55) };
     foreach (var row in tanza) { row.WeekStart = today.AddDays(-15); row.WeekEnd = today.AddDays(-9); }
     db.DoeFuelPrices.AddRange(tanza);
@@ -261,6 +265,39 @@ try
     using var all = await Post(Body(geo.Cities.Keys.ToArray()));
     Check(all.StatusCode == HttpStatusCode.OK, "Entire national inventory fits batch and body limits");
     Console.WriteLine("PASS HTTP geometry/envelopes/gzip/ETags, authenticated batch query, limits, validation and browser CSRF enforcement");
+
+    async Task<JsonElement> Browse(string query = "")
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, ApiRoutes.DoeFuelPricesBrowse + query);
+        req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + token);
+        req.Headers.TryAddWithoutValidation("X-App-Instance-Id", installation);
+        using var response = await http.SendAsync(req);
+        Check(response.StatusCode == HttpStatusCode.OK, "DOE browse succeeds");
+        using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return payload.RootElement.GetProperty("data").Clone();
+    }
+
+    var defaultBrowse = await Browse();
+    Check(defaultBrowse.GetProperty("locations")[0].GetProperty("city").GetString() == "Bangued City" &&
+        defaultBrowse.GetProperty("selected").GetProperty("city").GetString() == "Manila" &&
+        defaultBrowse.GetProperty("selected").GetProperty("prices").GetArrayLength() > 0,
+        "DOE browse defaults to Manila even when another location sorts first");
+    var explicitBrowse = await Browse("?city=Bangued%20City&province=Abra");
+    Check(explicitBrowse.GetProperty("selected").GetProperty("city").GetString() == "Bangued City",
+        "DOE browse honors an explicit location");
+
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.DoeFuelPrices.RemoveRange(await db.DoeFuelPrices.Where(row =>
+            row.Province == "Metro Manila" && (row.City == "Manila" || row.City == "")).ToListAsync());
+        await db.SaveChangesAsync();
+    }
+    var missingManila = await Browse();
+    Check(missingManila.GetProperty("selected").ValueKind == JsonValueKind.Null &&
+        missingManila.GetProperty("locations")[0].GetProperty("city").GetString() == "Bangued City",
+        "DOE browse keeps the location list available when no recent report covers Manila");
+    Console.WriteLine("PASS DOE browse default, explicit selection and missing Manila coverage");
 }
 finally { await app.StopAsync(); }
 
