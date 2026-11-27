@@ -7,7 +7,7 @@
 - Show a smaller, muted publication date after each headline in the single-line fuel news ticker, and label the date on News cards and article pages.
 
 ### Fixed
-- Update web fuel map cards during drags while keeping visible cards anchored where space allows. Glide cards inward at the map margin and back toward their preferred positions during a drag once most of the card would be visible there. Preserve displaced positions when the map settles.
+- Update web fuel map cards during drags while keeping visible cards anchored where space allows. Glide cards inward at the map margin and back toward their preferred positions on a reverse drag. Preserve displaced positions when the map settles.
 
 ## [1.3.0] - 2026-11-27
 
