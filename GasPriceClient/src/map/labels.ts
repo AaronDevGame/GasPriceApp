@@ -3,12 +3,13 @@ import { areaPrices, mapLevel, visibleAreas, type MapArea } from './hierarchy';
 import type { CityPrices, MapSnapshot, Point, PriceRange, Viewport } from './types';
 
 export const mapLabelColors = {
-  selected: { background: '#115442', border: '#69E0B3' },
+  selected: { background: '#116453', border: '#92F4C8' },
   neutral: { background: 'rgba(60, 68, 77, 0.87)', border: '#9AA5B1' },
   unavailableText: '#E7EBF0',
   skeleton: { background: 'rgba(17, 31, 48, 0.92)', border: '#7997B5', bar: '#58718C' },
   textShadow: '#071322',
 };
+export const mapLabelNozzle = { size: 14, gap: 4 };
 
 export const rangeText = (value: PriceRange | null) => value
   ? `₱${value.minPrice.toFixed(2)}–₱${value.maxPrice.toFixed(2)}/L` : '—';
@@ -39,7 +40,7 @@ const mapFuels = ['gasoline', 'diesel'] as const;
 export type MapLabel = {
   id: string; name: string; priceRows: { fuel: typeof mapFuels[number]; text: string }[];
   skeletonWidths: readonly number[]; coverage: string; accessibilityLabel: string;
-  price: ReturnType<typeof areaPrices>; center: Point; anchor: Point; x: number; y: number; width: number; height: number; fontSize: number;
+  center: Point; anchor: Point; x: number; y: number; width: number; height: number; fontSize: number;
 };
 const cardInset = 8;
 const cardBottomInset = 36;
@@ -104,10 +105,12 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, prev
     const accessibilityLabel = pending ? `${name}, loading fuel prices` :
       [name, ...prices.map(({ fuel, amount }) => compact ?
         `${fuelNames[fuel]} lowest price ${amount} per liter` : `${fuelNames[fuel]} ${amount}`), coverage].filter(Boolean).join(', ');
-    const lines = [name, ...priceRows.map(row => row.text), ...(coverage ? coverage.split('\n') : [])];
-    const height = 14 + (pending ? 1 + skeletonWidths.length : lines.length) * 16;
-    const longestLine = Math.max(...lines.map(line => line.length));
-    const width = Math.min(viewport.width - 16, Math.max(pending ? 154 : 130, longestLine * fontSize * 0.64 + 18));
+    const coverageLines = coverage ? coverage.split('\n') : [];
+    const height = 14 + (1 + (pending ? skeletonWidths.length : priceRows.length + coverageLines.length)) * 16;
+    const textWidth = (line: string) => line.length * fontSize * 0.64;
+    const contentWidth = Math.max(textWidth(name), ...coverageLines.map(textWidth),
+      ...priceRows.map(({ text }) => mapLabelNozzle.size + mapLabelNozzle.gap + textWidth(text)));
+    const width = Math.min(viewport.width - 16, Math.max(pending ? 154 : 130, contentWidth + 18));
     const positions = [...candidates(area, viewport, width, height)];
     const previousAnchor = previousAnchors?.get(area.id);
     let previousPosition = previousAnchor && project(previousAnchor, viewport);
@@ -134,7 +137,7 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null, prev
     // Selected areas go first. Never force a colliding card into the remaining space.
     if (position) {
       const [x, y] = position;
-      placed.push({ id: area.id, price, priceRows, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
+      placed.push({ id: area.id, priceRows, skeletonWidths, coverage, accessibilityLabel, name, height, fontSize,
         center: boundsCenter(area.bbox), anchor: previousAnchor && keepPreviousAnchor && position === previousPosition
           ? previousAnchor : pointAtPixel(position, viewport), x, y, width });
     }

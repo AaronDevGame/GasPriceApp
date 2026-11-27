@@ -8,7 +8,7 @@ import { fuelNozzles } from '@/fuel/nozzles';
 
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
-import { mapLabelColors, placeLabels } from './labels';
+import { mapLabelColors, mapLabelNozzle, placeLabels } from './labels';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const coordinate = ([longitude, latitude]: Point) => ({ latitude, longitude });
@@ -185,31 +185,29 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
         const highlighted = label.id === selected;
         const hasPrices = label.priceRows.length > 0;
         const pending = label.skeletonWidths.length > 0;
-        const labelStyle = highlighted && (hasPrices || pending) ? styles.selectedLabel : pending ? styles.skeletonLabel : styles.neutralLabel;
-        const borderColor = highlighted ? mapLabelColors.selected.border : pending ? mapLabelColors.skeleton.border :
-          mapLabelColors.neutral.border;
-        const dashed = highlighted && (label.price.estimated || label.price.outdated);
+        const colors = highlighted ? mapLabelColors.selected : pending ? mapLabelColors.skeleton : mapLabelColors.neutral;
+        const muted = !highlighted && !hasPrices && !pending;
         const priceStyle = [styles.price, { fontSize: label.fontSize, lineHeight: label.fontSize + 4 }];
         return <Pressable key={label.id} accessibilityRole="button" accessibilityLabel={label.accessibilityLabel}
-          accessibilityState={{ busy: pending }}
+          accessibilityState={{ busy: pending, selected: highlighted }}
           onPress={() => {
             map.current?.setCamera({ center: coordinate(label.center) });
             onSelect(label.id);
           }}
-          style={[styles.label, labelStyle, { position: 'absolute', left, top, zIndex: labels.length - priority,
-            width: label.width, height: label.height, borderColor, borderStyle: dashed ? 'dashed' : 'solid' }]}>
-          <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, !hasPrices && !pending && styles.unavailableText]}>{label.name}</Text>
+          style={[styles.label, { position: 'absolute', left, top, zIndex: labels.length - priority,
+            width: label.width, height: label.height, backgroundColor: colors.background, borderColor: colors.border }]}>
+          <Text numberOfLines={1} allowFontScaling={false} style={[priceStyle, muted && styles.unavailableText]}>{label.name}</Text>
           {pending ? label.skeletonWidths.map(width => (
             <View key={width} style={styles.skeletonRow}><View style={[styles.skeletonBar, { width: `${width}%` }]} /></View>
           )) : <>
-            {label.priceRows.map(({ fuel, text }) => highlighted
-              ? <Text key={fuel} allowFontScaling={false} style={priceStyle}>{text}</Text>
-              : <View key={fuel} style={styles.priceRow}>
+            {label.priceRows.map(({ fuel, text }) => (
+              <View key={fuel} style={styles.priceRow}>
                 <Image source={fuelNozzles[fuel]} style={styles.nozzle} contentFit="contain" accessible={false} />
                 <Text allowFontScaling={false} style={priceStyle}>{text}</Text>
-              </View>)}
+              </View>
+            ))}
             {!!label.coverage && <Text allowFontScaling={false} style={[styles.price, styles.coverage,
-              !hasPrices && [styles.unavailableText, styles.noReport]]}>{label.coverage}</Text>}
+              muted && styles.unavailableText, !hasPrices && styles.noReport]}>{label.coverage}</Text>}
           </>}
         </Pressable>;
       })}
@@ -223,17 +221,14 @@ const styles = StyleSheet.create({
   fill: { flex: 1 }, unavailable: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   notice: { color: '#E8EDF5', textAlign: 'center' }, warning: { position: 'absolute', top: 10, left: 12, right: 12, padding: 10, backgroundColor: '#243142' },
   label: { height: 46, paddingVertical: 5, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  selectedLabel: { backgroundColor: mapLabelColors.selected.background },
-  neutralLabel: { backgroundColor: mapLabelColors.neutral.background },
-  skeletonLabel: { backgroundColor: mapLabelColors.skeleton.background },
   skeletonRow: { height: 16, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   skeletonBar: { height: 7, borderRadius: 4, backgroundColor: mapLabelColors.skeleton.bar },
   unavailableText: { color: mapLabelColors.unavailableText },
   noReport: { fontStyle: 'italic' },
   coverage: { fontSize: 10, textAlign: 'center' },
   retry: { padding: 10, marginTop: 6, borderRadius: 8, backgroundColor: '#354B64' },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  nozzle: { width: 14, height: 14 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: mapLabelNozzle.gap },
+  nozzle: { width: mapLabelNozzle.size, height: mapLabelNozzle.size },
   price: { fontSize: 11, lineHeight: 17, color: '#FFFFFF', fontWeight: '600', fontVariant: ['tabular-nums'],
     textShadowColor: mapLabelColors.textShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
 });

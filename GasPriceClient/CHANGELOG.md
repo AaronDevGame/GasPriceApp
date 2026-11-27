@@ -8,6 +8,7 @@
 
 ### Changed
 - Show only the lowest available price per fuel on unselected map cards, using the gasoline and diesel nozzle icons and a compact gray design with white text.
+- Highlight the selected map card with a teal fill and a solid mint border, and show nozzle icons beside its fuel price ranges.
 
 ### Fixed
 - Update web fuel map cards during drags while keeping visible cards anchored where space allows. Glide cards inward at the map margin and back toward their preferred positions on a reverse drag. Preserve displaced positions when the map settles.

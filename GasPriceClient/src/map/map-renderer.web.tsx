@@ -7,7 +7,7 @@ import { fuelNozzles } from '@/fuel/nozzles';
 import { boundsCenter, cameraBounds, fitZoom, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
 import { loadGoogleMaps } from './google-loader.web';
-import { type MapLabel, mapLabelColors, placeLabels } from './labels';
+import { type MapLabel, mapLabelColors, mapLabelNozzle, placeLabels } from './labels';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const literalBounds = (bounds: Bounds) => ({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3] });
@@ -34,8 +34,7 @@ function createLabels(onSelect: (label: MapLabel) => void) {
           const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
           labels.forEach((label, priority) => {
             const selected = label.id === selectedId;
-            const dashed = selected && (label.price.estimated || label.price.outdated);
-            const appearance = JSON.stringify([selected, dashed, label.center, label.accessibilityLabel, label.name,
+            const appearance = JSON.stringify([selected, label.center, label.accessibilityLabel, label.name,
               label.priceRows, label.skeletonWidths, label.coverage, label.width, label.height, label.fontSize]);
             const anchor = new google.maps.LatLng(label.anchor[1], label.anchor[0]);
             const previous = this.cards.get(label.id);
@@ -68,49 +67,43 @@ function createLabels(onSelect: (label: MapLabel) => void) {
             card.addEventListener('click', () => onSelect(label));
             const hasPrices = label.priceRows.length > 0;
             const pending = label.skeletonWidths.length > 0;
-            const colors = selected && (hasPrices || pending) ? mapLabelColors.selected : pending ? mapLabelColors.skeleton : mapLabelColors.neutral;
-            const border = selected ? mapLabelColors.selected.border : colors.border;
+            const colors = selected ? mapLabelColors.selected : pending ? mapLabelColors.skeleton : mapLabelColors.neutral;
             card.setAttribute('aria-label', label.accessibilityLabel);
-            card.style.cssText = `appearance:none;box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;left:0;top:0;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:${hasPrices || pending ? 'white' : mapLabelColors.unavailableText};border:2px solid ${border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:auto;cursor:pointer;user-select:none;font-variant-numeric:tabular-nums;`;
+            if (selected) card.setAttribute('aria-current', 'true');
+            card.style.cssText = `appearance:none;box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;left:0;top:0;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:${selected || hasPrices || pending ? 'white' : mapLabelColors.unavailableText};border:2px solid ${colors.border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:auto;cursor:pointer;user-select:none;font-variant-numeric:tabular-nums;display:flex;flex-direction:column;align-items:center;justify-content:center;`;
             card.style.backgroundColor = colors.background;
+            const name = document.createElement('span');
+            name.textContent = label.name;
+            name.style.cssText = 'max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            card.append(name);
             if (pending) {
               card.setAttribute('aria-busy', 'true');
-              card.style.cssText += 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;';
-              const name = document.createElement('span');
-              name.textContent = label.name;
-              name.style.cssText = 'max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-              card.append(name);
+              card.style.gap = '9px';
               for (const width of label.skeletonWidths) {
                 const bar = document.createElement('span');
                 bar.setAttribute('aria-hidden', 'true');
                 bar.style.cssText = `flex:none;width:${width}%;height:7px;border-radius:4px;background:${mapLabelColors.skeleton.bar};`;
                 card.append(bar);
               }
-            } else if (hasPrices && !selected) {
-              card.style.cssText += 'display:flex;flex-direction:column;align-items:center;justify-content:center;';
-              const name = document.createElement('span');
-              name.textContent = label.name;
-              name.style.cssText = 'max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-              card.append(name);
+            } else {
               for (const { fuel, text } of label.priceRows) {
                 const row = document.createElement('span');
-                row.style.cssText = 'display:flex;align-items:center;gap:4px;';
+                row.style.cssText = `display:flex;align-items:center;gap:${mapLabelNozzle.gap}px;`;
                 const nozzle = document.createElement('img');
                 nozzle.src = nozzleUris[fuel];
                 nozzle.alt = '';
-                nozzle.width = 14;
-                nozzle.height = 14;
+                nozzle.width = mapLabelNozzle.size;
+                nozzle.height = mapLabelNozzle.size;
                 nozzle.style.objectFit = 'contain';
                 row.append(nozzle, text);
                 card.append(row);
               }
-            } else {
-              card.textContent = [label.name, ...label.priceRows.map(row => row.text)].join('\n');
-              const status = document.createElement(hasPrices ? 'span' : 'em');
-              status.textContent = label.coverage;
-              card.append('\n', status);
+              if (label.coverage) {
+                const status = document.createElement(hasPrices ? 'span' : 'em');
+                status.textContent = label.coverage;
+                card.append(status);
+              }
             }
-            if (dashed) card.style.borderStyle = 'dashed';
             positioner.replaceChildren(card);
           });
           for (const [id, card] of this.cards) {
