@@ -28,7 +28,7 @@ function createLabels(onSelect: (label: MapLabel) => void) {
               hasPrices ? mapLabelColors.unselected : mapLabelColors.unavailable;
             const border = selected ? mapLabelColors.selected.border : colors.border;
             card.setAttribute('aria-label', label.accessibilityLabel);
-            card.style.cssText = `appearance:none;box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;z-index:${labels.length - priority};visibility:hidden;transform:translate(-50%,-50%);width:${label.width}px;height:${label.height}px;color:${hasPrices || pending ? 'white' : mapLabelColors.unavailable.text};border:2px solid ${border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:auto;cursor:pointer;user-select:none;font-variant-numeric:tabular-nums;`;
+            card.style.cssText = `appearance:none;box-sizing:border-box;padding:4px;overflow:hidden;position:absolute;left:0;top:0;z-index:${labels.length - priority};visibility:hidden;width:${label.width}px;height:${label.height}px;color:${hasPrices || pending ? 'white' : mapLabelColors.unavailable.text};border:2px solid ${border};border-radius:7px;font:600 ${label.fontSize}px/16px system-ui;white-space:pre;text-align:center;pointer-events:auto;cursor:pointer;user-select:none;font-variant-numeric:tabular-nums;`;
             card.style.backgroundColor = colors.background;
             if (hasPrices && !selected) {
               card.style.backgroundImage = mapLabelColors.unselected.gradient;
@@ -67,8 +67,7 @@ function createLabels(onSelect: (label: MapLabel) => void) {
             const point = projection.fromLatLngToDivPixel(anchor);
             element.style.visibility = point ? 'visible' : 'hidden';
             if (point) {
-              element.style.left = `${point.x}px`;
-              element.style.top = `${point.y}px`;
+              element.style.transform = `translate(${point.x}px, ${point.y}px) translate(-50%, -50%)`;
             }
           }
         }
@@ -85,6 +84,7 @@ export default function MapRenderer(props: MapRendererProps) {
   const focusedLocation = useRef<MapRendererProps['locationFocus']>(null);
   const shapes = useRef<AreaPolygon[]>([]);
   const overlay = useRef<LabelOverlay | null>(null);
+  const isPanning = useRef(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -135,7 +135,9 @@ export default function MapRenderer(props: MapRendererProps) {
           width: host.current.clientWidth, height: host.current.clientHeight };
       };
       listeners.push(instance.addListener('bounds_changed', () => latest.current.onMove(readViewport())));
+      listeners.push(instance.addListener('dragstart', () => { isPanning.current = true; }));
       listeners.push(instance.addListener('idle', () => {
+        isPanning.current = false;
         const viewport = readViewport();
         if (viewport) latest.current.onIdle(viewport);
       }));
@@ -156,6 +158,7 @@ export default function MapRenderer(props: MapRendererProps) {
     return () => {
       active = false; resize?.disconnect(); listeners.forEach(listener => listener.remove());
       overlay.current?.setMap(null); overlay.current = null;
+      isPanning.current = false;
       map.current = null;
       if (callbacks.gm_authFailure === authFailure) callbacks.gm_authFailure = previousAuthFailure;
     };
@@ -211,7 +214,8 @@ export default function MapRenderer(props: MapRendererProps) {
     }
   }, [ready, props.snapshot.features, areaIds, props.selected]);
   useEffect(() => {
-    if (!overlay.current || !ready) return;
+    // Let the overlay project the existing anchors through the drag and its momentum.
+    if (!overlay.current || !ready || isPanning.current) return;
     overlay.current.setLabels(placeLabels(props.snapshot, props.selected), props.selected);
   }, [ready, props.snapshot, props.selected]);
   return <View style={styles.fill}>

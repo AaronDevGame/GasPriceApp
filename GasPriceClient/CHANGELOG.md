@@ -6,6 +6,9 @@
 - Show skeletons in map price cards while waiting for fuel prices on web and mobile.
 - Show the publication date in the fuel news ticker and label it on News cards and article pages.
 
+### Fixed
+- Keep web fuel map cards anchored during drags so they move smoothly with the map.
+
 ## [1.3.0] - 2026-11-27
 
 ### Added
