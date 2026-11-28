@@ -179,7 +179,7 @@ function createLabels(map: google.maps.Map, onSelect: (label: MapLabel) => void)
             card.offset = position?.offset;
             positioner.style.visibility = position ? 'visible' : 'hidden';
             if (position) {
-              if (!position.edgePushed) placed.push(position);
+              if (!position.atEdge) placed.push(position);
               positioner.style.zIndex = String(position.zIndex);
               positioner.style.transform = `translate(${position.x + left}px, ${position.y + top}px)`;
               const edge = position.tailAngle !== undefined;

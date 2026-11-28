@@ -58,14 +58,14 @@ type EdgeLabelPosition = LabelRectangle & { tailAngle: number };
 const cardInset = 8;
 const edgeMarkerInset = 4;
 const edgeMarkerMaxVisible = 0.2;
-export function clampLabelCenter([x, y]: Point, viewport: LabelSize,
-  width: number, height: number, inset = cardInset): Point {
+function clampMarkerCenter([x, y]: Point, viewport: LabelSize, footprint: number): Point {
+  const inset = edgeMarkerInset + footprint / 2;
   return [
-    Math.max(inset + width / 2, Math.min(x, viewport.width - inset - width / 2)),
-    Math.max(inset + height / 2, Math.min(y, viewport.height - inset - height / 2)),
+    Math.max(inset, Math.min(x, viewport.width - inset)),
+    Math.max(inset, Math.min(y, viewport.height - inset)),
   ];
 }
-function touchesCardMargin([x, y]: Point, viewport: LabelSize, width: number, height: number) {
+export function touchesCardMargin([x, y]: Point, viewport: LabelSize, width: number, height: number) {
   return x <= cardInset + width / 2 || x >= viewport.width - cardInset - width / 2 ||
     y <= cardInset + height / 2 || y >= viewport.height - cardInset - height / 2;
 }
@@ -87,9 +87,9 @@ export function edgeLabelPosition(label: MapLabel, preferred: Point, position: L
     : horizontal > 0 ? Math.max(viewport.width - cardInset - width / 2, px) - 1 : x;
   const markerY = vertical < 0 ? Math.min(cardInset + height / 2, py) + 1
     : vertical > 0 ? Math.max(viewport.height - cardInset - height / 2, py) - 1 : y;
-  let [cx, cy] = clampLabelCenter([markerX, markerY], viewport, footprint, footprint, edgeMarkerInset);
+  let [cx, cy] = clampMarkerCenter([markerX, markerY], viewport, footprint);
   if (cx === px && cy === py) {
-    [cx, cy] = clampLabelCenter([cx - horizontal, cy - vertical], viewport, footprint, footprint, edgeMarkerInset);
+    [cx, cy] = clampMarkerCenter([cx - horizontal, cy - vertical], viewport, footprint);
   }
   const tailAngle = Math.atan2(py - cy, px - cx);
   return { x: cx, y: cy, width: diameter, height: diameter, tailAngle };
@@ -105,7 +105,7 @@ function* candidates([x, y]: Point, nw: Point, se: Point, viewport: LabelViewpor
   const left = Math.max(cardInset + width / 2, nw[0]), right = Math.min(viewport.width - cardInset - width / 2, se[0]);
   const top = Math.max(cardInset + height / 2, nw[1]), bottom = Math.min(viewport.height - cardInset - height / 2, se[1]);
   if (left > right || top > bottom) {
-    yield clampLabelCenter([(nw[0] + se[0]) / 2, (nw[1] + se[1]) / 2], viewport, width, height);
+    yield [x, y];
     return;
   }
   const preferred: Point = [Math.max(left, Math.min(x, right)), Math.max(top, Math.min(y, bottom))];
@@ -133,16 +133,16 @@ function projectLabel(label: MapLabel, viewport: LabelViewport, projectPoint: (p
 
 export function webLabelPosition(label: MapLabel, viewport: LabelViewport, projectPoint: (point: Point) => Point | null,
   placed: readonly LabelRectangle[], priority: number, cardCount: number, previousOffset?: Point):
-  (LabelRectangle & { zIndex: number; edgePushed: boolean; tailAngle?: number; offset?: Point }) | null {
+  (LabelRectangle & { zIndex: number; atEdge: boolean; tailAngle?: number; offset?: Point }) | null {
   const projected = projectLabel(label, viewport, projectPoint);
   if (!projected) return null;
   const { preferred } = projected;
   const { width, height } = label;
-  const [x, y] = clampLabelCenter(preferred, viewport, width, height);
+  const [x, y] = preferred;
   const zIndex = cardCount - priority;
   if (touchesCardMargin([x, y], viewport, width, height)) {
     const edge = edgeLabelPosition(label, preferred, { x, y, width, height }, viewport);
-    return edge ? { ...edge, zIndex, edgePushed: true } : { x, y, width, height, zIndex, edgePushed: true };
+    return { ...(edge ?? { x, y, width, height }), zIndex, atEdge: true };
   }
   let position: LabelRectangle | null = null;
   if (previousOffset) {
@@ -155,12 +155,12 @@ export function webLabelPosition(label: MapLabel, viewport: LabelViewport, proje
   }
   position ??= findLabelPosition(label, viewport, projected, placed);
   if (!position) return null;
-  const edgePushed = touchesCardMargin([position.x, position.y], viewport, width, height);
-  const edge = edgePushed && edgeLabelPosition(label, preferred, position, viewport);
-  if (edge) return { ...edge, zIndex, edgePushed: true };
+  const atEdge = touchesCardMargin([position.x, position.y], viewport, width, height);
+  const edge = atEdge && edgeLabelPosition(label, preferred, position, viewport);
+  if (edge) return { ...edge, zIndex, atEdge: true };
   const offset: Point = [position.x - preferred[0], position.y - preferred[1]];
-  return { ...position, zIndex: edgePushed ? zIndex : zIndex + cardCount, edgePushed,
-    offset: !edgePushed && (offset[0] || offset[1]) ? offset : undefined };
+  return { ...position, zIndex: atEdge ? zIndex : zIndex + cardCount, atEdge,
+    offset: !atEdge && (offset[0] || offset[1]) ? offset : undefined };
 }
 
 function findLabelPosition(label: MapLabel, viewport: LabelViewport, projected: NonNullable<ReturnType<typeof projectLabel>>,
@@ -233,13 +233,14 @@ export function placeLabels(snapshot: MapSnapshot, selected: string | null) {
   for (const label of mapLabels(snapshot, selected)) {
     const projected = projectLabel(label, viewport, projectPoint);
     if (!projected) continue;
-    const [x, y] = clampLabelCenter(projected.preferred, viewport, label.width, label.height);
+    const [x, y] = projected.preferred;
     const position = touchesCardMargin([x, y], viewport, label.width, label.height)
       ? { x, y, width: label.width, height: label.height }
       : findLabelPosition(label, viewport, projected, regular);
     if (!position) continue;
     if (!edgeLabelPosition(label, projected.preferred, position, viewport)) regular.push(position);
-    placed.push({ ...label, ...position, anchor: pointAtPixel([position.x, position.y], viewport) });
+    const anchor = position.x === x && position.y === y ? label.labelPoint : pointAtPixel([position.x, position.y], viewport);
+    placed.push({ ...label, ...position, anchor });
   }
   return placed;
 }

@@ -11,7 +11,7 @@ import { stationPinAnchor, stationPinImage, stationPinLabel, stationPinSize } fr
 import { stationDirections, stationMarkers } from './stations';
 import { boundsCenter, cameraBounds, cameraCenter, fitZoom, FUEL_CARD_PAN_DURATION_MS, intersects, MAX_ZOOM, polygons, project } from './geometry';
 import { areaIdentity, defaultMapCamera, mapLevel } from './hierarchy';
-import { clampLabelCenter, edgeLabelPosition, edgeMarker, mapLabelColors, mapLabelNozzle, mapLabelShimmer, placeLabels } from './labels';
+import { edgeLabelPosition, edgeMarker, mapLabelColors, mapLabelNozzle, mapLabelShimmer, placeLabels, touchesCardMargin } from './labels';
 import type { Bounds, MapRendererProps, Point, Viewport } from './types';
 
 const coordinate = ([longitude, latitude]: Point) => ({ latitude, longitude });
@@ -221,11 +221,11 @@ function NativeMap({ snapshot, selected, focusBounds, locationFocus, zoomFocus, 
       {labels.map((label, priority) => {
         if (!labelViewport || (liveViewport && !intersects(label.bounds, liveViewport.bounds))) return null;
         const { width: cardWidth, height: cardHeight } = label;
-        const [x, y] = liveViewport
-          ? clampLabelCenter(project(label.anchor, liveViewport), liveViewport, cardWidth, cardHeight)
-          : [label.x, label.y];
+        const preferred = project(label.labelPoint, labelViewport);
+        const [x, y] = !liveViewport ? [label.x, label.y] :
+          touchesCardMargin(preferred, liveViewport, cardWidth, cardHeight) ? preferred : project(label.anchor, liveViewport);
         const regular = { x, y, width: cardWidth, height: cardHeight };
-        const edge = edgeLabelPosition(label, project(label.labelPoint, labelViewport), regular, labelViewport);
+        const edge = edgeLabelPosition(label, preferred, regular, labelViewport);
         const position = edge ?? regular;
         const { width, height } = position;
         const left = position.x - width / 2, top = position.y - height / 2;

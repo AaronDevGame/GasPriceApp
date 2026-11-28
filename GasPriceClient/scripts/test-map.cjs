@@ -486,9 +486,11 @@ function lifecycle(h, initial = {}) {
   const imusSnapshot = { index, detail: true, viewport: clipped, cities: [imus], features: [imusFeature], pendingPriceIds: new Set(),
     prices: new Map([[imus.id, h.feed([imus.id]).items[0]]]) };
   const [relocated] = placeLabels(imusSnapshot, imus.id);
-  assert(relocated, 'A visible part of Imus still has room for both price ranges');
+  assert(relocated, 'Keep Imus in the layout while its area is visible');
   assert.deepEqual(relocated.center, geometry.boundsCenter(imus.bbox));
-  assert.notDeepEqual(relocated.center, relocated.anchor, 'Center Imus itself when the card is displaced');
+  assert.deepEqual(relocated.anchor, imus.labelPoint, 'Keep the native geographic anchor when the card crosses the map edge');
+  assert.deepEqual([relocated.x, relocated.y], Array.from(geometry.project(imus.labelPoint, clipped)),
+    'Project the native card directly at its anchor, even when offscreen');
   const imusPrices = imusSnapshot.prices.get(imus.id);
   const [compact] = placeLabels(imusSnapshot, null);
   const displayRows = label => Array.from(label.priceRows, ({ fuel, text }) => [fuel, text]);
@@ -507,7 +509,7 @@ function lifecycle(h, initial = {}) {
   assert.equal(withoutPrices.coverage, 'No recent report');
   assert.equal(withoutPrices.accessibilityLabel, `${withoutPrices.name}, No recent report`);
   assert.equal(withoutPrices.height, relocated.height - 32, 'Omitting both price rows shrinks the card');
-  const { clampLabelCenter, edgeMarker, mapLabels, webLabelPosition } = h.load('labels');
+  const { edgeMarker, mapLabels, webLabelPosition } = h.load('labels');
   const [pendingDuringPan] = mapLabels({ ...imusSnapshot, prices: new Map(), pendingPriceIds: new Set([imus.id]) }, imus.id);
   assert(pendingDuringPan.skeletonWidths.length > 0);
   const panned = { ...clipped, bounds: [120.926, 14.36, 120.971, 14.393] };
@@ -555,7 +557,7 @@ function lifecycle(h, initial = {}) {
   ]) {
     const frame = batangasFrame(right);
     const position = webLabelPosition(batangasCard, frame, point => geometry.project(point, frame), [], 0, 1);
-    assert(position.edgePushed, 'Batangas reaches the card margin in both views');
+    assert(position.atEdge, 'Batangas reaches the card margin in both views');
     assert.equal(position.tailAngle !== undefined, circle, 'Use the live visible boundary to switch between full card and circle');
   }
   const areaBox = [0, 0, 10, 10];
@@ -578,17 +580,13 @@ function lifecycle(h, initial = {}) {
   for (const offset of [0, -27, -52, -60, -20]) {
     const projectFrame = ([x, y]) => [x + offset, y];
     const first = framePosition(higherPriority, projectFrame, [], 0, 2);
-    const second = framePosition(lowerPriority, projectFrame, first.edgePushed ? [] : [first], 1, 2);
+    const second = framePosition(lowerPriority, projectFrame, first.atEdge ? [] : [first], 1, 2);
     const atEdge = 100 + offset <= 73;
-    if (atEdge) {
-      assert.equal(first.x, 73, 'Clamp the full card while its area is still visible');
-      assert.equal(first.tailAngle, undefined);
-    } else {
-      assert.equal(first.x, 100 + offset);
-    }
+    assert.equal(first.x, 100 + offset, 'Keep the full card anchored throughout the pan');
+    assert.equal(first.tailAngle, undefined);
     assert.equal(second.x, 260 + offset, 'The foreground card keeps its preferred position during overlap');
-    assert.equal(first.edgePushed, atEdge, 'Only cards pushed inward by the map edge can overlap');
-    assert.equal(first.zIndex < second.zIndex, atEdge, 'Layer an edge-pushed card behind a card at its preferred position');
+    assert.equal(first.atEdge, atEdge, 'Identify cards at the edge during the pan');
+    assert.equal(first.zIndex < second.zIndex, atEdge, 'Layer an edge card behind a regular card');
   }
   const foregroundCard = { ...higherPriority, labelPoint: [150, 150], bounds: [140, 160, 160, 140] };
   const foregroundPosition = framePosition(foregroundCard, point => point, [], 0, 2);
@@ -596,7 +594,7 @@ function lifecycle(h, initial = {}) {
     'Two regular cards cannot overlap when there is no alternative position');
   const roomToShift = { ...lowerPriority, bounds: [255, 155, 310, 145] };
   const shifted = framePosition(roomToShift, point => point, [foregroundPosition], 1, 2);
-  assert(shifted.x >= foregroundPosition.x + 138 && !shifted.edgePushed, 'A regular card can move aside and stay in front');
+  assert(shifted.x >= foregroundPosition.x + 138 && !shifted.atEdge, 'A regular card can move aside and stay in front');
   const nearRight = { ...higherPriority, labelPoint: [398, 150], bounds: [390, 160, 410, 140] };
   const neighbor = { ...lowerPriority, labelPoint: [286, 150], bounds: [232, 155, 318, 145] };
   const rightPosition = framePosition(nearRight, point => point, [], 0, 2);
@@ -605,12 +603,12 @@ function lifecycle(h, initial = {}) {
   const slideRight = ([x, y]) => [x + 12, y];
   const rightAtEdge = framePosition(nearRight, slideRight, [], 0, 2);
   const neighborAtEdge = framePosition(neighbor, slideRight, [], 1, 2, neighborPosition.offset);
-  assert(rightAtEdge.edgePushed && neighborAtEdge.zIndex > rightAtEdge.zIndex);
+  assert(rightAtEdge.atEdge && neighborAtEdge.zIndex > rightAtEdge.zIndex);
   assert.equal(neighborAtEdge.x, neighborPosition.x + 12, 'The neighbor follows the map without snapping when the other card reaches the edge');
   assert.equal(neighborAtEdge.y, neighborPosition.y);
   const secondEdge = framePosition(higherPriority, ([x, y]) => [x - 60, y], [], 1, 2);
   const firstEdge = framePosition(higherPriority, ([x, y]) => [x - 60, y], [], 0, 2);
-  assert(firstEdge.edgePushed && secondEdge.edgePushed && firstEdge.zIndex > secondEdge.zIndex,
+  assert(firstEdge.atEdge && secondEdge.atEdge && firstEdge.zIndex > secondEdge.zIndex,
     'Edge cards can overlap in their existing priority order');
   for (const [anchor, bounds, direction] of [
     [[-20, 240], [-80, 270, 20, 200], [-1, 0]],
@@ -633,22 +631,16 @@ function lifecycle(h, initial = {}) {
       assert(Math.abs(margin - 4) < 0.001, 'Use the same 4 px tip gap on straight edges');
     }
   }
-  // Draw successive camera positions against the same viewport dimensions and card layout.
-  const leftEdge = relocated.width / 2 + 8;
-  for (const [offset, expected] of [[2, 2], [1, 1], [0, 0], [-1, 0], [-2, 0]]) {
-    const [frameX, frameY] = clampLabelCenter([leftEdge + offset, 150 - offset], panned, relocated.width, relocated.height);
-    assert.equal(frameX, leftEdge + expected, 'Constrain the card at the edge on each camera update');
-    assert.equal(frameY, 150 - offset, 'Track the camera immediately along the edge');
-  }
-  for (const [before, after] of [
-    [[relocated.width / 2 - 1, 150], [relocated.width / 2 + 8, 150]],
-    [[panned.width - relocated.width / 2 + 1, 150], [panned.width - relocated.width / 2 - 8, 150]],
-    [[200, relocated.height / 2 - 1], [200, relocated.height / 2 + 8]],
-    [[200, panned.height - relocated.height / 2 + 1], [200, panned.height - relocated.height / 2 - 8]],
+  for (const [anchor, bounds] of [
+    [[60, 240], [40, 260, 80, 220]],
+    [[420, 240], [400, 260, 440, 220]],
+    [[240, 25], [220, 45, 260, 5]],
+    [[240, 475], [220, 495, 260, 455]],
   ]) {
-    const [edgeX, edgeY] = clampLabelCenter(before, panned, relocated.width, relocated.height);
-    assert(Math.abs(edgeX - after[0]) < 0.001 && Math.abs(edgeY - after[1]) < 0.001,
-      'Move the card inward as soon as its outer edge clips, preserving its position along the edge');
+    const position = framePosition({ ...higherPriority, labelPoint: anchor, bounds }, point => point, [], 0, 1);
+    assert(position.atEdge, 'Detect the full card crossing each map edge');
+    assert.deepEqual([position.x, position.y], anchor, 'Keep the card anchored as its edges are clipped');
+    assert.equal(position.tailAngle, undefined, 'Keep the full card when its area is visible');
   }
   const [noReport] = placeLabels({ ...imusSnapshot, prices: new Map([[imus.id,
     { ...imusPrices, status: 'unavailable', gasoline: null, diesel: null }]]) }, imus.id);
@@ -664,8 +656,6 @@ function lifecycle(h, initial = {}) {
     assert.equal(compactPartial.coverage, '');
     assert.equal(compactPartial.height, compact.height - 16);
   }
-  const [x, y] = geometry.project(relocated.anchor, clipped);
-  assert(x >= relocated.width / 2 + 7.99 && y >= relocated.height / 2 + 7.99);
   const hierarchy = h.load('hierarchy');
   for (const [width, height] of [[400, 600], [1200, 560]]) {
     const base = geometry.fitZoom(index.bbox, width, height, 35);
