@@ -1194,8 +1194,12 @@ public sealed partial class DoeFuelPriceImporter(
     {
         if (start.HasValue != end.HasValue)
             throw new InvalidDataException("Monitoring dates require both a start and an end, or both null.");
-        if (start.HasValue && (end < start || end > PhilippineDate(nowUtc).AddDays(1)))
-            throw new InvalidDataException("Invalid monitoring dates: the end must be on or after the start and not more than one day in the future.");
+        // Published weekly reports can include the remaining days of their monitoring period.
+        // Bound the period itself instead of delaying import until its final day approaches.
+        if (start is { } first && end is { } last &&
+            (first > PhilippineDate(nowUtc).AddDays(1) || last < first ||
+             last.DayNumber - first.DayNumber > 7))
+            throw new InvalidDataException("Invalid monitoring dates: the start must not be more than one day in the future, and the end must be on or after the start and within seven days of it.");
     }
 
     private async Task<T> ExtractDocumentAsync<T>(byte[] pdf, string instructions,

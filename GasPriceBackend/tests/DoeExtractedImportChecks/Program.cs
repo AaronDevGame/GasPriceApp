@@ -272,6 +272,40 @@ if (int.TryParse(Environment.GetEnvironmentVariable("DOE_TEST_PGPORT"), out var 
 
 }
 else Console.WriteLine("SKIP: PostgreSQL persistence checks (set DOE_TEST_PGPORT for a disposable local cluster)");
+// A published weekly monitoring range is valid before its last day arrives.
+var published = valid.Replace("2026-10-27", "2026-11-03").Replace("2026-11-02", "2026-11-09")
+    .Replace("\"oilCompany\":", "\"monitoringStart\":\"2026-11-03\",\"monitoringEnd\":\"2026-11-09\",\"oilCompany\":");
+using (var response = await Post(published))
+    Check(response.StatusCode == HttpStatusCode.Accepted,
+        "Import a published report while its monitoring end is later than tomorrow.");
+var acceptedPeriod = JsonSerializer.Deserialize<DoeExtractedImportRequest>(captured.Last().RequestJson!)!;
+Check(acceptedPeriod.Rows[0].MonitoringStart == new DateOnly(2026, 11, 3) &&
+    acceptedPeriod.Rows[0].MonitoringEnd == new DateOnly(2026, 11, 9),
+    "Preserve both printed monitoring endpoints in the queued payload.");
+var visayas = acceptedPeriod with
+{
+    WeekStart = new(2026, 11, 24), WeekEnd = new(2026, 11, 30), CoverageSource = "monitoring",
+    Rows = [acceptedPeriod.Rows[0] with
+        { MonitoringStart = new(2026, 11, 24), MonitoringEnd = new(2026, 11, 30) }]
+};
+foreach (var day in new[] { 24, 25, 28 })
+    DoeFuelPriceImporter.ValidateSubmittedReport(visayas, new DateTime(2026, 11, day, 1, 0, 0, DateTimeKind.Utc));
+foreach (var dates in new[]
+{
+    (new DateOnly(2026, 11, 30), new DateOnly(2026, 12, 6)), // Start beyond tomorrow.
+    (new DateOnly(2026, 11, 24), new DateOnly(2026, 12, 2))  // More than eight inclusive days.
+})
+{
+    try
+    {
+        DoeFuelPriceImporter.ValidateSubmittedReport(visayas with
+        { Rows = [visayas.Rows[0] with { MonitoringStart = dates.Item1, MonitoringEnd = dates.Item2 }] },
+            new DateTime(2026, 11, 28, 1, 0, 0, DateTimeKind.Utc));
+        throw new Exception("Reject an invalid monitoring start or overlong monitoring range.");
+    }
+    catch (InvalidDataException) { }
+}
+Console.WriteLine("PASS: published weekly monitoring dates queue unchanged before period end; future starts and overlong ranges reject");
 await app.StopAsync();
 
 sealed class TestClock : TimeProvider

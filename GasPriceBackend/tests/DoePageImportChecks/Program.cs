@@ -138,7 +138,7 @@ foreach (var scenario in new[] { "visayas", "monitoring_first", "late_coverage" 
         "Using monitoring as coverage must not copy monitoring metadata to other pages.");
     Console.WriteLine($"PASS: {scenario} resolves report-wide dates and records their source");
 }
-foreach (var scenario in new[] { "all_undated", "monitoring_conflict", "monitoring_local", "monitoring_too_long" })
+foreach (var scenario in new[] { "all_undated", "monitoring_conflict", "monitoring_local" })
 {
     var unresolved = await RunAsync(scenario, expectFailure: true);
     Check(unresolved.Importer.ExtractionProgress!.PagesFailed == 0 &&
@@ -154,7 +154,7 @@ Check(retry.Handler.Pages.Count(number => number == 4) == 2 && retry.Handler.Pag
 Check(retry.Importer.ExtractionProgress!.PagesFailed == 0, "A recovered retry must not count as failed.");
 Console.WriteLine("PASS: retry only the failed page and include retry billing");
 
-foreach (var scenario in new[] { "failed", "date_conflict", "coverage_end_conflict", "missing_dates", "malformed_dates", "incomplete", "monitoring_missing_end", "monitoring_reversed", "monitoring_future", "monitoring_malformed" })
+foreach (var scenario in new[] { "failed", "date_conflict", "coverage_end_conflict", "missing_dates", "malformed_dates", "incomplete", "monitoring_missing_end", "monitoring_reversed", "monitoring_future", "monitoring_too_long", "monitoring_malformed" })
 {
     var failed = await RunAsync(scenario, expectFailure: true);
     Check(failed.Importer.ExtractionProgress!.PagesFailed == 1, "The failed page must be visible.");

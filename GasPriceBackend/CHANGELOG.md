@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Accept published DOE weekly monitoring periods before their end date approaches. Preserve printed dates while rejecting reversed, unpaired, overlong periods and starts beyond tomorrow in Philippine time.
+
 ## [1.17.0] - 2026-11-27
 
 ### Added
